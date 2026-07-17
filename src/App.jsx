@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Home, Users, PenTool, Plus, Search, Edit, ChevronDown, ChevronLeft, ChevronRight,
   X, Target, Phone, Briefcase, Award, MapPin, Upload, Download, Package, Trash2, Save,
-  Clock, TrendingUp, Monitor, Coins, Mail, Instagram, Copy, Sparkles, Bot, Settings,
+  Clock, TrendingUp, Monitor, Coins, Mail, Camera, Copy, Sparkles, Bot, Settings,
   FileText, Send, Menu, CheckCircle, LayoutGrid, List, Filter, BarChart, Link as LinkIcon, Star, Share2, Globe
 } from 'lucide-react';
 
@@ -89,7 +89,7 @@ export default function App() {
     { id: 'customers', icon: <Users className="w-5 h-5"/>, label: "顧客リスト" },
     { id: 'record', icon: <PenTool className="w-5 h-5"/>, label: "記録登録" },
     { id: 'email', icon: <Mail className="w-5 h-5"/>, label: "メール制作" },
-    { id: 'instagram', icon: <Instagram className="w-5 h-5"/>, label: "Instagram管理" }, // 追加されたメニュー
+    { id: 'instagram', icon: <Camera className="w-5 h-5"/>, label: "Instagram管理" }, // 追加されたメニュー
     { id: 'settings', icon: <Settings className="w-5 h-5"/>, label: "設定・管理" },
     { id: 'products', icon: <Package className="w-5 h-5"/>, label: "商品・フラグ管理" },
     { id: 'ai', icon: <Sparkles className="w-5 h-5"/>, label: "AIアシスタント" }
