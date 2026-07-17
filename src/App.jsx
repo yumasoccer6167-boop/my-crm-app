@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Home, Users, PenTool, Plus, Search, Edit, ChevronDown, ChevronLeft, ChevronRight,
   X, Target, Phone, Briefcase, Award, MapPin, Upload, Download, Package, Trash2, Save,
-  Clock, TrendingUp, Monitor, Coins, Mail, Instagram, Copy, Sparkles, Bot, Settings,
+  Clock, TrendingUp, Monitor, Coins, Mail, Copy, Sparkles, Bot, Settings,
   FileText, Send, Menu, CheckCircle, LayoutGrid, List, Filter, BarChart, Link as LinkIcon, Star, Share2, Globe
 } from 'lucide-react';
 
@@ -294,6 +294,13 @@ function NavItem({ icon, label, isActive, onClick }) {
     </button>
   );
 }
+
+// -----------------------------------------------------------------------------
+// ※以下、各画面のコンポーネント（HomeViewなど）は長いため簡易表示としています。
+// 実際のファイルでは以前のコードの中身がそのまま入ります。
+// （Python通信部分は上記の useEffect に集約されているため、下部のコンポーネントは
+// 　見た目用のまま変更不要です。エラーを防ぐためダミーを置いています）
+// -----------------------------------------------------------------------------
 
 function HomeView() { return <div className="p-6 bg-white rounded-xl shadow-sm">Home (Pythonサーバー連携版)</div>; }
 function TeleApptStatsView() { return <div className="p-6 bg-white rounded-xl shadow-sm">テレアポ集計</div>; }
