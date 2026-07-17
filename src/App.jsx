@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Home, Users, PenTool, Plus, Search, Edit, X, Phone, MapPin, Save,
   Trash2, Package, Settings, CheckCircle, Filter, Mail, Globe,
-  ChevronDown, Star, Instagram, Upload, Download, Copy, BarChart,
+  ChevronDown, Star, Camera, Upload, Download, Copy, BarChart,
   Bot, Sparkles, Send, FileText, ClipboardList
 } from 'lucide-react';
 
@@ -372,7 +372,7 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
         {customer.tel && <a href={`tel:${customer.tel}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.tel}</a>}
         {customer.address && <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{customer.address}</span>}
         {customer.hpLink && <a href={customer.hpLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-600"><Globe className="w-4 h-4" />HP</a>}
-        {customer.instagram && <a href={customer.instagram} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-pink-600"><Instagram className="w-4 h-4" />Instagram</a>}
+        {customer.instagram && <a href={customer.instagram} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-pink-600"><Camera className="w-4 h-4" />Instagram</a>}
         {customer.reviewScore && <span className="flex items-center gap-1 text-amber-500"><Star className="w-4 h-4 fill-amber-400" />{customer.reviewScore}（{customer.reviewCount || 0}件）</span>}
       </div>
 
