@@ -94,16 +94,13 @@ export default function App() {
       })
       .catch(err => {
         console.error("サーバーからのデータ取得エラー:", err);
-        // ローカル環境など、サーバーがない場合は空でスタート
         setDataLoaded(true);
       });
   }, []);
 
-  // Pythonサーバーへデータを保存する（スプレッドシートへ同期）
+  // Pythonサーバーへデータを保存する
   useEffect(() => {
     if (!dataLoaded) return;
-    
-    // データが更新されるたびにPythonサーバーへ送る
     fetch('/api/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -111,7 +108,6 @@ export default function App() {
     }).catch(e => console.log('スプレッドシートへの保存エラー:', e));
   }, [customers, records, dataLoaded]);
 
-  // 操作ハンドラ
   const handleSaveCustomer = (customerData) => {
     if (customerData.id) {
       setCustomers(customers.map(c => c.id === customerData.id ? customerData : c));
@@ -130,46 +126,10 @@ export default function App() {
     });
   };
 
-  const handleDeleteMultipleCustomers = (ids) => {
-    showConfirm(`${ids.length}件の顧客を本当に削除しますか？\n関連する活動履歴も一緒に削除されます。`, () => {
-      setCustomers(customers.filter(c => !ids.includes(c.id)));
-      setRecords(records.filter(r => !ids.includes(r.customerId)));
-      showAlert(`${ids.length}件の顧客を削除しました。`);
-    });
-  };
-
   const handleAddRecord = (recordData, redirectToHome = true) => {
     setRecords([...records, { ...recordData, id: Date.now() }]);
     showAlert('記録を保存しました。');
     if (redirectToHome) setActiveTab('home'); 
-  };
-
-  const handleUpdateRecord = (updatedRecord) => {
-    setRecords(records.map(r => r.id === updatedRecord.id ? updatedRecord : r));
-    showAlert('記録を更新しました。');
-  };
-
-  const handleDeleteRecord = (id) => {
-    showConfirm("この記録を削除しますか？", () => {
-      setRecords(records.filter(r => r.id !== id));
-      showAlert('記録を削除しました。');
-    });
-  };
-
-  const handleImportCustomers = (newCustomers, newRecords = []) => {
-    setCustomers(prev => {
-      const existingIds = new Set(prev.map(c => c.id));
-      const merged = [...prev];
-      newCustomers.forEach(nc => {
-        if(!existingIds.has(nc.id)) {
-          merged.push(nc);
-          existingIds.add(nc.id);
-        }
-      });
-      return merged;
-    });
-    if (newRecords.length > 0) setRecords(prev => [...prev, ...newRecords]);
-    showAlert(`${newCustomers.length}件の顧客データと ${newRecords.length}件の活動履歴をインポートしました。`);
   };
 
   const handleNavClick = (tabId) => {
@@ -184,7 +144,7 @@ export default function App() {
     { id: 'record', icon: <PenTool className="w-5 h-5"/>, label: "記録登録" },
     { id: 'email', icon: <Mail className="w-5 h-5"/>, label: "メール制作" },
     { id: 'settings', icon: <Settings className="w-5 h-5"/>, label: "設定・管理" },
-    { id: 'products', icon: <Package className="w-5 h-5"/>, label: "商品・フラグ管理" },
+    { id: 'products', icon: <Package className="w-5 h-5"/>, label: "商品管理" },
     { id: 'ai', icon: <Sparkles className="w-5 h-5"/>, label: "AIアシスタント" }
   ];
 
@@ -202,10 +162,11 @@ export default function App() {
       <header className="md:hidden flex justify-between items-center p-4 bg-slate-800 text-white shadow-md z-20 shrink-0 relative">
         <div className="flex items-center">
           <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 mr-2 hover:bg-slate-700 rounded-md"><Menu className="w-6 h-6" /></button>
-          <h1 className="font-bold text-lg tracking-wider">協会アプローチ用CRM</h1>
+          <h1 className="font-bold text-lg tracking-wider">協会CRM</h1>
         </div>
       </header>
 
+      {/* モバイルメニュー */}
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
           <div className="fixed inset-0 bg-black opacity-50" onClick={() => setIsMobileMenuOpen(false)}></div>
@@ -223,6 +184,7 @@ export default function App() {
         </div>
       )}
 
+      {/* サイドメニュー（PC用） */}
       <div className="hidden md:flex w-64 bg-slate-800 text-white flex-col shrink-0 relative z-20 shadow-xl">
         <div className="p-6 text-xl font-bold tracking-wider border-b border-slate-700">
           協会アプローチ用<br/>CRMシステム
@@ -232,7 +194,6 @@ export default function App() {
             <NavItem key={item.id} icon={item.icon} label={item.label} isActive={activeTab === item.id} onClick={() => handleNavClick(item.id)} />
           ))}
         </nav>
-        <div className="p-4 text-xs text-slate-400">© 2026 協会アプローチ用CRMシステム</div>
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col relative z-10">
@@ -245,34 +206,36 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-auto p-4 md:p-6 w-full max-w-7xl mx-auto">
-          {activeTab === 'home' && <HomeView records={records} monthlyGoals={monthlyGoals} onUpdateGoals={(m, g) => setMonthlyGoals({...monthlyGoals, [m]: g})} showAlert={showAlert} />}
-          {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} activityTypes={activityTypes} showAlert={showAlert} />}
-          {activeTab === 'customers' && <CustomersView customers={customers} records={records} products={products} onSaveCustomer={handleSaveCustomer} onDeleteCustomer={handleDeleteCustomer} onDeleteMultipleCustomers={handleDeleteMultipleCustomers} onImport={handleImportCustomers} onUpdateRecord={handleUpdateRecord} onDeleteRecord={handleDeleteRecord} onAddRecord={(data) => handleAddRecord(data, false)} showAlert={showAlert} showConfirm={showConfirm} activityTypes={activityTypes} reportTemplates={reportTemplates} />}
-          {activeTab === 'record' && <RecordView customers={customers} products={products} reportTemplates={reportTemplates} activityTypes={activityTypes} onSave={(data) => handleAddRecord(data, true)} showAlert={showAlert} />}
-          {activeTab === 'email' && <EmailBuilderView customers={customers} records={records} templates={emailTemplates} setTemplates={setEmailTemplates} showConfirm={showConfirm} showAlert={showAlert}/>}
-          {activeTab === 'settings' && <SettingsView templates={reportTemplates} setTemplates={setReportTemplates} showConfirm={showConfirm} showAlert={showAlert}/>}
-          {activeTab === 'products' && <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} showAlert={showAlert}/>}
-          {activeTab === 'ai' && <AIAssistantView customers={customers} records={records} />}
+          {/* ここで各画面を切り替えています */}
+          {activeTab === 'home' && <HomeView records={records} customers={customers} />}
+          {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} />}
+          {activeTab === 'customers' && <CustomersView customers={customers} onSaveCustomer={handleSaveCustomer} onDeleteCustomer={handleDeleteCustomer} />}
+          {activeTab === 'record' && <RecordView customers={customers} onSave={(data) => handleAddRecord(data, true)} />}
+          {activeTab === 'email' && <EmailBuilderView templates={emailTemplates} />}
+          {activeTab === 'settings' && <SettingsView />}
+          {activeTab === 'products' && <ProductsAndFlagsView products={products} />}
+          {activeTab === 'ai' && <AIAssistantView />}
         </main>
       </div>
 
+      {/* ダイアログコンポーネント群 */}
       {alertDialog.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[100] p-4 animate-in fade-in">
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full text-center">
             <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
             <p className="text-gray-800 font-medium mb-6 whitespace-pre-wrap">{alertDialog.message}</p>
-            <button onClick={() => setAlertDialog({ isOpen: false, message: '' })} className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors">OK</button>
+            <button onClick={() => setAlertDialog({ isOpen: false, message: '' })} className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-bold">OK</button>
           </div>
         </div>
       )}
 
       {confirmDialog.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[100] p-4 animate-in fade-in">
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full">
             <p className="text-gray-800 font-medium mb-6 whitespace-pre-wrap leading-relaxed">{confirmDialog.message}</p>
             <div className="flex justify-end space-x-3">
-              <button onClick={() => setConfirmDialog({ isOpen: false, message: '', onConfirm: null })} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors">キャンセル</button>
-              <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog({ isOpen: false, message: '', onConfirm: null }); }} className="px-5 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors">実行する</button>
+              <button onClick={() => setConfirmDialog({ isOpen: false, message: '', onConfirm: null })} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50">キャンセル</button>
+              <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog({ isOpen: false, message: '', onConfirm: null }); }} className="px-5 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700">実行する</button>
             </div>
           </div>
         </div>
@@ -295,27 +258,180 @@ function NavItem({ icon, label, isActive, onClick }) {
   );
 }
 
-// -----------------------------------------------------------------------------
-// ※以下、各画面のコンポーネント（HomeViewなど）は長いため簡易表示としています。
-// 実際のファイルでは以前のコードの中身がそのまま入ります。
-// （Python通信部分は上記の useEffect に集約されているため、下部のコンポーネントは
-// 　見た目用のまま変更不要です。エラーを防ぐためダミーを置いています）
-// -----------------------------------------------------------------------------
+// ==============================================================================
+// 🔽🔽🔽 ここから下が各ページの画面データです 🔽🔽🔽
+// ==============================================================================
 
-function HomeView() { return <div className="p-6 bg-white rounded-xl shadow-sm">Home (Pythonサーバー連携版)</div>; }
-function TeleApptStatsView() { return <div className="p-6 bg-white rounded-xl shadow-sm">テレアポ集計</div>; }
-function CustomersView() { return <div className="p-6 bg-white rounded-xl shadow-sm">顧客リスト</div>; }
-function RecordView() { return <div className="p-6 bg-white rounded-xl shadow-sm">記録登録</div>; }
-function EmailBuilderView() { return <div className="p-6 bg-white rounded-xl shadow-sm">メール制作</div>; }
-function SettingsView() { return <div className="p-6 bg-white rounded-xl shadow-sm">設定・管理</div>; }
-function ProductsAndFlagsView() { return <div className="p-6 bg-white rounded-xl shadow-sm">商品管理</div>; }
-function AIAssistantView() { return <div className="p-6 bg-white rounded-xl shadow-sm">AIアシスタント</div>; }
-
-function FormGroup({ label, value, onChange, type = "text", required = false, className = "", min, max, step }) {
+// ----------------------------------------------------
+// 【1】HOME画面
+// ----------------------------------------------------
+function HomeView({ records, customers }) {
   return (
-    <div className={`flex flex-col space-y-1 ${className}`}>
-      <label className="text-xs font-bold text-gray-700">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>
-      <input type={type} value={value} onChange={onChange} required={required} min={min} max={max} step={step} className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-colors" />
+    <div className="space-y-6 animate-in fade-in">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+          <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><Users className="w-8 h-8" /></div>
+          <div>
+            <p className="text-sm text-gray-500 font-bold">総顧客数</p>
+            <p className="text-2xl font-black">{customers.length}<span className="text-sm font-normal text-gray-500 ml-1">件</span></p>
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
+          <div className="p-3 bg-green-100 text-green-600 rounded-lg"><PenTool className="w-8 h-8" /></div>
+          <div>
+            <p className="text-sm text-gray-500 font-bold">総活動記録</p>
+            <p className="text-2xl font-black">{records.length}<span className="text-sm font-normal text-gray-500 ml-1">件</span></p>
+          </div>
+        </div>
+      </div>
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <h2 className="text-lg font-bold text-gray-700 mb-4 flex items-center"><Clock className="w-5 h-5 mr-2 text-blue-500"/>最近の活動記録</h2>
+        {records.length === 0 ? (
+          <p className="text-gray-500 text-sm">記録はまだありません。</p>
+        ) : (
+          <ul className="space-y-3">
+            {records.slice(-5).reverse().map(r => (
+              <li key={r.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100 text-sm">
+                <div className="flex justify-between font-bold text-gray-700 mb-1">
+                  <span>{r.activityType} - {r.flag}</span>
+                  <span className="text-gray-500">{r.date}</span>
+                </div>
+                <p className="text-gray-600 line-clamp-2">{r.memo || 'メモなし'}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 【2】テレアポ集計画面
+// ----------------------------------------------------
+function TeleApptStatsView({ records }) {
+  const teleapptRecords = records.filter(r => r.activityType === 'テレアポ');
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-in fade-in">
+      <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center"><BarChart className="w-6 h-6 mr-2 text-blue-500"/>テレアポ集計データ</h2>
+      <p className="text-gray-600 mb-6">テレアポの架電数やアポ獲得率の分析画面です。</p>
+      <div className="p-6 bg-blue-50 rounded-lg border border-blue-100 text-center max-w-sm mx-auto">
+        <p className="text-blue-800 font-bold mb-2">総架電件数</p>
+        <p className="text-4xl font-black text-blue-600">{teleapptRecords.length} <span className="text-lg">件</span></p>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 【3】顧客リスト画面
+// ----------------------------------------------------
+function CustomersView({ customers, onSaveCustomer, onDeleteCustomer }) {
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-in fade-in">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold text-gray-700 flex items-center"><Users className="w-6 h-6 mr-2 text-blue-500"/>顧客リスト</h2>
+        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold flex items-center text-sm shadow hover:bg-blue-700"><Plus className="w-4 h-4 mr-1"/>新規登録</button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-100 text-gray-700 border-b-2 border-gray-200">
+              <th className="p-3 font-bold">法人名・園名</th>
+              <th className="p-3 font-bold">担当者</th>
+              <th className="p-3 font-bold">電話番号</th>
+              <th className="p-3 font-bold text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {customers.length === 0 ? (
+              <tr><td colSpan="4" className="p-4 text-center text-gray-500">顧客データがありません</td></tr>
+            ) : customers.map(c => (
+              <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <td className="p-3">{c.schoolName} {c.kindergartenName}</td>
+                <td className="p-3">{c.directorName}</td>
+                <td className="p-3">{c.phone}</td>
+                <td className="p-3 text-center">
+                  <button onClick={() => onDeleteCustomer(c.id)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 【4】記録登録画面
+// ----------------------------------------------------
+function RecordView({ customers, onSave }) {
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-2xl mx-auto animate-in fade-in">
+      <h2 className="text-xl font-bold text-gray-700 mb-6 flex items-center"><PenTool className="w-6 h-6 mr-2 text-blue-500"/>新規記録の登録</h2>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-bold text-gray-700 mb-1">対象の顧客</label>
+          <select className="w-full p-2.5 border border-gray-300 rounded-lg bg-gray-50 focus:bg-white">
+            <option>顧客を選択してください...</option>
+            {customers.map(c => <option key={c.id}>{c.schoolName} {c.kindergartenName}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-bold text-gray-700 mb-1">活動内容</label>
+          <textarea rows="4" className="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 focus:bg-white" placeholder="活動のメモや結果を入力..."></textarea>
+        </div>
+        <button className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow">記録を保存する</button>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 【5】メール制作画面
+// ----------------------------------------------------
+function EmailBuilderView({ templates }) {
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-in fade-in">
+      <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center"><Mail className="w-6 h-6 mr-2 text-blue-500"/>メール制作アシスト</h2>
+      <p className="text-gray-600">テンプレートを選択して、素早くメールを作成できます。</p>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 【6】設定・管理画面
+// ----------------------------------------------------
+function SettingsView() {
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-in fade-in">
+      <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center"><Settings className="w-6 h-6 mr-2 text-blue-500"/>設定・管理</h2>
+      <p className="text-gray-600">システムの設定やテンプレートの管理を行います。</p>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 【7】商品・フラグ管理画面
+// ----------------------------------------------------
+function ProductsAndFlagsView({ products }) {
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-in fade-in">
+      <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center"><Package className="w-6 h-6 mr-2 text-blue-500"/>商品・フラグ管理</h2>
+      <p className="text-gray-600">取り扱い商品や、活動のフラグ（ステータス）を編集できます。</p>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 【8】AIアシスタント画面
+// ----------------------------------------------------
+function AIAssistantView() {
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-in fade-in">
+      <h2 className="text-xl font-bold text-gray-700 mb-4 flex items-center"><Sparkles className="w-6 h-6 mr-2 text-blue-500"/>AIアシスタント</h2>
+      <p className="text-gray-600">過去の履歴から最適なアプローチ方法をAIが提案します。</p>
     </div>
   );
 }
