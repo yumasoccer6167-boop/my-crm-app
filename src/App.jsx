@@ -2420,7 +2420,7 @@ function SettingsView({
       )}
 
       {innerTab === 'products' && (
-        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} associationTypes={associationTypes} setAssociationTypes={setAssociationTypes} />
+        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} associationTypes={associationTypes} setAssociationTypes={setAssociationTypes} showConfirm={showConfirm} />
       )}
 
       {innerTab === 'members' && (
@@ -2462,7 +2462,7 @@ function SettingsView({
 }
 
 // ---------- 商品・フラグ管理 ----------
-function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes }) {
+function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, showConfirm }) {
   const [newProduct, setNewProduct] = useState('');
   const [newType, setNewType] = useState('');
   const [flagDraft, setFlagDraft] = useState({});
@@ -2478,6 +2478,12 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
     if (!newType.trim()) return;
     setActivityTypes([...activityTypes, { id: Date.now(), name: newType.trim(), flags: [] }]);
     setNewType('');
+  };
+
+  const removeType = (typeId, typeName) => {
+    showConfirm(`活動種別「${typeName}」を削除しますか？\nこの種別を使った過去の記録は残りますが、選択肢からは無くなります。`, () => {
+      setActivityTypes(activityTypes.filter(a => a.id !== typeId));
+    });
   };
 
   const addFlag = (typeId) => {
@@ -2544,7 +2550,12 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
         <div className="space-y-4 max-h-96 overflow-y-auto">
           {activityTypes.map(a => (
             <div key={a.id} className="border border-slate-100 rounded-lg p-3">
-              <p className="text-sm font-bold text-slate-700 mb-2">{a.name}</p>
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm font-bold text-slate-700">{a.name}</p>
+                <button onClick={() => removeType(a.id, a.name)} className="p-1 text-slate-300 hover:text-red-500" title="この活動種別を削除">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {a.flags.map(f => (
                   <span key={f} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded text-xs">
