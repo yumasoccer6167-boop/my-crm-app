@@ -12,9 +12,10 @@ const initialProducts = [{ id: 1, name: 'SP-MEO' }, { id: 2, name: 'SP' }];
 const initialAssociationTypes = [];
 
 const initialActivityTypes = [
-  { id: 1, name: 'テレアポ', flags: ['再コール', '留守電・不通', '初回時間設定', '受付拒否', '代表接触拒否', '当日確認案件'] },
+  { id: 1, name: 'テレアポ', flags: ['再コール', '留守電・不通', '初回時間設定（代表）', '初回時間設定（担当）', '受付拒否', '代表接触拒否', '当日確認案件'] },
   { id: 2, name: '初回訪問', flags: ['営業時間設定', '資料メール送り'] },
-  { id: 3, name: '営業', flags: ['返事待ち', '返事待ちNG', 'NG'] },
+  { id: 3, name: '営業（代表）', flags: ['返事待ち', '返事待ちNG', 'NG'] },
+  { id: 6, name: '営業（担当）', flags: ['返事待ち', '返事待ちNG', 'NG'] },
   { id: 4, name: '過去ログ登録', flags: ['ユーザー', '過去営業履歴あり', '他者見込み', '営業提案NG'] },
   { id: 5, name: '受注登録', flags: ['受注'] },
 ];
@@ -417,7 +418,7 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
   const filtered = period === 'all' ? scopedRecords : scopedRecords.filter(r => r.date?.startsWith(period));
 
   // 指標の計算
-  const teleTimeSetting = filtered.filter(r => r.type === 'テレアポ' && r.flag === '初回時間設定').length; // 初回時間設定件数
+  const teleTimeSetting = filtered.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag)).length; // 初回時間設定件数
   const firstVisitCount = filtered.filter(r => r.type === '初回訪問').length; // 初回訪問件数
   const salesTimeSetting = filtered.filter(r => r.type === '初回訪問' && r.flag === '営業時間設定').length; // 営業時間設定件数
   const salesTimeSettingRate = firstVisitCount > 0 ? Math.round((salesTimeSetting / firstVisitCount) * 100) : 0; // 営業時間設定昇華率
@@ -650,7 +651,7 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
   const [showReport, setShowReport] = useState(false);
   const [reportSeedRecord, setReportSeedRecord] = useState(null);
 
-  const AUTO_REPORT_FLAGS = ['初回時間設定', '営業時間設定'];
+  const AUTO_REPORT_FLAGS = ['初回時間設定（代表）', '初回時間設定（担当）', '営業時間設定'];
   const handleRecordSaved = (record) => {
     setShowForm(false);
     if (AUTO_REPORT_FLAGS.includes(record.flag)) {
@@ -749,7 +750,7 @@ function getCustomerStatus(customerId, records) {
   const hasOrder = custRecords.some(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
   if (hasOrder) return { label: 'ユーザー', badge: 'bg-amber-100 text-amber-700', card: 'border-amber-300 bg-amber-50/60' };
 
-  const hasSalesResult = custRecords.some(r => r.type === '営業' && ['NG', '返事待ち', '返事待ちNG'].includes(r.flag));
+  const hasSalesResult = custRecords.some(r => SALES_TYPES.includes(r.type) && ['NG', '返事待ち', '返事待ちNG'].includes(r.flag));
   if (hasSalesResult) return { label: '営業実行済み', badge: 'bg-blue-100 text-blue-700', card: 'border-blue-300 bg-blue-50/60' };
 
   const hasVisitTimeSet = custRecords.some(r => r.type === '初回訪問' && r.flag === '営業時間設定');
@@ -1125,7 +1126,9 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 }
 
 // ---------- 記録登録フォーム（顧客詳細モーダルの中で使う） ----------
-const SCHEDULE_FLAGS = ['初回時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
+const SCHEDULE_FLAGS = ['初回時間設定（代表）', '初回時間設定（担当）', '営業時間設定', '返事待ち', '返事待ちNG'];
+const SALES_TYPES = ['営業（代表）', '営業（担当）'];
+const isInitialTimeSettingFlag = (flag) => flag === '初回時間設定（代表）' || flag === '初回時間設定（担当）';
 
 function RecordFields({ customer, setRecords, activityTypes, products, currentUser, token, showAlert, onSaved }) {
   const now = new Date();
@@ -1419,17 +1422,18 @@ function TeleApptStatsView({ records, activityTypes, members, currentUser, isOwn
   }, [teleRecords, granularity]);
 
   // コール数・有効/無効コール数・代表接触数・時間設定件数・接続アポ率・代表接触率を算出
-  // ※「無効」「代表接触」フラグが無い場合は0件として扱われます（設定・管理から追加できます）
   const computeFunnel = (items) => {
     const callCount = items.length; // コール数：活動種別「テレアポ」を選択した回数
     const invalidCount = items.filter(i => i.flag === '留守電・不通').length; // 無効コール数
     const validCount = callCount - invalidCount; // 有効コール数：その他の結果フラグの数
-    const timeSettingCount = items.filter(i => i.flag === '初回時間設定').length; // 時間設定件数
-    const repContactCount = items.filter(i => ['初回時間設定', '代表接触拒否', '当日確認案件'].includes(i.flag)).length; // 代表接触数
+    const repTimeSettingCount = items.filter(i => i.flag === '初回時間設定（代表）').length; // 時間設定（代表）
+    const staffTimeSettingCount = items.filter(i => i.flag === '初回時間設定（担当）').length; // 時間設定（担当）
+    const timeSettingCount = repTimeSettingCount + staffTimeSettingCount; // 時間設定件数（合計）
+    const repContactCount = items.filter(i => isInitialTimeSettingFlag(i.flag) || ['代表接触拒否', '当日確認案件'].includes(i.flag)).length; // 代表接触数
     const validRate = callCount > 0 ? Math.round((validCount / callCount) * 100) : 0; // 有効コール率
     const repContactRate = validCount > 0 ? Math.round((repContactCount / validCount) * 100) : 0; // 代表接触率
     const apptRate = repContactCount > 0 ? Math.round((timeSettingCount / repContactCount) * 100) : 0; // 接続アポ率
-    return { callCount, invalidCount, validCount, timeSettingCount, repContactCount, validRate, repContactRate, apptRate };
+    return { callCount, invalidCount, validCount, timeSettingCount, repTimeSettingCount, staffTimeSettingCount, repContactCount, validRate, repContactRate, apptRate };
   };
 
   const buildReport = (label, items) => {
@@ -1441,7 +1445,7 @@ function TeleApptStatsView({ records, activityTypes, members, currentUser, isOwn
       `有効コール数: ${f.validCount}件`,
       `無効コール数: ${f.invalidCount}件`,
       `代表接触数: ${f.repContactCount}件`,
-      `時間設定件数: ${f.timeSettingCount}件`,
+      `時間設定件数: ${f.timeSettingCount}件（代表${f.repTimeSettingCount}件、担当${f.staffTimeSettingCount}件）`,
       `有効コール率: ${f.validRate}%`,
       `代表接触率: ${f.repContactRate}%`,
       `接続アポ率: ${f.apptRate}%`,
@@ -1487,13 +1491,15 @@ function TeleApptStatsView({ records, activityTypes, members, currentUser, isOwn
                   <CopyButton text={buildReport(key, items)} label="レポートをコピー" />
                 </div>
 
-                <div className="grid grid-cols-4 lg:grid-cols-8 gap-2 mb-3">
+                <div className="grid grid-cols-4 lg:grid-cols-10 gap-2 mb-3">
                   {[
                     ['コール数', f.callCount, '件'],
                     ['有効コール数', f.validCount, '件'],
                     ['無効コール数', f.invalidCount, '件'],
                     ['代表接触数', f.repContactCount, '件'],
                     ['時間設定件数', f.timeSettingCount, '件'],
+                    ['　├代表', f.repTimeSettingCount, '件'],
+                    ['　└担当', f.staffTimeSettingCount, '件'],
                     ['有効コール率', f.validRate, '%'],
                     ['代表接触率', f.repContactRate, '%'],
                     ['接続アポ率', f.apptRate, '%'],
@@ -1524,62 +1530,333 @@ function TeleApptStatsView({ records, activityTypes, members, currentUser, isOwn
 }
 
 // ---------- 日報 ----------
-function DailyReportView({ records, dailyReportTemplates }) {
+// ---------- 日報フォーマット用ヘルパー ----------
+const WEEKDAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
+
+// 「協会の種類」の値から群私幼／ユーザー／新規のどれに属するかを判定する
+function getApproachBucket(customer) {
+  const t = customer?.associationType || '';
+  if (t.includes('群私幼')) return 'gunshiyou';
+  if (t.includes('ユーザー')) return 'user';
+  if (t.includes('新規')) return 'shinki';
+  return null;
+}
+
+function computeApproachStats(records, customerIds, dateFrom, dateTo) {
+  const recs = records.filter(r => customerIds.has(r.customerId) && r.date >= dateFrom && r.date <= dateTo);
+  const initialTimeSettingRep = recs.filter(r => r.type === 'テレアポ' && r.flag === '初回時間設定（代表）').length;
+  const initialTimeSettingStaff = recs.filter(r => r.type === 'テレアポ' && r.flag === '初回時間設定（担当）').length;
+  const initialTimeSetting = initialTimeSettingRep + initialTimeSettingStaff;
+  const initialVisit = recs.filter(r => r.type === '初回訪問').length;
+  const timeSetting = recs.filter(r => r.flag === '営業時間設定').length;
+  const visit = recs.filter(r => SALES_TYPES.includes(r.type)).length;
+  const visitRep = recs.filter(r => r.type === '営業（代表）').length;
+  const visitStaff = recs.filter(r => r.type === '営業（担当）').length;
+  const orderRecs = recs.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
+  const profit = orderRecs.reduce((s, r) => s + (Number(r.profit) || 0), 0);
+  const quantity = orderRecs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  return { initialTimeSetting, initialTimeSettingRep, initialTimeSettingStaff, initialVisit, timeSetting, visit, visitRep, visitStaff, profit, quantity };
+}
+
+function NumField({ label, value, onChange, suffix = '件' }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] font-semibold text-slate-500">{label}</label>
+      <div className="flex items-center gap-1">
+        <input type="number" value={value} onChange={e => onChange(Number(e.target.value))}
+          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white" />
+        <span className="text-xs text-slate-400 shrink-0">{suffix}</span>
+      </div>
+    </div>
+  );
+}
+
+function DailyReportView({ records, customers, currentUser, dailyReportLogs, setDailyReportLogs, showAlert }) {
   const [date, setDate] = useState(new Date().toISOString().substring(0, 10));
-  const [templateId, setTemplateId] = useState(dailyReportTemplates[0]?.id || '');
-  const [freeText, setFreeText] = useState('');
-  const [polished, setPolished] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [totalWorkingDays, setTotalWorkingDays] = useState(22);
 
-  const dayRecords = records.filter(r => r.date === date);
-  const teleCount = dayRecords.filter(r => r.type === 'テレアポ').length;
-  const visitCount = dayRecords.filter(r => r.type === '初回訪問').length;
-  const salesCount = dayRecords.filter(r => r.type === '営業').length;
-  const orderRecords = dayRecords.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
-  const orderCount = orderRecords.length;
-  const quantity = orderRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-  const profit = orderRecords.reduce((s, r) => s + (Number(r.profit) || 0), 0);
+  const [monthlyCommitProfit, setMonthlyCommitProfit] = useState(0);
+  const [monthlyCommitQuantity, setMonthlyCommitQuantity] = useState(0);
+  const [todayCommitTimeSetting, setTodayCommitTimeSetting] = useState(0);
+  const [todayCommitAppt, setTodayCommitAppt] = useState(0);
+  const [todayCommitProfit, setTodayCommitProfit] = useState(0);
+  const [todayCommitQuantity, setTodayCommitQuantity] = useState(0);
+  const [nextWeekCommitTimeSetting, setNextWeekCommitTimeSetting] = useState(0);
+  const [nextWeekCommitAppt, setNextWeekCommitAppt] = useState(0);
+  const [nextWeekCommitProfit, setNextWeekCommitProfit] = useState(0);
+  const [nextWeekCommitQuantity, setNextWeekCommitQuantity] = useState(0);
 
-  const template = dailyReportTemplates.find(t => t.id === Number(templateId)) || dailyReportTemplates[0];
-  const text = template ? fillDailyReport(template.body, {
-    date, teleCount, visitCount, salesCount, orderCount, quantity, profit,
-    freeText: polished || freeText,
-  }) : '';
+  const [userStats, setUserStats] = useState({ contact: 0, appt: 0, visit: 0, meeting: 0, newSchedule: 0, noContact: 0, churnRisk: 0 });
+  const [referral, setReferral] = useState({ count: 0, converted: 0, notApproached: 0 });
+
+  const [growthText, setGrowthText] = useState('');
+  const [improvementText, setImprovementText] = useState('');
+  const [improvementActionText, setImprovementActionText] = useState('');
+  const [nextWeekGoal1, setNextWeekGoal1] = useState('');
+  const [nextWeekGoal2, setNextWeekGoal2] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const myRecords = records.filter(r => r.assignedTo === currentUser?.displayName);
+  const monthStr = date.substring(0, 7);
+  const monthStart = `${monthStr}-01`;
+  const monthRecords = myRecords.filter(r => r.date?.startsWith(monthStr) && r.date <= date);
+  const workedDates = [...new Set(monthRecords.map(r => r.date))];
+  const workedDaysCount = workedDates.length;
+
+  const dParts = date.split('-');
+  const dayOfWeek = WEEKDAY_JA[new Date(date).getDay()];
+
+  const todayRecords = myRecords.filter(r => r.date === date);
+  const todayTimeSetting = todayRecords.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag)).length;
+  const todayVisit = todayRecords.filter(r => r.type === '初回訪問').length;
+  const todayOrderRecs = todayRecords.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
+  const todayProfit = todayOrderRecs.reduce((s, r) => s + (Number(r.profit) || 0), 0);
+  const todayQuantity = todayOrderRecs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+
+  const cumOrderRecs = monthRecords.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
+  const cumProfit = cumOrderRecs.reduce((s, r) => s + (Number(r.profit) || 0), 0);
+  const cumQuantity = cumOrderRecs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+
+  const remainingDays = Math.max(totalWorkingDays - workedDaysCount, 1);
+  const remainingProfit = Math.max(monthlyCommitProfit - cumProfit, 0);
+  const remainingQuantity = Math.max(monthlyCommitQuantity - cumQuantity, 0);
+  const dailyNeededProfit = (remainingProfit / remainingDays).toFixed(2);
+  const dailyNeededQuantity = (remainingQuantity / remainingDays).toFixed(2);
+
+  const gunshiyouIds = new Set(customers.filter(c => getApproachBucket(c) === 'gunshiyou').map(c => c.id));
+  const gunshiyouToday = computeApproachStats(myRecords, gunshiyouIds, date, date);
+  const gunshiyouCum = computeApproachStats(myRecords, gunshiyouIds, monthStart, date);
+
+  const userIds = new Set(customers.filter(c => getApproachBucket(c) === 'user').map(c => c.id));
+  const userToday = computeApproachStats(myRecords, userIds, date, date);
+  const userCum = computeApproachStats(myRecords, userIds, monthStart, date);
+
+  const shinkiIds = new Set(customers.filter(c => getApproachBucket(c) === 'shinki').map(c => c.id));
+  const shinkiToday = computeApproachStats(myRecords, shinkiIds, date, date);
+  const shinkiCum = computeApproachStats(myRecords, shinkiIds, monthStart, date);
+
+  const reportText = [
+    `ゾス！${companyName}の${currentUser?.displayName || ''}です！`,
+    `${Number(dParts[1])}月${Number(dParts[2])}日（${dayOfWeek}）の日報を提出します。`,
+    `稼働${workedDaysCount}日目/${totalWorkingDays}日`,
+    '',
+    '【今月のコミット】',
+    `粗利/台数：${monthlyCommitProfit}P/${monthlyCommitQuantity}台`,
+    `実数　${cumProfit}p/${cumQuantity}台`,
+    '',
+    '【本日コミット】',
+    `時間設定件数：${todayCommitTimeSetting}件`,
+    `アポ件数 ：${todayCommitAppt}訪問`,
+    `粗利/台数：${todayCommitProfit}P/${todayCommitQuantity}台`,
+    '',
+    '▪️結果',
+    `時間設定件数：${todayTimeSetting}件`,
+    `アポ件数 ：${todayVisit}訪問`,
+    `粗利/台数：${todayProfit}P/${todayQuantity}台`,
+    '',
+    '【群私幼アプローチ】',
+    `初回時間設定件数　${gunshiyouToday.initialTimeSetting}件`,
+    `初回訪問件数　${gunshiyouToday.initialVisit}件`,
+    `時間設定件数　${gunshiyouToday.timeSetting}件`,
+    `訪問件数　${gunshiyouToday.visit}件`,
+    `粗利/台数：${gunshiyouToday.profit}P/${gunshiyouToday.quantity}台`,
+    '',
+    `累計初回時間設定：${gunshiyouCum.initialTimeSetting}件（代表${gunshiyouCum.initialTimeSettingRep}件、担当${gunshiyouCum.initialTimeSettingStaff}件）`,
+    `累計初回訪問件数　${gunshiyouCum.initialVisit}件`,
+    `累計時間設定件数：${gunshiyouCum.timeSetting}件`,
+    `累計訪問件数　${gunshiyouCum.visit}件`,
+    `実数 ${gunshiyouCum.profit}P/${gunshiyouCum.quantity}台`,
+    `日々累計必要数：${remainingProfit}P/${remainingQuantity}台(日${dailyNeededProfit}P/${dailyNeededQuantity}台)`,
+    '',
+    '【ユーザーアプローチ】',
+    `1コンタクト完了数　${userStats.contact}件`,
+    `2アポ数　${userStats.appt}件`,
+    `3訪問数　${userStats.visit}件`,
+    `4定例ミーティング実行数　${userStats.meeting}件`,
+    `5新規スケジューリング数　${userStats.newSchedule}件`,
+    '-----',
+    `6：未コンタクト/追客　${userStats.noContact}件`,
+    `7：解約リスク　${userStats.churnRisk}件`,
+    '',
+    `訪問件数　${userToday.visit}件`,
+    `累計訪問件数　${userCum.visit}件`,
+    `実数 ${userCum.profit}P/${userCum.quantity}台`,
+    '',
+    '【新規アプローチ】',
+    `時間設定件数　${shinkiToday.initialTimeSetting}件`,
+    `訪問件数　${shinkiToday.initialVisit}件`,
+    `累計時間設定件数　${shinkiCum.initialTimeSetting}件`,
+    `累計訪問件数　${shinkiCum.initialVisit}件`,
+    `粗利/台数　${shinkiCum.profit}P/${shinkiCum.quantity}台`,
+    '',
+    '【今日の成長】',
+    `・${growthText}`,
+    '',
+    '【改善点】',
+    `・${improvementText}`,
+    '',
+    '【改善行動】',
+    `・${improvementActionText}`,
+    '',
+    '【来週の目標】',
+    `①${nextWeekGoal1}`,
+    `②${nextWeekGoal2}`,
+    '',
+    '【来週のコミット】',
+    `時間設定件数：${nextWeekCommitTimeSetting}件`,
+    `アポ件数 ：${nextWeekCommitAppt}訪問`,
+    `粗利/台数：${nextWeekCommitProfit}P/${nextWeekCommitQuantity}台`,
+    '',
+    '【紹介取得数】',
+    `紹介取得数：${referral.count}件`,
+    `商談昇華数：${referral.converted}件`,
+    `未アプローチ数：${referral.notApproached}件`,
+    '',
+    '以上です。',
+  ].join('\n');
+
+  const existingLog = dailyReportLogs.find(l => l.date === date);
+
+  const saveLog = () => {
+    setDailyReportLogs(prev => {
+      const withoutSameDate = prev.filter(l => l.date !== date);
+      return [...withoutSameDate, { id: Date.now(), date, text: reportText, createdAt: new Date().toISOString() }];
+    });
+    showAlert(existingLog ? 'この日の日報を上書き保存しました。' : '日報を保存しました。ログに記録されます。');
+  };
 
   return (
-    <div className="max-w-2xl space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="max-w-3xl space-y-5">
+      <div className="bg-white rounded-xl border border-slate-100 p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
         <FormField label="日付" type="date" value={date} onChange={e => setDate(e.target.value)} />
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">フォーマット</label>
-          <select value={templateId} onChange={e => setTemplateId(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
-            {dailyReportTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+        <FormField label="会社・支社名" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="例：WEB東京" />
+        <NumField label="今月の総稼働予定日数" value={totalWorkingDays} onChange={setTotalWorkingDays} suffix="日" />
+        <div className="flex flex-col justify-end">
+          <p className="text-xs text-slate-400">自動計算：稼働{workedDaysCount}日目/{totalWorkingDays}日</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <p className="text-xs font-bold text-slate-500 mb-2">自動集計された数値（{date}）</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-          <div><p className="text-xl font-extrabold text-slate-800">{teleCount}</p><p className="text-[10px] text-slate-400">テレアポ</p></div>
-          <div><p className="text-xl font-extrabold text-slate-800">{visitCount}</p><p className="text-[10px] text-slate-400">初回訪問</p></div>
-          <div><p className="text-xl font-extrabold text-slate-800">{salesCount}</p><p className="text-[10px] text-slate-400">営業</p></div>
-          <div><p className="text-xl font-extrabold text-slate-800">{orderCount}</p><p className="text-[10px] text-slate-400">受注</p></div>
+        <p className="text-xs font-bold text-slate-500 mb-3">コミット（目標）※手入力</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <NumField label="今月コミット：粗利" value={monthlyCommitProfit} onChange={setMonthlyCommitProfit} suffix="P" />
+          <NumField label="今月コミット：台数" value={monthlyCommitQuantity} onChange={setMonthlyCommitQuantity} suffix="台" />
+          <NumField label="本日コミット：時間設定" value={todayCommitTimeSetting} onChange={setTodayCommitTimeSetting} />
+          <NumField label="本日コミット：アポ" value={todayCommitAppt} onChange={setTodayCommitAppt} suffix="訪問" />
+          <NumField label="本日コミット：粗利" value={todayCommitProfit} onChange={setTodayCommitProfit} suffix="P" />
+          <NumField label="本日コミット：台数" value={todayCommitQuantity} onChange={setTodayCommitQuantity} suffix="台" />
         </div>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label className="text-xs font-semibold text-slate-500">所感・特記事項（1行ずつ箇条書きでOK）</label>
-        <textarea value={freeText} onChange={e => { setFreeText(e.target.value); setPolished(''); }} rows={4} placeholder="例：A園は反応が良く次回訪問につながりそう"
-          className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white" />
-        <button onClick={() => setPolished(polishText(freeText))} className="self-start mt-1 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold">
-          <Sparkles className="w-3.5 h-3.5" /> 文章に整える（簡易整形・AIではありません）
-        </button>
+      <div className="bg-white rounded-xl border border-slate-100 p-4">
+        <p className="text-xs font-bold text-slate-500 mb-3">本日の実績（自動集計）</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+          <div><p className="text-xl font-extrabold text-slate-800">{todayTimeSetting}</p><p className="text-[10px] text-slate-400">時間設定件数</p></div>
+          <div><p className="text-xl font-extrabold text-slate-800">{todayVisit}</p><p className="text-[10px] text-slate-400">アポ（訪問）件数</p></div>
+          <div><p className="text-xl font-extrabold text-slate-800">{todayProfit}<span className="text-xs font-normal text-slate-400">P</span></p><p className="text-[10px] text-slate-400">粗利</p></div>
+          <div><p className="text-xl font-extrabold text-slate-800">{todayQuantity}<span className="text-xs font-normal text-slate-400">台</span></p><p className="text-[10px] text-slate-400">台数</p></div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-100 p-4">
+        <p className="text-xs font-bold text-slate-500 mb-1">群私幼アプローチ（自動集計・協会の種類「群私幼」）</p>
+        <p className="text-[11px] text-slate-400 mb-3">本日: 初回時間設定{gunshiyouToday.initialTimeSetting}件（代表{gunshiyouToday.initialTimeSettingRep}/担当{gunshiyouToday.initialTimeSettingStaff}） / 初回訪問{gunshiyouToday.initialVisit}件 / 時間設定{gunshiyouToday.timeSetting}件 / 訪問{gunshiyouToday.visit}件 / {gunshiyouToday.profit}P・{gunshiyouToday.quantity}台</p>
+        <p className="text-[11px] text-slate-500">累計: 初回時間設定{gunshiyouCum.initialTimeSetting}件（代表{gunshiyouCum.initialTimeSettingRep}/担当{gunshiyouCum.initialTimeSettingStaff}） / 初回訪問{gunshiyouCum.initialVisit}件 / 時間設定{gunshiyouCum.timeSetting}件 / 訪問{gunshiyouCum.visit}件 / 実数{gunshiyouCum.profit}P・{gunshiyouCum.quantity}台</p>
+        <p className="text-[11px] text-slate-500">日々累計必要数: {remainingProfit}P/{remainingQuantity}台（日{dailyNeededProfit}P/{dailyNeededQuantity}台）</p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-100 p-4">
+        <p className="text-xs font-bold text-slate-500 mb-3">ユーザーアプローチ ※手入力（既存のフラグでは追跡していない指標のため）</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <NumField label="1 コンタクト完了数" value={userStats.contact} onChange={v => setUserStats({ ...userStats, contact: v })} />
+          <NumField label="2 アポ数" value={userStats.appt} onChange={v => setUserStats({ ...userStats, appt: v })} />
+          <NumField label="3 訪問数" value={userStats.visit} onChange={v => setUserStats({ ...userStats, visit: v })} />
+          <NumField label="4 定例ミーティング実行数" value={userStats.meeting} onChange={v => setUserStats({ ...userStats, meeting: v })} />
+          <NumField label="5 新規スケジューリング数" value={userStats.newSchedule} onChange={v => setUserStats({ ...userStats, newSchedule: v })} />
+          <NumField label="6 未コンタクト/追客" value={userStats.noContact} onChange={v => setUserStats({ ...userStats, noContact: v })} />
+          <NumField label="7 解約リスク" value={userStats.churnRisk} onChange={v => setUserStats({ ...userStats, churnRisk: v })} />
+        </div>
+        <p className="text-[11px] text-slate-400 mt-3">自動集計（協会の種類「ユーザー」）：本日訪問{userToday.visit}件 / 累計訪問{userCum.visit}件 / 実数{userCum.profit}P・{userCum.quantity}台</p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-100 p-4">
+        <p className="text-xs font-bold text-slate-500 mb-1">新規アプローチ（自動集計・協会の種類「新規」）</p>
+        <p className="text-[11px] text-slate-400 mb-1">本日: 時間設定{shinkiToday.initialTimeSetting}件 / 訪問{shinkiToday.initialVisit}件</p>
+        <p className="text-[11px] text-slate-500">累計: 時間設定{shinkiCum.initialTimeSetting}件 / 訪問{shinkiCum.initialVisit}件 / {shinkiCum.profit}P・{shinkiCum.quantity}台</p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-100 p-4 space-y-3">
+        <p className="text-xs font-bold text-slate-500">所感・自由記述</p>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-semibold text-slate-500">今日の成長</label>
+          <input value={growthText} onChange={e => setGrowthText(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-semibold text-slate-500">改善点</label>
+          <input value={improvementText} onChange={e => setImprovementText(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-semibold text-slate-500">改善行動</label>
+          <input value={improvementActionText} onChange={e => setImprovementActionText(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-slate-500">来週の目標①</label>
+            <input value={nextWeekGoal1} onChange={e => setNextWeekGoal1(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-slate-500">来週の目標②</label>
+            <input value={nextWeekGoal2} onChange={e => setNextWeekGoal2(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-100 p-4">
+        <p className="text-xs font-bold text-slate-500 mb-3">来週のコミット ／ 紹介取得数 ※手入力</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <NumField label="来週コミット：時間設定" value={nextWeekCommitTimeSetting} onChange={setNextWeekCommitTimeSetting} />
+          <NumField label="来週コミット：アポ" value={nextWeekCommitAppt} onChange={setNextWeekCommitAppt} suffix="訪問" />
+          <NumField label="来週コミット：粗利/台数" value={nextWeekCommitProfit} onChange={setNextWeekCommitProfit} suffix="P" />
+          <NumField label="紹介取得数" value={referral.count} onChange={v => setReferral({ ...referral, count: v })} />
+          <NumField label="商談昇華数" value={referral.converted} onChange={v => setReferral({ ...referral, converted: v })} />
+          <NumField label="未アプローチ数" value={referral.notApproached} onChange={v => setReferral({ ...referral, notApproached: v })} />
+        </div>
       </div>
 
       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-        <pre className="text-xs whitespace-pre-wrap font-sans text-slate-700">{text}</pre>
+        <pre className="text-xs whitespace-pre-wrap font-sans text-slate-700">{reportText}</pre>
       </div>
-      <CopyButton text={text} label="日報をコピー" />
+      <div className="flex flex-wrap gap-2">
+        <CopyButton text={reportText} label="日報をコピー" />
+        <button onClick={saveLog} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700">
+          <Save className="w-3.5 h-3.5" />{existingLog ? 'この日の日報を上書き保存' : '日報を保存してログに残す'}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-100 p-4">
+        <button onClick={() => setHistoryOpen(v => !v)} className="w-full flex justify-between items-center text-sm font-bold text-slate-700">
+          過去の日報ログ（{dailyReportLogs.length}件）
+          <ChevronDown className={`w-4 h-4 transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {historyOpen && (
+          <ul className="mt-3 space-y-2 max-h-96 overflow-y-auto">
+            {dailyReportLogs.length === 0 && <p className="text-sm text-slate-400">まだ保存された日報はありません。</p>}
+            {dailyReportLogs.slice().sort((a, b) => b.date.localeCompare(a.date)).map(log => (
+              <li key={log.id} className="bg-slate-50 rounded-lg p-3">
+                <div className="flex justify-between items-center mb-1">
+                  <p className="text-xs font-bold text-slate-700">{log.date}</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setDate(log.date)} className="text-[11px] text-teal-600 font-semibold">この日を開く</button>
+                    <CopyButton text={log.text} label="コピー" />
+                  </div>
+                </div>
+                <pre className="text-[11px] whitespace-pre-wrap font-sans text-slate-500 max-h-24 overflow-y-auto">{log.text}</pre>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -2199,10 +2476,10 @@ export default function App() {
   const { data, makeSetter, loaded: dataLoaded, syncError } = useSyncedData({
     customers: [], records: [], products: initialProducts, activityTypes: initialActivityTypes,
     goals: initialGoals, emailTemplates: initialEmailTemplates, reportTemplates: initialReportTemplates,
-    dailyReportTemplates: initialDailyReportTemplates, associationTypes: initialAssociationTypes,
+    dailyReportTemplates: initialDailyReportTemplates, associationTypes: initialAssociationTypes, dailyReportLogs: [],
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes } = data;
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs } = data;
   const setCustomers = makeSetter('customers');
   const setRecords = makeSetter('records');
   const setProducts = makeSetter('products');
@@ -2212,6 +2489,7 @@ export default function App() {
   const setReportTemplates = makeSetter('reportTemplates');
   const setDailyReportTemplates = makeSetter('dailyReportTemplates');
   const setAssociationTypes = makeSetter('associationTypes');
+  const setDailyReportLogs = makeSetter('dailyReportLogs');
 
   // メンバー一覧（担当者選択・絞り込み用）を取得
   useEffect(() => {
@@ -2321,7 +2599,13 @@ export default function App() {
         )}
         {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} activityTypes={activityTypes} members={members} currentUser={user} isOwner={isOwner} />}
         {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} currentUser={user} isOwner={isOwner} />}
-        {activeTab === 'daily_report' && <DailyReportView records={records} dailyReportTemplates={dailyReportTemplates} />}
+        {activeTab === 'daily_report' && (
+          <DailyReportView
+            records={records} customers={customers} currentUser={user}
+            dailyReportLogs={dailyReportLogs} setDailyReportLogs={setDailyReportLogs}
+            showAlert={showAlert}
+          />
+        )}
         {activeTab === 'email' && (
           <EmailBuilderView customers={customers} emailTemplates={emailTemplates} setEmailTemplates={setEmailTemplates} showAlert={showAlert} showConfirm={showConfirm} />
         )}
