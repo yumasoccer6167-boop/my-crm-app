@@ -14,8 +14,9 @@ const initialAssociationTypes = [];
 const initialActivityTypes = [
   { id: 1, name: 'テレアポ', flags: ['時間設定', '再コール', '拒否', '廃業', '接触済み拒否', '当日確認案件', '長期見込み'] },
   { id: 2, name: '初回訪問', flags: ['営業時間設定', '資料メール送り'] },
-  { id: 3, name: '営業', flags: ['受注', '返事待ち', '返事待ちNG', 'NG'] },
+  { id: 3, name: '営業', flags: ['返事待ち', '返事待ちNG', 'NG'] },
   { id: 4, name: '過去ログ登録', flags: ['ユーザー', '過去営業履歴あり', '他者見込み', '営業提案NG'] },
+  { id: 5, name: '受注登録', flags: ['受注'] },
 ];
 
 const thisMonth = new Date().toISOString().substring(0, 7);
@@ -23,7 +24,7 @@ const initialGoals = { [thisMonth]: { timeSetting: 50, firstVisit: 20, salesTime
 
 const emptyCustomer = {
   id: null, gakuenName: '', enName: '', associationType: '', chairman: '', principal: '', address: '',
-  tel: '', email: '', hpLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
+  tel: '', mobile: '', email: '', hpLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
 };
 
 const initialEmailTemplates = [
@@ -89,11 +90,11 @@ const CSV_FIELDS = [
   ['gakuenName', '学園名'], ['enName', '園名'],
   ['associationType', '協会の種類', '協会関係'],
   ['chairman', '理事長'], ['principal', '園長'],
-  ['address', '住所'], ['tel', 'TEL'],
+  ['address', '住所'], ['tel', 'TEL'], ['mobile', '携帯番号'],
   ['email', 'メール', 'メールアドレス'],
   ['hpLink', 'HPリンク'], ['hpVendor', 'HP業者'],
   ['instagram', 'InstagramURL', 'Instagram'],
-  ['gbpLink', 'GBPリンク'],
+  ['gbpLink', 'GBPプロフィールリンク', 'GBPリンク'],
   ['reviewScore', '口コミ評価'],
   ['reviewCount', '口コミ件数', '口コミ数'],
 ];
@@ -585,11 +586,12 @@ function CustomerModal({ customer, associationTypes, members, currentUser, onSav
         <FormField label="園長" value={form.principal} onChange={set('principal')} />
         <FormField label="住所" value={form.address} onChange={set('address')} className="md:col-span-2" />
         <FormField label="TEL" value={form.tel} onChange={set('tel')} />
+        <FormField label="携帯番号" value={form.mobile} onChange={set('mobile')} />
         <FormField label="メールアドレス" value={form.email} onChange={set('email')} />
         <FormField label="HPリンク" value={form.hpLink} onChange={set('hpLink')} />
         <FormField label="HP業者" value={form.hpVendor} onChange={set('hpVendor')} />
         <FormField label="Instagram URL" value={form.instagram} onChange={set('instagram')} />
-        <FormField label="GBPリンク" value={form.gbpLink} onChange={set('gbpLink')} />
+        <FormField label="GBPプロフィールリンク" value={form.gbpLink} onChange={set('gbpLink')} />
         <FormField label="口コミ評価（★の数）" type="number" value={form.reviewScore} onChange={set('reviewScore')} />
         <FormField label="口コミ数" type="number" value={form.reviewCount} onChange={set('reviewCount')} />
       </div>
@@ -668,6 +670,7 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
       })()}
       <div className="flex flex-wrap gap-4 text-sm text-slate-600 mb-5">
         {customer.tel && <a href={`tel:${customer.tel}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.tel}</a>}
+        {customer.mobile && <a href={`tel:${customer.mobile}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.mobile}（携帯）</a>}
         {customer.address && <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{customer.address}</span>}
         {customer.hpLink && <a href={customer.hpLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-600"><Globe className="w-4 h-4" />HP</a>}
         {customer.instagram && <a href={customer.instagram} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-pink-600"><Camera className="w-4 h-4" />Instagram</a>}
@@ -1005,8 +1008,28 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                   </div>
                   <div className="mt-2 space-y-1 text-xs text-slate-500">
                     {c.tel && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.tel}</p>}
+                    {c.mobile && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.mobile}（携帯）</p>}
                     {c.address && <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3" />{c.address}</p>}
                   </div>
+                  {(c.hpLink || c.instagram || c.gbpLink) && (
+                    <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      {c.hpLink && (
+                        <a href={c.hpLink} target="_blank" rel="noreferrer" title="HP" className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100">
+                          <Globe className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {c.instagram && (
+                        <a href={c.instagram} target="_blank" rel="noreferrer" title="Instagram" className="p-1.5 bg-pink-50 text-pink-600 rounded-lg hover:bg-pink-100">
+                          <Camera className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {c.gbpLink && (
+                        <a href={c.gbpLink} target="_blank" rel="noreferrer" title="GBPプロフィール" className="p-1.5 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100">
+                          <Star className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="bg-slate-50 px-4 py-2.5 text-xs text-slate-500 border-t border-slate-100">
                   {latest ? `最新: ${latest.type}${latest.flag ? `（${latest.flag}）` : ''} - ${latest.date}` : '活動記録なし'}
