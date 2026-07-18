@@ -12,7 +12,7 @@ const initialProducts = [{ id: 1, name: 'SP-MEO' }, { id: 2, name: 'SP' }];
 const initialAssociationTypes = [];
 
 const initialActivityTypes = [
-  { id: 1, name: 'テレアポ', flags: ['時間設定', '再コール', '拒否', '廃業', '接触済み拒否', '当日確認案件', '長期見込み'] },
+  { id: 1, name: 'テレアポ', flags: ['再コール', '留守電・不通', '初回時間設定', '受付拒否', '代表接触拒否', '当日確認案件'] },
   { id: 2, name: '初回訪問', flags: ['営業時間設定', '資料メール送り'] },
   { id: 3, name: '営業', flags: ['返事待ち', '返事待ちNG', 'NG'] },
   { id: 4, name: '過去ログ登録', flags: ['ユーザー', '過去営業履歴あり', '他者見込み', '営業提案NG'] },
@@ -415,7 +415,7 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
   const filtered = period === 'all' ? scopedRecords : scopedRecords.filter(r => r.date?.startsWith(period));
 
   // 指標の計算
-  const teleTimeSetting = filtered.filter(r => r.type === 'テレアポ' && r.flag === '時間設定').length; // 初回時間設定件数
+  const teleTimeSetting = filtered.filter(r => r.type === 'テレアポ' && r.flag === '初回時間設定').length; // 初回時間設定件数
   const firstVisitCount = filtered.filter(r => r.type === '初回訪問').length; // 初回訪問件数
   const salesTimeSetting = filtered.filter(r => r.type === '初回訪問' && r.flag === '営業時間設定').length; // 営業時間設定件数
   const salesTimeSettingRate = firstVisitCount > 0 ? Math.round((salesTimeSetting / firstVisitCount) * 100) : 0; // 営業時間設定昇華率
@@ -648,7 +648,7 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
   const [showReport, setShowReport] = useState(false);
   const [reportSeedRecord, setReportSeedRecord] = useState(null);
 
-  const AUTO_REPORT_FLAGS = ['時間設定', '営業時間設定'];
+  const AUTO_REPORT_FLAGS = ['初回時間設定', '営業時間設定'];
   const handleRecordSaved = (record) => {
     setShowForm(false);
     if (AUTO_REPORT_FLAGS.includes(record.flag)) {
@@ -1123,7 +1123,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 }
 
 // ---------- 記録登録フォーム（顧客詳細モーダルの中で使う） ----------
-const SCHEDULE_FLAGS = ['時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
+const SCHEDULE_FLAGS = ['初回時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
 
 function RecordFields({ customer, setRecords, activityTypes, products, currentUser, token, showAlert, onSaved }) {
   const now = new Date();
@@ -1414,12 +1414,39 @@ function TeleApptStatsView({ records, activityTypes }) {
     return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
   }, [teleRecords, granularity]);
 
+  // コール数・有効/無効コール数・代表接触数・時間設定件数・接続アポ率・代表接触率を算出
+  // ※「無効」「代表接触」フラグが無い場合は0件として扱われます（設定・管理から追加できます）
+  const computeFunnel = (items) => {
+    const callCount = items.length; // コール数：活動種別「テレアポ」を選択した回数
+    const invalidCount = items.filter(i => i.flag === '留守電・不通').length; // 無効コール数
+    const validCount = callCount - invalidCount; // 有効コール数：その他の結果フラグの数
+    const timeSettingCount = items.filter(i => i.flag === '初回時間設定').length; // 時間設定件数
+    const repContactCount = items.filter(i => ['初回時間設定', '代表接触拒否', '当日確認案件'].includes(i.flag)).length; // 代表接触数
+    const validRate = callCount > 0 ? Math.round((validCount / callCount) * 100) : 0; // 有効コール率
+    const repContactRate = validCount > 0 ? Math.round((repContactCount / validCount) * 100) : 0; // 代表接触率
+    const apptRate = repContactCount > 0 ? Math.round((timeSettingCount / repContactCount) * 100) : 0; // 接続アポ率
+    return { callCount, invalidCount, validCount, timeSettingCount, repContactCount, validRate, repContactRate, apptRate };
+  };
+
   const buildReport = (label, items) => {
     const total = items.length;
-    const lines = [`${label} テレアポ結果`, `総件数: ${total}件`];
-    flags.forEach(f => {
-      const n = items.filter(i => i.flag === f).length;
-      if (n > 0) lines.push(`${f}: ${n}件（${total ? Math.round(n / total * 100) : 0}%）`);
+    const f = computeFunnel(items);
+    const lines = [
+      `${label} テレアポ結果`,
+      `コール数: ${f.callCount}件`,
+      `有効コール数: ${f.validCount}件`,
+      `無効コール数: ${f.invalidCount}件`,
+      `代表接触数: ${f.repContactCount}件`,
+      `時間設定件数: ${f.timeSettingCount}件`,
+      `有効コール率: ${f.validRate}%`,
+      `代表接触率: ${f.repContactRate}%`,
+      `接続アポ率: ${f.apptRate}%`,
+      '',
+      '【フラグ内訳】',
+    ];
+    flags.forEach(fl => {
+      const n = items.filter(i => i.flag === fl).length;
+      if (n > 0) lines.push(`${fl}: ${n}件（${total ? Math.round(n / total * 100) : 0}%）`);
     });
     const noFlag = items.filter(i => !i.flag).length;
     if (noFlag > 0) lines.push(`フラグなし: ${noFlag}件（${total ? Math.round(noFlag / total * 100) : 0}%）`);
@@ -1440,15 +1467,33 @@ function TeleApptStatsView({ records, activityTypes }) {
         <div className="space-y-3">
           {groups.map(([key, items]) => {
             const noFlagCount = items.filter(i => !i.flag).length;
+            const f = computeFunnel(items);
             return (
               <div key={key} className="bg-white rounded-xl border border-slate-100 p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="text-sm font-bold text-slate-700">{key}</p>
-                    <p className="text-xs text-slate-400">総件数 {items.length}件</p>
-                  </div>
+                <div className="flex justify-between items-start mb-3">
+                  <p className="text-sm font-bold text-slate-700">{key}</p>
                   <CopyButton text={buildReport(key, items)} label="レポートをコピー" />
                 </div>
+
+                <div className="grid grid-cols-4 lg:grid-cols-8 gap-2 mb-3">
+                  {[
+                    ['コール数', f.callCount, '件'],
+                    ['有効コール数', f.validCount, '件'],
+                    ['無効コール数', f.invalidCount, '件'],
+                    ['代表接触数', f.repContactCount, '件'],
+                    ['時間設定件数', f.timeSettingCount, '件'],
+                    ['有効コール率', f.validRate, '%'],
+                    ['代表接触率', f.repContactRate, '%'],
+                    ['接続アポ率', f.apptRate, '%'],
+                  ].map(([label, value, unit]) => (
+                    <div key={label} className="bg-slate-50 rounded-lg p-2 text-center">
+                      <p className="text-base font-extrabold text-slate-800">{value}<span className="text-xs font-normal text-slate-400">{unit}</span></p>
+                      <p className="text-[10px] text-slate-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-xs text-slate-400 mb-1.5">フラグ内訳</p>
                 <div className="flex flex-wrap gap-2">
                   {flags.map(f => {
                     const n = items.filter(i => i.flag === f).length;
@@ -1999,7 +2044,7 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
         <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Package className="w-4 h-4" />商品管理</h3>
         <div className="flex gap-2 mb-4">
-          <input value={newProduct} onChange={e => setNewProduct(e.target.value)} placeholder="新しい商品名"
+          <input value={newProduct} onChange={e => setNewProduct(e.target.value)} placeholder="新しい商品名" autoComplete="off"
             className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
           <button onClick={addProduct} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
         </div>
@@ -2017,7 +2062,7 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
         <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" />協会の種類管理</h3>
         <p className="text-xs text-slate-400 mb-3">ここで登録した選択肢が、顧客登録フォームの「協会の種類」プルダウンに反映されます。</p>
         <div className="flex gap-2 mb-4">
-          <input value={newAssociationType} onChange={e => setNewAssociationType(e.target.value)} placeholder="例：〇〇県私立幼稚園協会"
+          <input value={newAssociationType} onChange={e => setNewAssociationType(e.target.value)} placeholder="例：〇〇県私立幼稚園協会" autoComplete="off"
             className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
           <button onClick={addAssociationType} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
         </div>
@@ -2034,7 +2079,7 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
         <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Filter className="w-4 h-4" />活動種別・結果フラグ管理</h3>
         <div className="flex gap-2 mb-4">
-          <input value={newType} onChange={e => setNewType(e.target.value)} placeholder="新しい活動種別"
+          <input value={newType} onChange={e => setNewType(e.target.value)} placeholder="新しい活動種別" autoComplete="off"
             className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
           <button onClick={addType} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
         </div>
@@ -2052,7 +2097,7 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
               </div>
               <div className="flex gap-2">
                 <input value={flagDraft[a.id] || ''} onChange={e => setFlagDraft({ ...flagDraft, [a.id]: e.target.value })}
-                  placeholder="フラグを追加" className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-xs" />
+                  placeholder="フラグを追加" autoComplete="off" className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-xs" />
                 <button onClick={() => addFlag(a.id)} className="px-3 py-1.5 bg-slate-700 text-white rounded text-xs font-bold">追加</button>
               </div>
             </div>
