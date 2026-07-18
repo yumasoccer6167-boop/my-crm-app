@@ -644,12 +644,119 @@ function ReportGenerator({ customer, reportTemplates, latestRecord }) {
   );
 }
 
+// ---------- 過去の記録の編集フォーム ----------
+function RecordEditForm({ record, activityTypes, products, onSave, onCancel }) {
+  const [type, setType] = useState(record.type);
+  const [flag, setFlag] = useState(record.flag || '');
+  const [date, setDate] = useState(record.date || '');
+  const [time, setTime] = useState(record.time || '');
+  const [memo, setMemo] = useState(record.memo || '');
+  const [productName, setProductName] = useState(record.productName || products[0]?.name || '');
+  const [monthlyFee, setMonthlyFee] = useState(record.monthlyFee || '');
+  const [years, setYears] = useState(record.years || '');
+  const [quantity, setQuantity] = useState(record.quantity || '');
+  const [profit, setProfit] = useState(record.profit || '');
+  const [scheduledDate, setScheduledDate] = useState(record.scheduledDate || '');
+  const [scheduledTime, setScheduledTime] = useState(record.scheduledTime || '');
+  const [voiceLink, setVoiceLink] = useState(record.voiceLink || '');
+  const [voiceMemo, setVoiceMemo] = useState(record.voiceMemo || '');
+
+  const currentFlags = activityTypes.find(a => a.name === type)?.flags || [];
+  const isOrder = flag === '受注' || flag === 'ユーザー';
+  const needsSchedule = SCHEDULE_FLAGS.includes(flag);
+  const isTele = type === 'テレアポ';
+
+  const save = () => {
+    onSave({
+      ...record, type, flag, date, time, memo,
+      ...(isOrder ? { productName, monthlyFee, years, quantity, profit } : { productName: undefined, monthlyFee: undefined, years: undefined, quantity: undefined, profit: undefined }),
+      ...(needsSchedule && scheduledDate ? { scheduledDate, scheduledTime } : { scheduledDate: undefined, scheduledTime: undefined }),
+      ...(isTele && (voiceLink || voiceMemo) ? { voiceLink, voiceMemo } : { voiceLink: undefined, voiceMemo: undefined }),
+    });
+  };
+
+  return (
+    <div className="bg-white border border-indigo-200 rounded-lg p-3 space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-semibold text-slate-500">活動種別</label>
+          <select value={type} onChange={e => { setType(e.target.value); setFlag(''); }} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+            {activityTypes.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-semibold text-slate-500">結果フラグ</label>
+          <select value={flag} onChange={e => setFlag(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+            <option value="">なし</option>
+            {currentFlags.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </div>
+        <FormField label="日付" type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <FormField label="時間" type="time" value={time} onChange={e => setTime(e.target.value)} />
+      </div>
+
+      {needsSchedule && (
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="予定日" type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
+          <FormField label="予定時間" type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} />
+        </div>
+      )}
+
+      {isTele && (
+        <div className="grid grid-cols-1 gap-2">
+          <FormField label="音声リンク（URL）" value={voiceLink} onChange={e => setVoiceLink(e.target.value)} />
+          <FormField label="音声メモ" value={voiceMemo} onChange={e => setVoiceMemo(e.target.value)} />
+        </div>
+      )}
+
+      {isOrder && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-slate-500">商品名</label>
+            <select value={productName} onChange={e => setProductName(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+              {products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+          </div>
+          <FormField label="月額" type="number" value={monthlyFee} onChange={e => setMonthlyFee(e.target.value)} />
+          <FormField label="年数" type="number" value={years} onChange={e => setYears(e.target.value)} />
+          <FormField label="台数" type="number" value={quantity} onChange={e => setQuantity(e.target.value)} />
+          <FormField label="営業粗利（P）" type="number" value={profit} onChange={e => setProfit(e.target.value)} />
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[11px] font-semibold text-slate-500">メモ</label>
+        <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={3} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
+      </div>
+
+      <div className="flex gap-2">
+        <button onClick={save} className="flex-1 py-2 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700">保存する</button>
+        <button onClick={onCancel} className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-medium">キャンセル</button>
+      </div>
+    </div>
+  );
+}
+
 // ---------- 顧客詳細（活動履歴＋記録登録）モーダル ----------
-function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, currentUser, token, showAlert, onClose, onEdit, startWithForm }) {
+function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, currentUser, token, showAlert, showConfirm, onClose, onEdit, startWithForm }) {
   const history = records.filter(r => r.customerId === customer.id).slice().reverse();
   const [showForm, setShowForm] = useState(!!startWithForm);
   const [showReport, setShowReport] = useState(false);
   const [reportSeedRecord, setReportSeedRecord] = useState(null);
+  const [editingRecordId, setEditingRecordId] = useState(null);
+
+  const updateRecord = (updated) => {
+    setRecords(prev => prev.map(r => r.id === updated.id ? updated : r));
+    setEditingRecordId(null);
+    showAlert('記録を更新しました。');
+  };
+
+  const deleteRecord = (id) => {
+    showConfirm('この記録を削除しますか？', () => {
+      setRecords(prev => prev.filter(r => r.id !== id));
+      showAlert('記録を削除しました。');
+    });
+  };
 
   const AUTO_REPORT_FLAGS = ['初回時間設定（代表）', '初回時間設定（担当）', '営業時間設定'];
   const handleRecordSaved = (record) => {
@@ -720,19 +827,29 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
       ) : (
         <ul className="space-y-2">
           {history.map(r => (
-            <li key={r.id} className="bg-slate-50 rounded-lg p-3 text-sm">
-              <div className="flex justify-between">
-                <span className="font-semibold text-slate-700">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
-                <span className="text-xs text-slate-400">{r.date} {r.time}</span>
-              </div>
-              {r.memo && <p className="text-slate-500 mt-1">{r.memo}</p>}
-              {r.productName && <p className="text-amber-700 mt-1 text-xs">受注: {r.productName} / 月額{r.monthlyFee || 0} / {r.years || 0}年 / 台数{r.quantity || 0} / 粗利{r.profit || 0}</p>}
-              {r.scheduledDate && <p className="text-indigo-600 mt-1 text-xs flex items-center gap-1"><CalendarDays className="w-3 h-3" />次回予定: {r.scheduledDate} {r.scheduledTime}</p>}
-              {(r.voiceLink || r.voiceMemo) && (
-                <p className="text-pink-600 mt-1 text-xs">
-                  {r.voiceLink && <a href={r.voiceLink} target="_blank" rel="noreferrer" className="underline">音声リンクを開く</a>}
-                  {r.voiceMemo && <span>{r.voiceLink ? '　' : ''}{r.voiceMemo}</span>}
-                </p>
+            <li key={r.id}>
+              {editingRecordId === r.id ? (
+                <RecordEditForm record={r} activityTypes={activityTypes} products={products} onSave={updateRecord} onCancel={() => setEditingRecordId(null)} />
+              ) : (
+                <div className="bg-slate-50 rounded-lg p-3 text-sm">
+                  <div className="flex justify-between items-start">
+                    <span className="font-semibold text-slate-700">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-slate-400">{r.date} {r.time}</span>
+                      <button onClick={() => setEditingRecordId(r.id)} className="p-1 text-slate-300 hover:text-teal-600"><Edit className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => deleteRecord(r.id)} className="p-1 text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+                  {r.memo && <p className="text-slate-500 mt-1">{r.memo}</p>}
+                  {r.productName && <p className="text-amber-700 mt-1 text-xs">受注: {r.productName} / 月額{r.monthlyFee || 0} / {r.years || 0}年 / 台数{r.quantity || 0} / 粗利{r.profit || 0}</p>}
+                  {r.scheduledDate && <p className="text-indigo-600 mt-1 text-xs flex items-center gap-1"><CalendarDays className="w-3 h-3" />次回予定: {r.scheduledDate} {r.scheduledTime}</p>}
+                  {(r.voiceLink || r.voiceMemo) && (
+                    <p className="text-pink-600 mt-1 text-xs">
+                      {r.voiceLink && <a href={r.voiceLink} target="_blank" rel="noreferrer" className="underline">音声リンクを開く</a>}
+                      {r.voiceMemo && <span>{r.voiceLink ? '　' : ''}{r.voiceMemo}</span>}
+                    </p>
+                  )}
+                </div>
               )}
             </li>
           ))}
@@ -1116,6 +1233,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
           currentUser={currentUser}
           token={token}
           showAlert={showAlert}
+          showConfirm={showConfirm}
           startWithForm={viewingWithForm}
           onClose={() => { setViewing(null); setViewingWithForm(false); }}
           onEdit={(c) => setEditing(c)}
