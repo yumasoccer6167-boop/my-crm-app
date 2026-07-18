@@ -3,7 +3,8 @@ import {
   Home, Users, PenTool, Plus, Search, Edit, X, Phone, MapPin, Save,
   Trash2, Package, Settings, CheckCircle, Filter, Mail, Globe,
   ChevronDown, Star, Camera, Upload, Download, Copy, BarChart,
-  Bot, Sparkles, Send, FileText, ClipboardList
+  Bot, Sparkles, Send, FileText, ClipboardList, CalendarDays,
+  ChevronLeft, ChevronRight, CheckSquare, Square, Mic, LayoutGrid, List
 } from 'lucide-react';
 
 // ---------- 初期データ ----------
@@ -20,8 +21,8 @@ const thisMonth = new Date().toISOString().substring(0, 7);
 const initialGoals = { [thisMonth]: { timeSetting: 50, firstVisit: 20, sales: 10, order: 5 } };
 
 const emptyCustomer = {
-  id: null, gakuenName: '', enName: '', chairman: '', principal: '', address: '',
-  tel: '', email: '', hpLink: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '',
+  id: null, gakuenName: '', enName: '', associationType: '', chairman: '', principal: '', address: '',
+  tel: '', email: '', hpLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
 };
 
 const initialEmailTemplates = [
@@ -32,6 +33,11 @@ const initialEmailTemplates = [
 const initialReportTemplates = [
   { id: 1, name: '基本報告フォーマット',
     body: '《法人》{{学園名}}\n《園名》{{園名}}\n《代表》{{理事長}}\n《住所》{{住所}}\n《URL》{{HPリンク}}\n《連絡先》{{TEL}}\n\n【5W1H】\n{{メモ}}\n\n【結果】\n{{結果}}' },
+];
+
+const initialDailyReportTemplates = [
+  { id: 1, name: '標準日報フォーマット',
+    body: '{{日付}} 日報\n\n【テレアポ】{{テレアポ件数}}件\n【初回訪問】{{初回訪問件数}}件\n【営業】{{営業件数}}件\n【受注】{{受注件数}}件（台数{{台数}} / 粗利{{営業P}}）\n\n【所感・特記事項】\n{{自由記述}}' },
 ];
 
 // ---------- テンプレート変数の置換 ----------
@@ -52,11 +58,56 @@ function fillTemplate(str, customer, extra = {}) {
   return out;
 }
 
+// ---------- 日報テンプレートの変数置換 ----------
+function fillDailyReport(str, data) {
+  const map = {
+    '{{日付}}': data.date || '',
+    '{{テレアポ件数}}': String(data.teleCount ?? 0),
+    '{{初回訪問件数}}': String(data.visitCount ?? 0),
+    '{{営業件数}}': String(data.salesCount ?? 0),
+    '{{受注件数}}': String(data.orderCount ?? 0),
+    '{{台数}}': String(data.quantity ?? 0),
+    '{{営業P}}': String(data.profit ?? 0),
+    '{{自由記述}}': data.freeText || '',
+  };
+  let out = str || '';
+  Object.entries(map).forEach(([k, v]) => { out = out.split(k).join(v); });
+  return out;
+}
+
+// ---------- 箇条書きメモを文章っぽく整える（簡易整形。生成AIではありません） ----------
+function polishText(raw) {
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return '（特記事項なし）';
+  return lines.map(l => (/[。！？]$/.test(l) ? l : l + '。')).join('\n');
+}
+
 // ---------- CSV ヘルパー ----------
+// [キー, 出力時の見出し, 取り込み時に受け付ける他の見出し...]
 const CSV_FIELDS = [
-  ['gakuenName', '学園名'], ['enName', '園名'], ['chairman', '理事長'], ['principal', '園長'],
-  ['address', '住所'], ['tel', 'TEL'], ['email', 'メール'], ['hpLink', 'HPリンク'],
-  ['instagram', 'InstagramURL'], ['gbpLink', 'GBPリンク'], ['reviewScore', '口コミ評価'], ['reviewCount', '口コミ件数'],
+  ['gakuenName', '学園名'], ['enName', '園名'],
+  ['associationType', '協会の種類', '協会関係'],
+  ['chairman', '理事長'], ['principal', '園長'],
+  ['address', '住所'], ['tel', 'TEL'],
+  ['email', 'メール', 'メールアドレス'],
+  ['hpLink', 'HPリンク'], ['hpVendor', 'HP業者'],
+  ['instagram', 'InstagramURL', 'Instagram'],
+  ['gbpLink', 'GBPリンク'],
+  ['reviewScore', '口コミ評価'],
+  ['reviewCount', '口コミ件数', '口コミ数'],
+];
+
+// 活動履歴（記録）をCSVに含める際、1顧客につき何件までログ列を出力するか
+const CSV_LOG_COLUMNS = 3;
+// [キー, 出力時の見出し, 取り込み時に受け付ける他の見出し...]
+const LOG_FIELD_SUFFIXES = [
+  ['type', '種別', '活動種別'],
+  ['flag', 'フラグ', '結果フラグ'],
+  ['date', '日付'],
+  ['time', '時間'],
+  ['memo', 'メモ'],
+  ['scheduledDate', '予定日付'],
+  ['scheduledTime', '予定時間'],
 ];
 
 function csvEscape(v) {
@@ -64,9 +115,27 @@ function csvEscape(v) {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function customersToCSV(customers) {
-  const header = CSV_FIELDS.map(f => f[1]).join(',');
-  const rows = customers.map(c => CSV_FIELDS.map(f => csvEscape(c[f[0]])).join(','));
+function customersToCSV(customers, records) {
+  const logHeaders = [];
+  for (let i = 1; i <= CSV_LOG_COLUMNS; i++) {
+    LOG_FIELD_SUFFIXES.forEach(([, label]) => logHeaders.push(`ログ${i}_${label}`));
+  }
+  const header = [...CSV_FIELDS.map(f => f[1]), ...logHeaders].join(',');
+
+  const rows = customers.map(c => {
+    const baseCols = CSV_FIELDS.map(f => csvEscape(c[f[0]]));
+    const custLogs = (records || [])
+      .filter(r => r.customerId === c.id)
+      .slice()
+      .reverse() // 新しい順
+      .slice(0, CSV_LOG_COLUMNS);
+    const logCols = [];
+    for (let i = 0; i < CSV_LOG_COLUMNS; i++) {
+      const r = custLogs[i];
+      LOG_FIELD_SUFFIXES.forEach(([key]) => logCols.push(csvEscape(r ? r[key] : '')));
+    }
+    return [...baseCols, ...logCols].join(',');
+  });
   return [header, ...rows].join('\r\n');
 }
 
@@ -88,17 +157,64 @@ function parseCSVText(text) {
   return rows.filter(r => r.some(v => v !== ''));
 }
 
-function downloadCustomersCSV(customers) {
-  const blob = new Blob(['\uFEFF' + customersToCSV(customers)], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `顧客リスト_${new Date().toISOString().substring(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+function downloadCustomersCSV(customers, records, showAlert) {
+  try {
+    const blob = new Blob(['\uFEFF' + customersToCSV(customers, records)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `customers_${new Date().toISOString().substring(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    console.error('CSV export error:', err);
+    showAlert && showAlert('CSVの出力中にエラーが発生しました。もう一度お試しください。');
+  }
+}
+
+// ---------- 認証フック（ログイン状態の管理） ----------
+function useAuth() {
+  const [token, setToken] = useState(() => { try { return localStorage.getItem('crm_token'); } catch { return null; } });
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) { setAuthLoading(false); return; }
+    fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+      .then(u => { setUser(u); setAuthLoading(false); })
+      .catch(() => {
+        setToken(null); setUser(null);
+        try { localStorage.removeItem('crm_token'); } catch {}
+        setAuthLoading(false);
+      });
+  }, [token]);
+
+  const login = async (username, password) => {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'ログインに失敗しました');
+    setToken(data.token);
+    setUser(data.user);
+    try { localStorage.setItem('crm_token', data.token); } catch {}
+  };
+
+  const logout = () => {
+    setToken(null); setUser(null);
+    try { localStorage.removeItem('crm_token'); } catch {}
+  };
+
+  return { token, user, authLoading, login, logout };
 }
 
 // ---------- サーバー同期フック（/api/data 経由でデータベースと同期） ----------
-function useSyncedData(initial) {
+function useSyncedData(initial, token, onUnauthorized) {
   const [data, setData] = useState(initial);
   const [loaded, setLoaded] = useState(false);
   const [syncError, setSyncError] = useState(false);
@@ -106,30 +222,38 @@ function useSyncedData(initial) {
 
   // 起動時にサーバーから読み込む
   useEffect(() => {
-    fetch('/api/data')
-      .then(res => res.json())
+    if (!token) return;
+    fetch('/api/data', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => {
+        if (res.status === 401) { onUnauthorized && onUnauthorized(); throw new Error('unauthorized'); }
+        return res.json();
+      })
       .then(json => {
         setData(prev => ({ ...prev, ...json }));
         setLoaded(true);
       })
       .catch(() => { setLoaded(true); setSyncError(true); });
-  }, []);
+  }, [token]);
 
   // データが変わるたびに（少し待ってから）サーバーへ保存する
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !token) return;
     if (firstRender.current) { firstRender.current = false; return; }
     const timer = setTimeout(() => {
       fetch('/api/data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(data),
       })
-        .then(res => { if (!res.ok) throw new Error(); setSyncError(false); })
+        .then(res => {
+          if (res.status === 401) { onUnauthorized && onUnauthorized(); throw new Error('unauthorized'); }
+          if (!res.ok) throw new Error();
+          setSyncError(false);
+        })
         .catch(() => setSyncError(true));
     }, 800);
     return () => clearTimeout(timer);
-  }, [data, loaded]);
+  }, [data, loaded, token]);
 
   // customers / records などの各項目ごとに setCustomers のような関数を作る
   const makeSetter = (key) => (updater) => {
@@ -156,14 +280,23 @@ function FormField({ label, value, onChange, type = 'text', className = '', plac
 }
 
 function Modal({ title, onClose, children, wide }) {
+  useEffect(() => {
+    const onKeyDown = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className={`bg-white rounded-2xl shadow-2xl w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`bg-white rounded-2xl shadow-2xl w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[85dvh] flex flex-col`}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 rounded-t-2xl">
           <h3 className="font-bold text-slate-800">{title}</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"><X className="w-5 h-5" /></button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-6 overflow-y-auto">{children}</div>
       </div>
     </div>
   );
@@ -211,16 +344,56 @@ function ProgressCard({ label, actual, goal, unit = '件' }) {
   );
 }
 
+// ---------- ログイン画面 ----------
+function LoginView({ onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await onLogin(username, password);
+    } catch (err) {
+      setError(err.message || 'ログインに失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex h-[100dvh] items-center justify-center bg-slate-50 p-4">
+      <form onSubmit={submit} className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm space-y-4">
+        <div className="text-center mb-2">
+          <h1 className="text-xl font-bold text-slate-800">CRMシステム</h1>
+          <p className="text-xs text-slate-400 mt-1">ログインしてください</p>
+        </div>
+        <FormField label="ユーザー名" value={username} onChange={e => setUsername(e.target.value)} />
+        <FormField label="パスワード" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+        {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+        <button type="submit" disabled={loading} className="w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700 disabled:opacity-50">
+          {loading ? 'ログイン中...' : 'ログイン'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 // ---------- HOME ----------
-function HomeView({ records, goals, setGoals }) {
+function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onNavigate }) {
   const [period, setPeriod] = useState(thisMonth);
+  const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
   const months = useMemo(() => {
     const set = new Set([thisMonth]);
     records.forEach(r => set.add(r.date?.substring(0, 7)));
     return Array.from(set).filter(Boolean).sort();
   }, [records]);
 
-  const filtered = period === 'all' ? records : records.filter(r => r.date?.startsWith(period));
+  const scopedRecords = scope === 'all' ? records : records.filter(r => r.assignedTo === scope);
+  const filtered = period === 'all' ? scopedRecords : scopedRecords.filter(r => r.date?.startsWith(period));
   const count = (type, flag) => filtered.filter(r => r.type === type && (!flag || r.flag === flag)).length;
 
   const timeSetting = count('テレアポ', '時間設定');
@@ -237,11 +410,29 @@ function HomeView({ records, goals, setGoals }) {
     setEditing(false);
   };
 
+  // カレンダー：直近の予定（3件）
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const upcoming = scopedRecords
+    .filter(r => r.scheduledDate && r.scheduledDate >= todayStr)
+    .slice()
+    .sort((a, b) => (a.scheduledDate + (a.scheduledTime || '')).localeCompare(b.scheduledDate + (b.scheduledTime || '')))
+    .slice(0, 3);
+
+  // テレアポ集計：今日と今月の概要
+  const teleToday = scopedRecords.filter(r => r.type === 'テレアポ' && r.date === todayStr).length;
+  const teleMonth = scopedRecords.filter(r => r.type === 'テレアポ' && r.date?.startsWith(thisMonth)).length;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold text-slate-800">今月の実績</h2>
-        <div className="flex items-center gap-2">
+        <h2 className="text-lg font-bold text-slate-800">実績サマリー</h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          {isOwner && (
+            <select value={scope} onChange={e => setScope(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+              <option value="all">全員</option>
+              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+            </select>
+          )}
           <select value={period} onChange={e => setPeriod(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
             <option value="all">全期間</option>
             {months.map(m => <option key={m} value={m}>{m}</option>)}
@@ -271,6 +462,44 @@ function HomeView({ records, goals, setGoals }) {
         </Modal>
       )}
 
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-slate-600 flex items-center gap-1.5"><CalendarDays className="w-4 h-4" />直近の予定</h3>
+            <button onClick={() => onNavigate('calendar')} className="text-xs text-teal-600 font-semibold">カレンダーを見る</button>
+          </div>
+          {upcoming.length === 0 ? (
+            <p className="text-sm text-slate-400">直近の予定はありません。</p>
+          ) : (
+            <ul className="space-y-2">
+              {upcoming.map(r => (
+                <li key={r.id} className="text-sm">
+                  <p className="font-semibold text-slate-700">{r.customerName || '不明な顧客'}</p>
+                  <p className="text-xs text-indigo-600">{r.scheduledDate} {r.scheduledTime}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-slate-600 flex items-center gap-1.5"><BarChart className="w-4 h-4" />テレアポ状況</h3>
+            <button onClick={() => onNavigate('teleappt_stats')} className="text-xs text-teal-600 font-semibold">集計を見る</button>
+          </div>
+          <div className="flex justify-around text-center">
+            <div><p className="text-2xl font-extrabold text-slate-800">{teleToday}</p><p className="text-[10px] text-slate-400">今日</p></div>
+            <div><p className="text-2xl font-extrabold text-slate-800">{teleMonth}</p><p className="text-[10px] text-slate-400">今月</p></div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 flex flex-col justify-between">
+          <h3 className="text-sm font-bold text-slate-600 flex items-center gap-1.5 mb-3"><FileText className="w-4 h-4" />日報</h3>
+          <p className="text-xs text-slate-400 mb-3">今日の活動を自動集計して日報を作成できます。</p>
+          <button onClick={() => onNavigate('daily_report')} className="w-full py-2 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">日報を作成する</button>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
         <h3 className="text-sm font-bold text-slate-600 mb-3">最近の記録</h3>
         {filtered.length === 0 ? (
@@ -294,8 +523,8 @@ function HomeView({ records, goals, setGoals }) {
 }
 
 // ---------- 顧客編集モーダル ----------
-function CustomerModal({ customer, onSave, onClose }) {
-  const [form, setForm] = useState(customer || emptyCustomer);
+function CustomerModal({ customer, existingAssociationTypes, members, currentUser, onSave, onClose }) {
+  const [form, setForm] = useState(customer ? { ...emptyCustomer, ...customer } : { ...emptyCustomer, assignedTo: currentUser?.displayName || '' });
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   return (
@@ -303,12 +532,33 @@ function CustomerModal({ customer, onSave, onClose }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <FormField label="学園名" value={form.gakuenName} onChange={set('gakuenName')} />
         <FormField label="園名" value={form.enName} onChange={set('enName')} />
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-slate-500">協会の種類</label>
+          <input
+            list="association-type-options"
+            value={form.associationType}
+            onChange={set('associationType')}
+            placeholder="例：〇〇県私立幼稚園協会"
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+          />
+          <datalist id="association-type-options">
+            {existingAssociationTypes.map(t => <option key={t} value={t} />)}
+          </datalist>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-slate-500">担当者</label>
+          <select value={form.assignedTo} onChange={set('assignedTo')} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">未設定</option>
+            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+          </select>
+        </div>
         <FormField label="理事長" value={form.chairman} onChange={set('chairman')} />
         <FormField label="園長" value={form.principal} onChange={set('principal')} />
         <FormField label="住所" value={form.address} onChange={set('address')} className="md:col-span-2" />
         <FormField label="TEL" value={form.tel} onChange={set('tel')} />
         <FormField label="メールアドレス" value={form.email} onChange={set('email')} />
         <FormField label="HPリンク" value={form.hpLink} onChange={set('hpLink')} />
+        <FormField label="HP業者" value={form.hpVendor} onChange={set('hpVendor')} />
         <FormField label="Instagram URL" value={form.instagram} onChange={set('instagram')} />
         <FormField label="GBPリンク" value={form.gbpLink} onChange={set('gbpLink')} />
         <FormField label="口コミ評価（★の数）" type="number" value={form.reviewScore} onChange={set('reviewScore')} />
@@ -361,13 +611,32 @@ function ReportGenerator({ customer, reportTemplates, latestRecord }) {
 }
 
 // ---------- 顧客詳細（活動履歴＋記録登録）モーダル ----------
-function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, showAlert, onClose, onEdit, startWithForm }) {
+function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, currentUser, showAlert, onClose, onEdit, startWithForm }) {
   const history = records.filter(r => r.customerId === customer.id).slice().reverse();
   const [showForm, setShowForm] = useState(!!startWithForm);
   const [showReport, setShowReport] = useState(false);
+  const [reportSeedRecord, setReportSeedRecord] = useState(null);
+
+  const AUTO_REPORT_FLAGS = ['時間設定', '営業時間設定'];
+  const handleRecordSaved = (record) => {
+    setShowForm(false);
+    if (AUTO_REPORT_FLAGS.includes(record.flag)) {
+      setReportSeedRecord(record);
+      setShowReport(true);
+    }
+  };
 
   return (
     <Modal title={customer.enName || customer.gakuenName} onClose={onClose} wide>
+      {(() => {
+        const status = getCustomerStatus(customer.id, records);
+        return (customer.associationType || status) && (
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            {customer.associationType && <span className="px-2.5 py-1 bg-slate-100 rounded-full text-xs text-slate-600">{customer.associationType}</span>}
+            {status && <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${status.badge}`}>現在の状況: {status.label}</span>}
+          </div>
+        );
+      })()}
       <div className="flex flex-wrap gap-4 text-sm text-slate-600 mb-5">
         {customer.tel && <a href={`tel:${customer.tel}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.tel}</a>}
         {customer.address && <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{customer.address}</span>}
@@ -381,14 +650,17 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
         <button onClick={() => setShowForm(v => !v)} className="text-sm font-semibold text-indigo-700 flex items-center gap-1">
           <PenTool className="w-4 h-4" />{showForm ? '記録フォームを閉じる' : '新しい記録を追加'}
         </button>
-        <button onClick={() => setShowReport(v => !v)} className="text-sm font-semibold text-purple-700 flex items-center gap-1">
+        <button onClick={() => { setShowReport(v => !v); if (showReport) setReportSeedRecord(null); }} className="text-sm font-semibold text-purple-700 flex items-center gap-1">
           <FileText className="w-4 h-4" />{showReport ? '報告文フォームを閉じる' : '報告文を作成'}
         </button>
       </div>
 
       {showReport && (
         <div className="mb-6">
-          <ReportGenerator customer={customer} reportTemplates={reportTemplates} latestRecord={history[0]} />
+          {reportSeedRecord && (
+            <p className="text-xs text-purple-600 mb-2 flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" />「{reportSeedRecord.flag}」の記録が登録されたので、報告文フォーマットを自動で表示しています。</p>
+          )}
+          <ReportGenerator customer={customer} reportTemplates={reportTemplates} latestRecord={reportSeedRecord || history[0]} />
         </div>
       )}
 
@@ -399,8 +671,9 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
             setRecords={setRecords}
             activityTypes={activityTypes}
             products={products}
+            currentUser={currentUser}
             showAlert={showAlert}
-            onSaved={() => setShowForm(false)}
+            onSaved={handleRecordSaved}
           />
         </div>
       )}
@@ -418,6 +691,13 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
               </div>
               {r.memo && <p className="text-slate-500 mt-1">{r.memo}</p>}
               {r.productName && <p className="text-amber-700 mt-1 text-xs">受注: {r.productName} / 月額{r.monthlyFee || 0} / {r.years || 0}年 / 台数{r.quantity || 0} / 粗利{r.profit || 0}</p>}
+              {r.scheduledDate && <p className="text-indigo-600 mt-1 text-xs flex items-center gap-1"><CalendarDays className="w-3 h-3" />次回予定: {r.scheduledDate} {r.scheduledTime}</p>}
+              {(r.voiceLink || r.voiceMemo) && (
+                <p className="text-pink-600 mt-1 text-xs">
+                  {r.voiceLink && <a href={r.voiceLink} target="_blank" rel="noreferrer" className="underline">音声リンクを開く</a>}
+                  {r.voiceMemo && <span>{r.voiceLink ? '　' : ''}{r.voiceMemo}</span>}
+                </p>
+              )}
             </li>
           ))}
         </ul>
@@ -426,39 +706,136 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
   );
 }
 
+// ---------- 顧客の現在の状況（記録から自動判定） ----------
+function getCustomerStatus(customerId, records) {
+  const custRecords = records.filter(r => r.customerId === customerId);
+  if (custRecords.length === 0) return null;
+
+  const hasOrder = custRecords.some(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
+  if (hasOrder) return { label: 'ユーザー', badge: 'bg-amber-100 text-amber-700', card: 'border-amber-300 bg-amber-50/60' };
+
+  const hasSalesResult = custRecords.some(r => r.type === '営業' && ['NG', '返事待ち', '返事待ちNG'].includes(r.flag));
+  if (hasSalesResult) return { label: '営業実行済み', badge: 'bg-blue-100 text-blue-700', card: 'border-blue-300 bg-blue-50/60' };
+
+  const hasVisitTimeSet = custRecords.some(r => r.type === '初回訪問' && r.flag === '営業時間設定');
+  if (hasVisitTimeSet) return { label: '初回訪問済み・営業時間設定', badge: 'bg-purple-200 text-purple-800', card: 'border-purple-400 bg-purple-100/60' };
+
+  const hasVisit = custRecords.some(r => r.type === '初回訪問');
+  if (hasVisit) return { label: '初回訪問済み', badge: 'bg-purple-100 text-purple-700', card: 'border-purple-300 bg-purple-50/60' };
+
+  const hasTele = custRecords.some(r => r.type === 'テレアポ');
+  if (hasTele) return { label: 'テレアポ中', badge: 'bg-pink-100 text-pink-700', card: 'border-pink-300 bg-pink-50/60' };
+
+  return { label: '記録あり', badge: 'bg-slate-100 text-slate-600', card: 'border-slate-200' };
+}
+
 // ---------- 顧客リスト ----------
-function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, showAlert, showConfirm }) {
+function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, members, currentUser, isOwner, showAlert, showConfirm }) {
   const [search, setSearch] = useState('');
+  const [addressFilter, setAddressFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [associationFilter, setAssociationFilter] = useState('');
+  const [activityTypeFilter, setActivityTypeFilter] = useState('');
+  const [flagFilter, setFlagFilter] = useState('');
+  const [assigneeFilter, setAssigneeFilter] = useState(isOwner ? '' : (currentUser?.displayName || ''));
+  const [viewMode, setViewMode] = useState('card'); // 'card' | 'table'
   const [editing, setEditing] = useState(null); // customer being edited, or {} for new
   const [viewing, setViewing] = useState(null); // customer being viewed
   const [viewingWithForm, setViewingWithForm] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
   const fileInputRef = useRef(null);
+
+  const STATUS_OPTIONS = ['ユーザー', '営業実行済み', '初回訪問済み・営業時間設定', '初回訪問済み', 'テレアポ中', '記録あり', '記録なし'];
+  const associationOptions = [...new Set(customers.map(c => c.associationType).filter(Boolean))];
+  const flagOptions = activityTypeFilter
+    ? (activityTypes.find(a => a.name === activityTypeFilter)?.flags || [])
+    : [...new Set(activityTypes.flatMap(a => a.flags))];
 
   const handleImportFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const rows = parseCSVText(String(ev.target.result));
-      if (rows.length < 2) { showAlert('データを読み取れませんでした。'); return; }
-      const header = rows[0].map(h => h.trim());
-      const labelToKey = Object.fromEntries(CSV_FIELDS.map(([k, l]) => [l, k]));
-      const keyForCol = header.map(h => labelToKey[h] || null);
-      const imported = rows.slice(1).map(r => {
-        const obj = { id: Date.now() + Math.floor(Math.random() * 100000) };
-        keyForCol.forEach((key, i) => { if (key) obj[key] = r[i] || ''; });
-        return obj;
-      }).filter(c => c.enName || c.gakuenName);
-      setCustomers(prev => [...prev, ...imported]);
-      showAlert(`${imported.length}件の顧客データを取り込みました。`);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      try {
+        const rows = parseCSVText(String(ev.target.result));
+        if (rows.length < 2) { showAlert('データを読み取れませんでした。'); return; }
+        const header = rows[0].map(h => h.trim());
+
+        // 見出しの表記ゆれ（例：「協会関係」「メールアドレス」など）も受け付ける
+        const labelToKey = {};
+        CSV_FIELDS.forEach(([key, ...labels]) => { labels.forEach(l => { labelToKey[l] = key; }); });
+        const keyForCol = header.map(h => labelToKey[h] || null);
+
+        // ログ列（ログ1_種別／ログ1_活動種別 など、表記ゆれも含む）の位置を調べておく
+        const logColIndexes = [];
+        for (let i = 1; i <= CSV_LOG_COLUMNS; i++) {
+          const cols = {};
+          LOG_FIELD_SUFFIXES.forEach(([key, ...labels]) => {
+            for (const label of labels) {
+              const idx = header.indexOf(`ログ${i}_${label}`);
+              if (idx !== -1) { cols[key] = idx; break; }
+            }
+          });
+          if (Object.keys(cols).length > 0) logColIndexes.push(cols);
+        }
+
+        const importedCustomers = [];
+        const importedRecords = [];
+        rows.slice(1).forEach(r => {
+          const customerId = Date.now() + Math.floor(Math.random() * 1000000);
+          const obj = { id: customerId };
+          keyForCol.forEach((key, i) => { if (key) obj[key] = r[i] || ''; });
+          if (!obj.enName && !obj.gakuenName) return;
+          importedCustomers.push(obj);
+
+          logColIndexes.forEach(cols => {
+            const type = cols.type !== undefined ? r[cols.type] : '';
+            if (!type) return; // 種別が空のログ列は無視
+            const rec = {
+              id: Date.now() + Math.floor(Math.random() * 1000000),
+              customerId,
+              customerName: obj.enName || obj.gakuenName,
+              type,
+              flag: cols.flag !== undefined ? r[cols.flag] || '' : '',
+              date: cols.date !== undefined ? r[cols.date] || '' : '',
+              time: cols.time !== undefined ? r[cols.time] || '' : '',
+              memo: cols.memo !== undefined ? r[cols.memo] || '' : '',
+            };
+            const schedDate = cols.scheduledDate !== undefined ? r[cols.scheduledDate] || '' : '';
+            const schedTime = cols.scheduledTime !== undefined ? r[cols.scheduledTime] || '' : '';
+            if (schedDate) { rec.scheduledDate = schedDate; rec.scheduledTime = schedTime; }
+            importedRecords.push(rec);
+          });
+        });
+
+        setCustomers(prev => [...prev, ...importedCustomers]);
+        if (importedRecords.length > 0) setRecords(prev => [...prev, ...importedRecords]);
+        showAlert(`${importedCustomers.length}件の顧客データと${importedRecords.length}件の活動履歴を取り込みました。`);
+      } catch (err) {
+        console.error('CSV import error:', err);
+        showAlert('CSVの読み込み中にエラーが発生しました。ファイルの形式をご確認ください。');
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     };
+    reader.onerror = () => showAlert('ファイルの読み込みに失敗しました。');
     reader.readAsText(file, 'UTF-8');
   };
 
   const filtered = customers.filter(c => {
     const q = search.toLowerCase();
-    return !q || [c.gakuenName, c.enName, c.chairman, c.principal].some(v => (v || '').toLowerCase().includes(q));
+    const matchesSearch = !q || [c.gakuenName, c.enName, c.chairman, c.principal].some(v => (v || '').toLowerCase().includes(q));
+    const matchesAddress = !addressFilter || (c.address || '').toLowerCase().includes(addressFilter.toLowerCase());
+    const status = getCustomerStatus(c.id, records);
+    const statusLabel = status ? status.label : '記録なし';
+    const matchesStatus = !statusFilter || statusLabel === statusFilter;
+    const matchesAssociation = !associationFilter || c.associationType === associationFilter;
+    const custRecords = records.filter(r => r.customerId === c.id);
+    const matchesActivityType = !activityTypeFilter || custRecords.some(r => r.type === activityTypeFilter);
+    const matchesFlag = !flagFilter || custRecords.some(r => r.flag === flagFilter);
+    const matchesAssignee = !assigneeFilter || c.assignedTo === assigneeFilter;
+    return matchesSearch && matchesAddress && matchesStatus && matchesAssociation && matchesActivityType && matchesFlag && matchesAssignee;
   });
 
   const saveCustomer = (c) => {
@@ -473,68 +850,205 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
   const deleteCustomer = (id) => {
     showConfirm('この顧客を削除しますか？関連する活動履歴も削除されます。', () => {
       setCustomers(prev => prev.filter(c => c.id !== id));
+      setRecords(prev => prev.filter(r => r.customerId !== id));
       setViewing(null);
+    });
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const deleteSelected = () => {
+    if (selectedIds.length === 0) return;
+    showConfirm(`選択した${selectedIds.length}件の顧客を削除しますか？関連する活動履歴も削除されます。`, () => {
+      setCustomers(prev => prev.filter(c => !selectedIds.includes(c.id)));
+      setRecords(prev => prev.filter(r => !selectedIds.includes(r.customerId)));
+      setSelectedIds([]);
+      setSelectMode(false);
     });
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="園名・理事長・園長で検索"
-            className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="園名・理事長・園長で検索"
+              className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <input value={addressFilter} onChange={e => setAddressFilter(e.target.value)} placeholder="住所で絞り込み"
+            className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white w-32" />
+          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべての協会</option>
+            {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select value={activityTypeFilter} onChange={e => { setActivityTypeFilter(e.target.value); setFlagFilter(''); }} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべての活動種別</option>
+            {activityTypes.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+          </select>
+          <select value={flagFilter} onChange={e => setFlagFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべての結果フラグ</option>
+            {flagOptions.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべてのステータス</option>
+            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {isOwner && (
+            <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+              <option value="">すべての担当者</option>
+              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+            </select>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-slate-400">{filtered.length}件</span>
+          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+            <button onClick={() => setViewMode('card')} className={`p-2.5 ${viewMode === 'card' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`} title="カード表示">
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button onClick={() => setViewMode('table')} className={`p-2.5 ${viewMode === 'table' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`} title="表形式表示">
+              <List className="w-4 h-4" />
+            </button>
+          </div>
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleImportFile} className="hidden" />
           <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50">
             <Upload className="w-4 h-4" /> CSVインポート
           </button>
-          <button onClick={() => downloadCustomersCSV(customers)} className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50">
+          <button onClick={() => downloadCustomersCSV(customers, records, showAlert)} className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50">
             <Download className="w-4 h-4" /> CSV出力
           </button>
-          <button onClick={() => setEditing(emptyCustomer)} className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">
-            <Plus className="w-4 h-4" /> 新規登録
+          <button
+            onClick={() => { setSelectMode(v => !v); setSelectedIds([]); }}
+            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-semibold border ${selectMode ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+          >
+            <CheckSquare className="w-4 h-4" /> {selectMode ? '選択を終了' : '選択して削除'}
           </button>
+          {selectMode && (
+            <button onClick={deleteSelected} disabled={selectedIds.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-red-600 disabled:bg-red-200 text-white rounded-lg text-sm font-bold">
+              <Trash2 className="w-4 h-4" /> {selectedIds.length}件を削除
+            </button>
+          )}
+          {!selectMode && (
+            <button onClick={() => setEditing(emptyCustomer)} className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">
+              <Plus className="w-4 h-4" /> 新規登録
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map(c => {
-          const latest = records.filter(r => r.customerId === c.id).slice(-1)[0];
-          return (
-            <div key={c.id} onClick={() => setViewing(c)} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden cursor-pointer hover:shadow-md hover:border-teal-200 transition">
-              <div className="p-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs text-slate-400">{c.gakuenName}</p>
-                    <p className="font-bold text-slate-800">{c.enName || '（園名未登録）'}</p>
+      {viewMode === 'card' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map(c => {
+            const custRecords = records.filter(r => r.customerId === c.id);
+            const latest = custRecords.slice(-1)[0];
+            const status = getCustomerStatus(c.id, records);
+            const isSelected = selectedIds.includes(c.id);
+            return (
+              <div key={c.id} onClick={() => selectMode ? toggleSelect(c.id) : setViewing(c)}
+                className={`bg-white rounded-xl shadow-sm border overflow-hidden cursor-pointer hover:shadow-md transition ${
+                  selectMode && isSelected ? 'border-teal-400 ring-2 ring-teal-200' : (status ? status.card : 'border-slate-100 hover:border-teal-200')
+                }`}>
+                <div className="p-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-start gap-2">
+                      {selectMode && (isSelected ? <CheckSquare className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" /> : <Square className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />)}
+                      <div>
+                        <p className="text-xs text-slate-400">{c.gakuenName}{c.associationType ? ` ・ ${c.associationType}` : ''}{c.assignedTo ? ` ・ 担当:${c.assignedTo}` : ''}</p>
+                        <p className="font-bold text-slate-800">{c.enName || '（園名未登録）'}</p>
+                        {status && <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${status.badge}`}>{status.label}</span>}
+                      </div>
+                    </div>
+                    {!selectMode && (
+                      <div className="flex items-center gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); setViewing(c); setViewingWithForm(true); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="記録登録">
+                          <PenTool className="w-4 h-4" />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); setViewing(c); setViewingWithForm(true); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="記録登録">
-                      <PenTool className="w-4 h-4" />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  <div className="mt-2 space-y-1 text-xs text-slate-500">
+                    {c.tel && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.tel}</p>}
+                    {c.address && <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3" />{c.address}</p>}
                   </div>
                 </div>
-                <div className="mt-2 space-y-1 text-xs text-slate-500">
-                  {c.tel && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.tel}</p>}
-                  {c.address && <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3" />{c.address}</p>}
+                <div className="bg-slate-50 px-4 py-2.5 text-xs text-slate-500 border-t border-slate-100">
+                  {latest ? `最新: ${latest.type}${latest.flag ? `（${latest.flag}）` : ''} - ${latest.date}` : '活動記録なし'}
                 </div>
               </div>
-              <div className="bg-slate-50 px-4 py-2.5 text-xs text-slate-500 border-t border-slate-100">
-                {latest ? `最新: ${latest.type}${latest.flag ? `（${latest.flag}）` : ''} - ${latest.date}` : '活動記録なし'}
-              </div>
-            </div>
-          );
-        })}
-        {filtered.length === 0 && <p className="text-sm text-slate-400 col-span-full text-center py-10">該当する顧客がいません。新規登録してから記録を追加してください。</p>}
-      </div>
+            );
+          })}
+          {filtered.length === 0 && <p className="text-sm text-slate-400 col-span-full text-center py-10">該当する顧客がいません。新規登録してから記録を追加してください。</p>}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-100 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                {selectMode && <th className="px-3 py-2 w-8"></th>}
+                <th className="px-3 py-2">園名</th>
+                <th className="px-3 py-2">協会の種類</th>
+                <th className="px-3 py-2">TEL</th>
+                <th className="px-3 py-2">住所</th>
+                <th className="px-3 py-2">ステータス</th>
+                <th className="px-3 py-2">最新記録</th>
+                {!selectMode && <th className="px-3 py-2 w-20"></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(c => {
+                const custRecords = records.filter(r => r.customerId === c.id);
+                const latest = custRecords.slice(-1)[0];
+                const status = getCustomerStatus(c.id, records);
+                const isSelected = selectedIds.includes(c.id);
+                return (
+                  <tr key={c.id} onClick={() => selectMode ? toggleSelect(c.id) : setViewing(c)}
+                    className={`border-b border-slate-50 cursor-pointer hover:bg-slate-50 ${selectMode && isSelected ? 'bg-teal-50' : ''}`}>
+                    {selectMode && (
+                      <td className="px-3 py-2.5">{isSelected ? <CheckSquare className="w-4 h-4 text-teal-600" /> : <Square className="w-4 h-4 text-slate-300" />}</td>
+                    )}
+                    <td className="px-3 py-2.5">
+                      <p className="font-bold text-slate-800">{c.enName || '（園名未登録）'}</p>
+                      <p className="text-xs text-slate-400">{c.gakuenName}</p>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-600">{c.associationType || '-'}</td>
+                    <td className="px-3 py-2.5 text-slate-600">{c.tel || '-'}</td>
+                    <td className="px-3 py-2.5 text-slate-600 max-w-[160px] truncate">{c.address || '-'}</td>
+                    <td className="px-3 py-2.5">{status && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${status.badge}`}>{status.label}</span>}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-500">{latest ? `${latest.type}${latest.flag ? `（${latest.flag}）` : ''} - ${latest.date}` : '-'}</td>
+                    {!selectMode && (
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); setViewing(c); setViewingWithForm(true); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><PenTool className="w-4 h-4" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {filtered.length === 0 && <p className="text-sm text-slate-400 text-center py-10">該当する顧客がいません。</p>}
+        </div>
+      )}
 
-      {editing && <CustomerModal customer={editing.id ? editing : null} onSave={saveCustomer} onClose={() => setEditing(null)} />}
+      {editing && (
+        <CustomerModal
+          customer={editing.id ? editing : null}
+          existingAssociationTypes={[...new Set(customers.map(c => c.associationType).filter(Boolean))]}
+          members={members}
+          currentUser={currentUser}
+          onSave={saveCustomer}
+          onClose={() => setEditing(null)}
+        />
+      )}
       {viewing && (
         <CustomerDetailModal
           customer={viewing}
@@ -543,6 +1057,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
           activityTypes={activityTypes}
           products={products}
           reportTemplates={reportTemplates}
+          currentUser={currentUser}
           showAlert={showAlert}
           startWithForm={viewingWithForm}
           onClose={() => { setViewing(null); setViewingWithForm(false); }}
@@ -554,7 +1069,9 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 }
 
 // ---------- 記録登録フォーム（顧客詳細モーダルの中で使う） ----------
-function RecordFields({ customer, setRecords, activityTypes, products, showAlert, onSaved }) {
+const SCHEDULE_FLAGS = ['時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
+
+function RecordFields({ customer, setRecords, activityTypes, products, currentUser, showAlert, onSaved }) {
   const now = new Date();
   const [type, setType] = useState(activityTypes[0]?.name || '');
   const [flag, setFlag] = useState('');
@@ -566,21 +1083,33 @@ function RecordFields({ customer, setRecords, activityTypes, products, showAlert
   const [years, setYears] = useState('');
   const [quantity, setQuantity] = useState('');
   const [profit, setProfit] = useState('');
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [voiceLink, setVoiceLink] = useState('');
+  const [voiceMemo, setVoiceMemo] = useState('');
 
   const currentFlags = activityTypes.find(a => a.name === type)?.flags || [];
   const isOrder = flag === '受注' || flag === 'ユーザー';
+  const needsSchedule = SCHEDULE_FLAGS.includes(flag);
+  const isTele = type === 'テレアポ';
 
-  const reset = () => { setFlag(''); setMemo(''); setMonthlyFee(''); setYears(''); setQuantity(''); setProfit(''); };
+  const reset = () => {
+    setFlag(''); setMemo(''); setMonthlyFee(''); setYears(''); setQuantity(''); setProfit('');
+    setScheduledDate(''); setScheduledTime(''); setVoiceLink(''); setVoiceMemo('');
+  };
 
   const save = () => {
-    setRecords(prev => [...prev, {
+    const newRecord = {
       id: Date.now(), customerId: customer.id, customerName: customer.enName || customer.gakuenName,
-      type, flag, date, time, memo,
+      type, flag, date, time, memo, assignedTo: currentUser?.displayName || '',
       ...(isOrder ? { productName, monthlyFee, years, quantity, profit } : {}),
-    }]);
+      ...(needsSchedule && scheduledDate ? { scheduledDate, scheduledTime } : {}),
+      ...(isTele && (voiceLink || voiceMemo) ? { voiceLink, voiceMemo } : {}),
+    };
+    setRecords(prev => [...prev, newRecord]);
     showAlert('記録を保存しました。');
     reset();
-    onSaved && onSaved();
+    onSaved && onSaved(newRecord);
   };
 
   return (
@@ -604,6 +1133,28 @@ function RecordFields({ customer, setRecords, activityTypes, products, showAlert
         <FormField label="日付" type="date" value={date} onChange={e => setDate(e.target.value)} />
         <FormField label="時間" type="time" value={time} onChange={e => setTime(e.target.value)} />
       </div>
+
+      {needsSchedule && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+          <p className="text-xs font-bold text-indigo-700 mb-2">次回予定（カレンダーに反映されます）</p>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="予定日" type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
+            <FormField label="予定時間" type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} />
+          </div>
+        </div>
+      )}
+
+      {isTele && (
+        <div className="bg-pink-50 border border-pink-200 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-bold text-pink-700">通話の音声メモ（任意）</p>
+          <FormField label="音声リンク（URL）" value={voiceLink} onChange={e => setVoiceLink(e.target.value)} placeholder="録音データのURLがあれば貼り付け" />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500">音声メモ</label>
+            <textarea value={voiceMemo} onChange={e => setVoiceMemo(e.target.value)} rows={2} placeholder="パスワードや特記事項など"
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" />
+          </div>
+        </div>
+      )}
 
       {isOrder && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
@@ -747,7 +1298,7 @@ function EmailBuilderView({ customers, emailTemplates, setEmailTemplates, showAl
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">本文</label>
               <textarea value={editingTpl.body} onChange={e => setEditingTpl({ ...editingTpl, body: e.target.value })} rows={8}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm resize-y max-h-72" />
             </div>
           </div>
           <button onClick={() => saveTpl({ ...editingTpl, id: editingTpl.id || Date.now() })}
@@ -770,7 +1321,10 @@ function getWeekKey(dateStr) {
 function TeleApptStatsView({ records, activityTypes }) {
   const [granularity, setGranularity] = useState('day');
   const teleRecords = records.filter(r => r.type === 'テレアポ');
-  const flags = activityTypes.find(a => a.name === 'テレアポ')?.flags || [];
+  // 現在設定されているフラグ ＋ 過去に使われたことがあるが今は消えたフラグも漏らさず集計する
+  const configuredFlags = activityTypes.find(a => a.name === 'テレアポ')?.flags || [];
+  const usedFlags = [...new Set(teleRecords.map(r => r.flag).filter(Boolean))];
+  const flags = [...new Set([...configuredFlags, ...usedFlags])];
 
   const keyFn = granularity === 'day' ? (r => r.date) : granularity === 'week' ? (r => getWeekKey(r.date)) : (r => r.date?.substring(0, 7));
 
@@ -792,6 +1346,8 @@ function TeleApptStatsView({ records, activityTypes }) {
       const n = items.filter(i => i.flag === f).length;
       if (n > 0) lines.push(`${f}: ${n}件（${total ? Math.round(n / total * 100) : 0}%）`);
     });
+    const noFlag = items.filter(i => !i.flag).length;
+    if (noFlag > 0) lines.push(`フラグなし: ${noFlag}件（${total ? Math.round(noFlag / total * 100) : 0}%）`);
     return lines.join('\n');
   };
 
@@ -807,24 +1363,189 @@ function TeleApptStatsView({ records, activityTypes }) {
         <p className="text-sm text-slate-400">テレアポの記録がまだありません。</p>
       ) : (
         <div className="space-y-3">
-          {groups.map(([key, items]) => (
-            <div key={key} className="bg-white rounded-xl border border-slate-100 p-4">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <p className="text-sm font-bold text-slate-700">{key}</p>
-                  <p className="text-xs text-slate-400">総件数 {items.length}件</p>
+          {groups.map(([key, items]) => {
+            const noFlagCount = items.filter(i => !i.flag).length;
+            return (
+              <div key={key} className="bg-white rounded-xl border border-slate-100 p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">{key}</p>
+                    <p className="text-xs text-slate-400">総件数 {items.length}件</p>
+                  </div>
+                  <CopyButton text={buildReport(key, items)} label="レポートをコピー" />
                 </div>
-                <CopyButton text={buildReport(key, items)} label="レポートをコピー" />
+                <div className="flex flex-wrap gap-2">
+                  {flags.map(f => {
+                    const n = items.filter(i => i.flag === f).length;
+                    if (n === 0) return null;
+                    return <span key={f} className="px-2.5 py-1 bg-slate-100 rounded-full text-xs text-slate-600">{f}: {n}件</span>;
+                  })}
+                  {noFlagCount > 0 && <span className="px-2.5 py-1 bg-slate-50 border border-dashed border-slate-200 rounded-full text-xs text-slate-400">フラグなし: {noFlagCount}件</span>}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {flags.map(f => {
-                  const n = items.filter(i => i.flag === f).length;
-                  if (n === 0) return null;
-                  return <span key={f} className="px-2.5 py-1 bg-slate-100 rounded-full text-xs text-slate-600">{f}: {n}件</span>;
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- 日報 ----------
+function DailyReportView({ records, dailyReportTemplates }) {
+  const [date, setDate] = useState(new Date().toISOString().substring(0, 10));
+  const [templateId, setTemplateId] = useState(dailyReportTemplates[0]?.id || '');
+  const [freeText, setFreeText] = useState('');
+  const [polished, setPolished] = useState('');
+
+  const dayRecords = records.filter(r => r.date === date);
+  const teleCount = dayRecords.filter(r => r.type === 'テレアポ').length;
+  const visitCount = dayRecords.filter(r => r.type === '初回訪問').length;
+  const salesCount = dayRecords.filter(r => r.type === '営業').length;
+  const orderRecords = dayRecords.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
+  const orderCount = orderRecords.length;
+  const quantity = orderRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  const profit = orderRecords.reduce((s, r) => s + (Number(r.profit) || 0), 0);
+
+  const template = dailyReportTemplates.find(t => t.id === Number(templateId)) || dailyReportTemplates[0];
+  const text = template ? fillDailyReport(template.body, {
+    date, teleCount, visitCount, salesCount, orderCount, quantity, profit,
+    freeText: polished || freeText,
+  }) : '';
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FormField label="日付" type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-slate-500">フォーマット</label>
+          <select value={templateId} onChange={e => setTemplateId(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            {dailyReportTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-100 p-4">
+        <p className="text-xs font-bold text-slate-500 mb-2">自動集計された数値（{date}）</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+          <div><p className="text-xl font-extrabold text-slate-800">{teleCount}</p><p className="text-[10px] text-slate-400">テレアポ</p></div>
+          <div><p className="text-xl font-extrabold text-slate-800">{visitCount}</p><p className="text-[10px] text-slate-400">初回訪問</p></div>
+          <div><p className="text-xl font-extrabold text-slate-800">{salesCount}</p><p className="text-[10px] text-slate-400">営業</p></div>
+          <div><p className="text-xl font-extrabold text-slate-800">{orderCount}</p><p className="text-[10px] text-slate-400">受注</p></div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-semibold text-slate-500">所感・特記事項（1行ずつ箇条書きでOK）</label>
+        <textarea value={freeText} onChange={e => { setFreeText(e.target.value); setPolished(''); }} rows={4} placeholder="例：A園は反応が良く次回訪問につながりそう"
+          className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white" />
+        <button onClick={() => setPolished(polishText(freeText))} className="self-start mt-1 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold">
+          <Sparkles className="w-3.5 h-3.5" /> 文章に整える（簡易整形・AIではありません）
+        </button>
+      </div>
+
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+        <pre className="text-xs whitespace-pre-wrap font-sans text-slate-700">{text}</pre>
+      </div>
+      <CopyButton text={text} label="日報をコピー" />
+    </div>
+  );
+}
+
+// ---------- カレンダー（訪問予定・再コール予定） ----------
+function CalendarView({ records, customers, members, currentUser, isOwner }) {
+  const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d; });
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
+
+  const scoped = scope === 'all' ? records : records.filter(r => r.assignedTo === scope);
+  const scheduled = scoped.filter(r => r.scheduledDate);
+  const byDate = useMemo(() => {
+    const map = {};
+    scheduled.forEach(r => {
+      if (!map[r.scheduledDate]) map[r.scheduledDate] = [];
+      map[r.scheduledDate].push(r);
+    });
+    Object.values(map).forEach(list => list.sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || '')));
+    return map;
+  }, [scheduled]);
+
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayStr = new Date().toISOString().substring(0, 10);
+
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const dateStr = (d) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+  const selectedItems = selectedDate ? (byDate[selectedDate] || []) : [];
+
+  return (
+    <div className="space-y-4">
+      {isOwner && (
+        <div className="flex justify-end">
+          <select value={scope} onChange={e => setScope(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="all">全員</option>
+            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+          </select>
+        </div>
+      )}
+      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-100 p-4">
+        <button onClick={() => setCursor(new Date(year, month - 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronLeft className="w-5 h-5" /></button>
+        <p className="font-bold text-slate-700">{year}年 {month + 1}月</p>
+        <button onClick={() => setCursor(new Date(year, month + 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronRight className="w-5 h-5" /></button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-100 p-4">
+        <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 mb-2">
+          {['日', '月', '火', '水', '木', '金', '土'].map(d => <div key={d}>{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((d, i) => {
+            if (d === null) return <div key={i} />;
+            const ds = dateStr(d);
+            const items = byDate[ds] || [];
+            const isToday = ds === todayStr;
+            return (
+              <button key={i} onClick={() => setSelectedDate(ds)}
+                className={`aspect-square rounded-lg p-1 text-left border transition ${
+                  selectedDate === ds ? 'border-teal-500 bg-teal-50' : isToday ? 'border-teal-300' : 'border-transparent hover:border-slate-200'
+                }`}>
+                <span className={`text-xs ${isToday ? 'font-bold text-teal-600' : 'text-slate-600'}`}>{d}</span>
+                {items.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-0.5">
+                    {items.slice(0, 3).map((it, idx) => <span key={idx} className="w-1.5 h-1.5 rounded-full bg-indigo-400" />)}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedDate && (
+        <div className="bg-white rounded-xl border border-slate-100 p-4">
+          <p className="text-sm font-bold text-slate-700 mb-3">{selectedDate} の予定（{selectedItems.length}件）</p>
+          {selectedItems.length === 0 ? (
+            <p className="text-sm text-slate-400">この日の予定はありません。</p>
+          ) : (
+            <ul className="space-y-2">
+              {selectedItems.map(r => (
+                <li key={r.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 text-sm">
+                  <div>
+                    <span className="font-semibold text-slate-700">{r.customerName || '不明な顧客'}</span>
+                    <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
+                  </div>
+                  <span className="text-xs text-indigo-600 font-bold">{r.scheduledTime || '時間未設定'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>
@@ -909,54 +1630,205 @@ function AIAssistantView({ customers, records }) {
 }
 
 // ---------- 設定・管理（報告フォーマット／データ運用） ----------
-function SettingsView({ reportTemplates, setReportTemplates, showConfirm }) {
-  const [editingTpl, setEditingTpl] = useState(null);
+// ---------- メンバー管理（オーナーのみ） ----------
+function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
 
-  const saveTpl = (tpl) => {
-    setReportTemplates(prev => {
-      const exists = prev.some(p => p.id === tpl.id);
-      return exists ? prev.map(p => p.id === tpl.id ? tpl : p) : [...prev, tpl];
-    });
-    setEditingTpl(null);
+  const load = () => {
+    setLoading(true);
+    fetch('/api/users', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => { setMembers(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(() => setLoading(false));
   };
 
-  const deleteTpl = (id) => {
-    showConfirm('このフォーマットを削除しますか？', () => setReportTemplates(prev => prev.filter(p => p.id !== id)));
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    try {
+      const isNew = !editing.id;
+      const res = await fetch(isNew ? '/api/users' : `/api/users/${editing.id}`, {
+        method: isNew ? 'POST' : 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(editing),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '保存に失敗しました');
+      showAlert(isNew ? 'メンバーを追加しました。' : 'メンバー情報を更新しました。');
+      setEditing(null);
+      load();
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  const remove = (id) => {
+    showConfirm('このメンバーを削除しますか？', async () => {
+      try {
+        const res = await fetch(`/api/users/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        load();
+      } catch (err) {
+        showAlert(err.message);
+      }
+    });
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" />報告フォーマット管理</h3>
-        <button onClick={() => setEditingTpl({ id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
-          <Plus className="w-4 h-4" />新しいフォーマット
-        </button>
+    <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+      <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Users className="w-4 h-4" />メンバー管理</h3>
+      <button onClick={() => setEditing({ username: '', password: '', displayName: '', role: 'member' })}
+        className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
+        <Plus className="w-4 h-4" />メンバーを追加
+      </button>
+      {loading ? <p className="text-sm text-slate-400">読み込み中...</p> : (
         <ul className="space-y-2">
-          {reportTemplates.map(t => (
-            <li key={t.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-start">
-              <p className="text-sm font-bold text-slate-700">{t.name}</p>
+          {members.map(m => (
+            <li key={m.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-center">
+              <div>
+                <p className="text-sm font-bold text-slate-700">{m.displayName} <span className="text-xs text-slate-400 font-normal">（{m.username}）</span></p>
+                <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${m.role === 'owner' ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'}`}>
+                  {m.role === 'owner' ? 'オーナー' : '一般メンバー'}
+                </span>
+              </div>
               <div className="flex gap-1">
-                <button onClick={() => setEditingTpl(t)} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
-                <button onClick={() => deleteTpl(t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => setEditing({ ...m, password: '' })} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                {m.id !== currentUser?.id && (
+                  <button onClick={() => remove(m.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                )}
               </div>
             </li>
           ))}
         </ul>
-        <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{学園名}} {{園名}} {{理事長}} {{園長}} {{住所}} {{TEL}} {{HPリンク}} {{メモ}} {{結果}}'}</p>
+      )}
+
+      {editing && (
+        <Modal title={editing.id ? 'メンバー編集' : '新しいメンバー'} onClose={() => setEditing(null)}>
+          <div className="space-y-3">
+            <FormField label="ユーザー名（ログインID）" value={editing.username} onChange={e => setEditing({ ...editing, username: e.target.value })} />
+            <FormField label="表示名" value={editing.displayName} onChange={e => setEditing({ ...editing, displayName: e.target.value })} />
+            <FormField label={editing.id ? '新しいパスワード（変更する場合のみ）' : 'パスワード'} type="password" value={editing.password} onChange={e => setEditing({ ...editing, password: e.target.value })} />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-500">権限</label>
+              <select value={editing.role} onChange={e => setEditing({ ...editing, role: e.target.value })} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+                <option value="member">一般メンバー</option>
+                <option value="owner">オーナー</option>
+              </select>
+            </div>
+          </div>
+          <button onClick={save} className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ---------- 設定・管理（オーナー専用：報告フォーマット／商品・フラグ／メンバー／データ運用） ----------
+function SettingsView({
+  reportTemplates, setReportTemplates, dailyReportTemplates, setDailyReportTemplates,
+  products, setProducts, activityTypes, setActivityTypes,
+  token, currentUser, showAlert, showConfirm,
+}) {
+  const [innerTab, setInnerTab] = useState('templates');
+  const [editingTpl, setEditingTpl] = useState(null); // { kind: 'report' | 'daily', ...tpl }
+
+  const saveTpl = (tpl) => {
+    const setter = tpl.kind === 'daily' ? setDailyReportTemplates : setReportTemplates;
+    setter(prev => {
+      const exists = prev.some(p => p.id === tpl.id);
+      const clean = { id: tpl.id, name: tpl.name, body: tpl.body };
+      return exists ? prev.map(p => p.id === tpl.id ? clean : p) : [...prev, clean];
+    });
+    setEditingTpl(null);
+  };
+
+  const deleteTpl = (kind, id) => {
+    const setter = kind === 'daily' ? setDailyReportTemplates : setReportTemplates;
+    showConfirm('このフォーマットを削除しますか？', () => setter(prev => prev.filter(p => p.id !== id)));
+  };
+
+  const TABS = [
+    ['templates', '報告フォーマット'],
+    ['products', '商品・フラグ管理'],
+    ['members', 'メンバー管理'],
+    ['data', 'データ運用'],
+  ];
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-5 flex-wrap">
+        {TABS.map(([v, l]) => (
+          <button key={v} onClick={() => setInnerTab(v)} className={`px-4 py-2 rounded-lg text-sm font-bold ${innerTab === v ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>{l}</button>
+        ))}
       </div>
 
-      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Globe className="w-4 h-4" />スプレッドシートとの連携について</h3>
-        <p className="text-sm text-slate-600 leading-relaxed">
-          このアプリはデータをこの端末（ブラウザ）に保存する仕組みのため、Googleスプレッドシートと自動で常時同期することはできません。
-        </p>
-        <p className="text-sm text-slate-600 leading-relaxed mt-2">
-          代わりに「顧客リスト」画面の <strong>CSV出力</strong> ボタンで最新データをダウンロードし、スプレッドシートに貼り付けてください。逆にスプレッドシート側の情報をこのアプリに取り込みたい場合は、スプレッドシートを「CSV形式（UTF-8）」で書き出し、<strong>CSVインポート</strong> ボタンから読み込んでください。
-        </p>
-        <p className="text-xs text-slate-400 mt-3">
-          ※本格的な自動同期（複数人でのリアルタイム共有）が必要な場合は、認証情報を安全に扱うための簡易サーバーを別途用意する必要があります。ご希望であれば構成をお手伝いします。
-        </p>
-      </div>
+      {innerTab === 'templates' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" />顧客向け報告フォーマット</h3>
+            <button onClick={() => setEditingTpl({ kind: 'report', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
+              <Plus className="w-4 h-4" />新しいフォーマット
+            </button>
+            <ul className="space-y-2">
+              {reportTemplates.map(t => (
+                <li key={t.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-start">
+                  <p className="text-sm font-bold text-slate-700">{t.name}</p>
+                  <div className="flex gap-1">
+                    <button onClick={() => setEditingTpl({ kind: 'report', ...t })} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                    <button onClick={() => deleteTpl('report', t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{学園名}} {{園名}} {{理事長}} {{園長}} {{住所}} {{TEL}} {{HPリンク}} {{メモ}} {{結果}}'}</p>
+          </div>
+
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><FileText className="w-4 h-4" />日報フォーマット</h3>
+            <button onClick={() => setEditingTpl({ kind: 'daily', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
+              <Plus className="w-4 h-4" />新しいフォーマット
+            </button>
+            <ul className="space-y-2">
+              {dailyReportTemplates.map(t => (
+                <li key={t.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-start">
+                  <p className="text-sm font-bold text-slate-700">{t.name}</p>
+                  <div className="flex gap-1">
+                    <button onClick={() => setEditingTpl({ kind: 'daily', ...t })} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                    <button onClick={() => deleteTpl('daily', t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{日付}} {{テレアポ件数}} {{初回訪問件数}} {{営業件数}} {{受注件数}} {{台数}} {{営業P}} {{自由記述}}'}</p>
+          </div>
+        </div>
+      )}
+
+      {innerTab === 'products' && (
+        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} />
+      )}
+
+      {innerTab === 'members' && (
+        <MembersManagement token={token} currentUser={currentUser} showAlert={showAlert} showConfirm={showConfirm} />
+      )}
+
+      {innerTab === 'data' && (
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+          <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Globe className="w-4 h-4" />スプレッドシートとの連携について</h3>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            このアプリはデータをデータベースに保存する仕組みのため、Googleスプレッドシートと自動で常時同期することはできません。
+          </p>
+          <p className="text-sm text-slate-600 leading-relaxed mt-2">
+            代わりに「顧客リスト」画面の <strong>CSV出力</strong> ボタンで最新データをダウンロードし、スプレッドシートに貼り付けてください。逆にスプレッドシート側の情報をこのアプリに取り込みたい場合は、スプレッドシートを「CSV形式（UTF-8）」で書き出し、<strong>CSVインポート</strong> ボタンから読み込んでください。
+          </p>
+          <p className="text-xs text-slate-400 mt-3">
+            ※本格的な自動同期（複数人でのリアルタイム共有）が必要な場合は、認証情報を安全に扱うための簡易サーバーを別途用意する必要があります。ご希望であれば構成をお手伝いします。
+          </p>
+        </div>
+      )}
 
       {editingTpl && (
         <Modal title={editingTpl.id ? 'フォーマットを編集' : '新しいフォーマット'} onClose={() => setEditingTpl(null)}>
@@ -965,7 +1837,7 @@ function SettingsView({ reportTemplates, setReportTemplates, showConfirm }) {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">本文</label>
               <textarea value={editingTpl.body} onChange={e => setEditingTpl({ ...editingTpl, body: e.target.value })} rows={8}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm resize-y max-h-72" />
             </div>
           </div>
           <button onClick={() => saveTpl({ ...editingTpl, id: editingTpl.id || Date.now() })}
@@ -1069,12 +1941,25 @@ function NavItem({ icon, label, isActive, onClick }) {
 
 // ---------- App ----------
 export default function App() {
+  const { token, user, authLoading, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
+  const [members, setMembers] = useState([]);
+  const [alertMsg, setAlertMsg] = useState('');
+  const [confirmState, setConfirmState] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+
+  const showAlert = (msg) => setAlertMsg(msg);
+  const showConfirm = (msg, onConfirm) => setConfirmState({ msg, onConfirm });
+  const isOwner = user?.role === 'owner';
+
   const { data, makeSetter, loaded: dataLoaded, syncError } = useSyncedData({
     customers: [], records: [], products: initialProducts, activityTypes: initialActivityTypes,
     goals: initialGoals, emailTemplates: initialEmailTemplates, reportTemplates: initialReportTemplates,
-  });
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates } = data;
+    dailyReportTemplates: initialDailyReportTemplates,
+  }, token, logout);
+
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates } = data;
   const setCustomers = makeSetter('customers');
   const setRecords = makeSetter('records');
   const setProducts = makeSetter('products');
@@ -1082,27 +1967,50 @@ export default function App() {
   const setGoals = makeSetter('goals');
   const setEmailTemplates = makeSetter('emailTemplates');
   const setReportTemplates = makeSetter('reportTemplates');
-  const [alertMsg, setAlertMsg] = useState('');
-  const [confirmState, setConfirmState] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const setDailyReportTemplates = makeSetter('dailyReportTemplates');
 
-  const showAlert = (msg) => setAlertMsg(msg);
-  const showConfirm = (msg, onConfirm) => setConfirmState({ msg, onConfirm });
+  // メンバー一覧（担当者選択・絞り込み用）を取得
+  useEffect(() => {
+    if (!token) return;
+    fetch('/api/members', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+      .then(list => setMembers(Array.isArray(list) ? list : []))
+      .catch(() => setMembers([]));
+  }, [token]);
+
+  // 権限のないタブ（設定・管理）に一般メンバーが残ってしまっていたらHOMEへ戻す
+  useEffect(() => {
+    if (activeTab === 'settings' && !isOwner) setActiveTab('home');
+  }, [activeTab, isOwner]);
 
   const menuItems = [
     { id: 'home', icon: <Home className="w-4 h-4" />, label: 'HOME' },
     { id: 'customers', icon: <Users className="w-4 h-4" />, label: '顧客リスト' },
+    { id: 'calendar', icon: <CalendarDays className="w-4 h-4" />, label: 'カレンダー' },
     { id: 'teleappt_stats', icon: <BarChart className="w-4 h-4" />, label: 'テレアポ集計' },
+    { id: 'daily_report', icon: <FileText className="w-4 h-4" />, label: '日報' },
     { id: 'email', icon: <Mail className="w-4 h-4" />, label: 'メール制作' },
     { id: 'ai', icon: <Sparkles className="w-4 h-4" />, label: 'AIアシスタント' },
-    { id: 'products', icon: <Package className="w-4 h-4" />, label: '商品・フラグ管理' },
-    { id: 'settings', icon: <Settings className="w-4 h-4" />, label: '設定・管理' },
+    ...(isOwner ? [{ id: 'settings', icon: <Settings className="w-4 h-4" />, label: '設定・管理' }] : []),
   ];
 
   const titles = {
-    home: 'HOME', customers: '顧客リスト', teleappt_stats: 'テレアポ集計', email: 'メール制作',
-    ai: 'AIアシスタント', products: '商品・フラグ管理', settings: '設定・管理',
+    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', teleappt_stats: 'テレアポ集計', daily_report: '日報',
+    email: 'メール制作', ai: 'AIアシスタント', settings: '設定・管理',
   };
+
+  // 未ログイン
+  if (authLoading) {
+    return (
+      <div className="flex h-[100dvh] items-center justify-center bg-slate-50 flex-col">
+        <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mb-4" />
+        <p className="text-slate-400 font-bold text-sm">読み込み中...</p>
+      </div>
+    );
+  }
+  if (!user) {
+    return <LoginView onLogin={login} />;
+  }
 
   if (!dataLoaded) {
     return (
@@ -1119,7 +2027,7 @@ export default function App() {
       <header className="md:hidden fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-slate-800 text-white z-30">
         <button onClick={() => setMenuOpen(true)} className="p-1"><LayoutMenuIcon /></button>
         <h1 className="font-bold text-sm">CRMシステム</h1>
-        <div className="w-6" />
+        <button onClick={() => setAccountOpen(true)} className="p-1"><Users className="w-5 h-5" /></button>
       </header>
 
       {menuOpen && (
@@ -1139,7 +2047,11 @@ export default function App() {
         <nav className="flex-1 py-3">
           {menuItems.map(m => <NavItem key={m.id} {...m} isActive={activeTab === m.id} onClick={() => setActiveTab(m.id)} />)}
         </nav>
-        <div className="px-5 py-4 text-[10px] flex items-center gap-1.5">
+        <button onClick={() => setAccountOpen(true)} className="mx-3 mb-2 px-3 py-2.5 bg-slate-700/60 hover:bg-slate-700 rounded-lg text-left">
+          <p className="text-sm font-bold text-white truncate">{user.displayName}</p>
+          <p className="text-[10px] text-slate-400">{isOwner ? 'オーナー' : '一般メンバー'} ・ アカウント設定</p>
+        </button>
+        <div className="px-5 pb-4 text-[10px] flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${syncError ? 'bg-red-400' : 'bg-teal-400'}`} />
           <span className={syncError ? 'text-red-300' : 'text-slate-500'}>{syncError ? '保存に失敗しました（通信を確認してください）' : 'サーバーと同期中'}</span>
         </div>
@@ -1147,24 +2059,41 @@ export default function App() {
 
       <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
         <h2 className="hidden md:block text-xl font-bold text-slate-800 mb-6">{titles[activeTab]}</h2>
-        {activeTab === 'home' && <HomeView records={records} goals={goals} setGoals={setGoals} />}
+        {activeTab === 'home' && (
+          <HomeView records={records} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} onNavigate={setActiveTab} />
+        )}
         {activeTab === 'customers' && (
           <CustomersView
             customers={customers} setCustomers={setCustomers}
             records={records} setRecords={setRecords}
             activityTypes={activityTypes} products={products}
             reportTemplates={reportTemplates}
+            members={members} currentUser={user} isOwner={isOwner}
             showAlert={showAlert} showConfirm={showConfirm}
           />
         )}
         {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} activityTypes={activityTypes} />}
+        {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} currentUser={user} isOwner={isOwner} />}
+        {activeTab === 'daily_report' && <DailyReportView records={records} dailyReportTemplates={dailyReportTemplates} />}
         {activeTab === 'email' && (
           <EmailBuilderView customers={customers} emailTemplates={emailTemplates} setEmailTemplates={setEmailTemplates} showAlert={showAlert} showConfirm={showConfirm} />
         )}
         {activeTab === 'ai' && <AIAssistantView customers={customers} records={records} />}
-        {activeTab === 'products' && <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} />}
-        {activeTab === 'settings' && <SettingsView reportTemplates={reportTemplates} setReportTemplates={setReportTemplates} showConfirm={showConfirm} />}
+        {activeTab === 'settings' && isOwner && (
+          <SettingsView
+            reportTemplates={reportTemplates} setReportTemplates={setReportTemplates}
+            dailyReportTemplates={dailyReportTemplates} setDailyReportTemplates={setDailyReportTemplates}
+            products={products} setProducts={setProducts}
+            activityTypes={activityTypes} setActivityTypes={setActivityTypes}
+            token={token} currentUser={user}
+            showAlert={showAlert} showConfirm={showConfirm}
+          />
+        )}
       </main>
+
+      {accountOpen && (
+        <AccountModal user={user} token={token} onLogout={logout} onClose={() => setAccountOpen(false)} showAlert={showAlert} />
+      )}
 
       {alertMsg && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4">
@@ -1188,6 +2117,42 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+// ---------- アカウント設定（パスワード変更・ログアウト） ----------
+function AccountModal({ user, token, onLogout, onClose, showAlert }) {
+  const [password, setPassword] = useState('');
+
+  const changePassword = async () => {
+    if (password.length < 4) { showAlert('パスワードは4文字以上にしてください。'); return; }
+    try {
+      const res = await fetch('/api/me/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '変更に失敗しました');
+      setPassword('');
+      showAlert('パスワードを変更しました。');
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
+  return (
+    <Modal title="アカウント設定" onClose={onClose}>
+      <div className="space-y-4">
+        <div>
+          <p className="text-sm font-bold text-slate-700">{user.displayName}</p>
+          <p className="text-xs text-slate-400">{user.role === 'owner' ? 'オーナー' : '一般メンバー'}</p>
+        </div>
+        <FormField label="新しいパスワード" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+        <button onClick={changePassword} className="w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">パスワードを変更する</button>
+        <button onClick={onLogout} className="w-full py-2.5 border border-red-200 text-red-600 rounded-lg font-bold hover:bg-red-50">ログアウト</button>
+      </div>
+    </Modal>
   );
 }
 
