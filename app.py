@@ -4,6 +4,9 @@ from flask import Flask, request, jsonify, send_from_directory
 import psycopg2
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 app = Flask(__name__, static_folder='dist', static_url_path='/')
 
@@ -14,6 +17,25 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 SECRET_KEY = os.environ.get('SECRET_KEY', 'please-change-this-secret-key')
 serializer = URLSafeTimedSerializer(SECRET_KEY)
 TOKEN_MAX_AGE = 60 * 60 * 24 * 30  # 30日間有効
+
+# ---------- Googleカレンダー連携（サービスアカウント方式） ----------
+GOOGLE_CALENDAR_ID = os.environ.get('GOOGLE_CALENDAR_ID')
+GOOGLE_CALENDAR_CREDENTIALS_JSON = os.environ.get('GOOGLE_CALENDAR_CREDENTIALS_JSON')
+
+
+def get_calendar_service():
+    """設定が揃っていればGoogleカレンダーAPIのサービスを返す。未設定ならNone。"""
+    if not GOOGLE_CALENDAR_ID or not GOOGLE_CALENDAR_CREDENTIALS_JSON:
+        return None
+    try:
+        info = json.loads(GOOGLE_CALENDAR_CREDENTIALS_JSON)
+        creds = service_account.Credentials.from_service_account_info(
+            info, scopes=['https://www.googleapis.com/auth/calendar']
+        )
+        return build('calendar', 'v3', credentials=creds, cache_discovery=False)
+    except Exception as e:
+        print('Googleカレンダー認証エラー:', e)
+        return None
 
 
 def get_conn():
@@ -40,10 +62,13 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             display_name TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'member',
+            role TEXT NOT NULL DEFAULT 'general',
             created_at TIMESTAMP NOT NULL DEFAULT NOW()
         )
     ''')
+    # 既存のデータベースにも新しい列を追加する（マイグレーション）
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS photo TEXT")
     cur.execute('SELECT COUNT(*) FROM users')
     if cur.fetchone()[0] == 0:
         # 初回起動時に、最初のオーナーアカウントを自動作成します。
@@ -68,13 +93,13 @@ def get_current_user():
         return None
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute('SELECT id, username, display_name, role FROM users WHERE id = %s', (data.get('uid'),))
+    cur.execute('SELECT id, username, display_name, role, department, photo FROM users WHERE id = %s', (data.get('uid'),))
     row = cur.fetchone()
     cur.close()
     conn.close()
     if not row:
         return None
-    return {'id': row[0], 'username': row[1], 'displayName': row[2], 'role': row[3]}
+    return {'id': row[0], 'username': row[1], 'displayName': row[2], 'role': row[3], 'department': row[4], 'photo': row[5]}
 
 
 def require_owner():
@@ -96,14 +121,14 @@ def login():
         return jsonify({'error': 'ユーザー名とパスワードを入力してください'}), 400
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute('SELECT id, username, password_hash, display_name, role FROM users WHERE username = %s', (username,))
+    cur.execute('SELECT id, username, password_hash, display_name, role, department, photo FROM users WHERE username = %s', (username,))
     row = cur.fetchone()
     cur.close()
     conn.close()
     if not row or not check_password_hash(row[2], password):
         return jsonify({'error': 'ユーザー名またはパスワードが正しくありません'}), 401
     token = serializer.dumps({'uid': row[0]})
-    return jsonify({'token': token, 'user': {'id': row[0], 'username': row[1], 'displayName': row[3], 'role': row[4]}})
+    return jsonify({'token': token, 'user': {'id': row[0], 'username': row[1], 'displayName': row[3], 'role': row[4], 'department': row[5], 'photo': row[6]}})
 
 
 @app.route('/api/me', methods=['GET'])
@@ -132,6 +157,25 @@ def change_own_password():
     return jsonify({'status': 'success'})
 
 
+@app.route('/api/me/photo', methods=['PUT'])
+def change_own_photo():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(force=True) or {}
+    photo = body.get('photo', '')
+    # 画像はBase64のData URLとして保存する。大きすぎる画像は容量を圧迫するため制限する
+    if photo and len(photo) > 900000:
+        return jsonify({'error': '画像のサイズが大きすぎます。もっと小さい画像を選んでください。'}), 400
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute('UPDATE users SET photo = %s WHERE id = %s', (photo or None, user['id']))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+
 # ---------- メンバー一覧（担当者選択用・ログインしていれば誰でも取得可） ----------
 @app.route('/api/members', methods=['GET'])
 def list_members():
@@ -140,11 +184,14 @@ def list_members():
         return jsonify({'error': 'unauthorized'}), 401
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute('SELECT id, display_name, role FROM users ORDER BY id')
+    cur.execute('SELECT id, display_name, role, department, photo FROM users ORDER BY id')
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    return jsonify([{'id': r[0], 'displayName': r[1], 'role': r[2]} for r in rows])
+    return jsonify([
+        {'id': r[0], 'displayName': r[1], 'role': r[2], 'department': r[3], 'photo': r[4]}
+        for r in rows
+    ])
 
 
 # ---------- メンバー管理（オーナーのみ） ----------
@@ -155,14 +202,17 @@ def list_users():
         return err
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute('SELECT id, username, display_name, role, created_at FROM users ORDER BY id')
+    cur.execute('SELECT id, username, display_name, role, department, photo, created_at FROM users ORDER BY id')
     rows = cur.fetchall()
     cur.close()
     conn.close()
     return jsonify([
-        {'id': r[0], 'username': r[1], 'displayName': r[2], 'role': r[3], 'createdAt': r[4].isoformat()}
+        {'id': r[0], 'username': r[1], 'displayName': r[2], 'role': r[3], 'department': r[4], 'photo': r[5], 'createdAt': r[6].isoformat()}
         for r in rows
     ])
+
+
+VALID_ROLES = ('owner', 'general', 'smgr', 'mgr')
 
 
 @app.route('/api/users', methods=['POST'])
@@ -174,7 +224,9 @@ def create_user():
     username = (body.get('username') or '').strip()
     password = body.get('password') or ''
     display_name = (body.get('displayName') or username).strip()
-    role = body.get('role') if body.get('role') in ('owner', 'member') else 'member'
+    department = body.get('department') or None
+    photo = body.get('photo') or None
+    role = body.get('role') if body.get('role') in VALID_ROLES else 'general'
     if not username or not password:
         return jsonify({'error': 'ユーザー名とパスワードは必須です'}), 400
     conn = get_conn()
@@ -185,14 +237,14 @@ def create_user():
         conn.close()
         return jsonify({'error': 'そのユーザー名はすでに使われています'}), 400
     cur.execute(
-        'INSERT INTO users (username, password_hash, display_name, role) VALUES (%s, %s, %s, %s) RETURNING id',
-        (username, generate_password_hash(password), display_name, role)
+        'INSERT INTO users (username, password_hash, display_name, role, department, photo) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id',
+        (username, generate_password_hash(password), display_name, role, department, photo)
     )
     new_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({'id': new_id, 'username': username, 'displayName': display_name, 'role': role})
+    return jsonify({'id': new_id, 'username': username, 'displayName': display_name, 'role': role, 'department': department})
 
 
 @app.route('/api/users/<int:uid>', methods=['PUT'])
@@ -207,8 +259,16 @@ def update_user(uid):
         cur.execute('UPDATE users SET password_hash = %s WHERE id = %s', (generate_password_hash(body['password']), uid))
     if 'displayName' in body:
         cur.execute('UPDATE users SET display_name = %s WHERE id = %s', (body['displayName'], uid))
-    if 'role' in body and body['role'] in ('owner', 'member'):
+    if 'role' in body and body['role'] in VALID_ROLES:
         cur.execute('UPDATE users SET role = %s WHERE id = %s', (body['role'], uid))
+    if 'department' in body:
+        cur.execute('UPDATE users SET department = %s WHERE id = %s', (body['department'] or None, uid))
+    if 'photo' in body:
+        photo = body.get('photo') or None
+        if photo and len(photo) > 900000:
+            cur.close(); conn.close()
+            return jsonify({'error': '画像のサイズが大きすぎます。もっと小さい画像を選んでください。'}), 400
+        cur.execute('UPDATE users SET photo = %s WHERE id = %s', (photo, uid))
     conn.commit()
     cur.close()
     conn.close()
@@ -229,6 +289,72 @@ def delete_user(uid):
     cur.close()
     conn.close()
     return jsonify({'status': 'success'})
+
+
+# ---------- Googleカレンダー連携API ----------
+@app.route('/api/calendar/status', methods=['GET'])
+def calendar_status():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'unauthorized'}), 401
+    return jsonify({'configured': get_calendar_service() is not None})
+
+
+@app.route('/api/calendar/event', methods=['POST'])
+def create_calendar_event():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'unauthorized'}), 401
+    service = get_calendar_service()
+    if not service:
+        return jsonify({'error': 'not_configured'}), 400
+
+    body = request.get_json(force=True) or {}
+    date = body.get('date')
+    time = body.get('time') or '09:00'
+    title = body.get('title') or '予定'
+    description = body.get('description') or ''
+    if not date:
+        return jsonify({'error': '日付が必要です'}), 400
+
+    try:
+        h, m = map(int, time.split(':'))
+    except Exception:
+        h, m = 9, 0
+    start_dt = f'{date}T{h:02d}:{m:02d}:00'
+    end_h = (h + 1) % 24
+    end_dt = f'{date}T{end_h:02d}:{m:02d}:00'
+
+    event = {
+        'summary': title,
+        'description': description,
+        'start': {'dateTime': start_dt, 'timeZone': 'Asia/Tokyo'},
+        'end': {'dateTime': end_dt, 'timeZone': 'Asia/Tokyo'},
+    }
+    try:
+        created = service.events().insert(calendarId=GOOGLE_CALENDAR_ID, body=event).execute()
+        return jsonify({'eventId': created.get('id'), 'htmlLink': created.get('htmlLink')})
+    except HttpError as e:
+        return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/calendar/event/<event_id>', methods=['DELETE'])
+def delete_calendar_event(event_id):
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'unauthorized'}), 401
+    service = get_calendar_service()
+    if not service:
+        return jsonify({'error': 'not_configured'}), 400
+    try:
+        service.events().delete(calendarId=GOOGLE_CALENDAR_ID, eventId=event_id).execute()
+        return jsonify({'status': 'success'})
+    except HttpError as e:
+        return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ---------- アプリデータ（ログイン必須） ----------

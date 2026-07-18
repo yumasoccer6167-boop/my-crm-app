@@ -212,7 +212,9 @@ function useAuth() {
     try { localStorage.removeItem('crm_token'); } catch {}
   };
 
-  return { token, user, authLoading, login, logout };
+  const updateUser = (patch) => setUser(prev => prev ? { ...prev, ...patch } : prev);
+
+  return { token, user, authLoading, login, logout, updateUser };
 }
 
 // ---------- サーバー同期フック（/api/data 経由でデータベースと同期） ----------
@@ -1393,9 +1395,11 @@ function getWeekKey(dateStr) {
   return `${d.getFullYear()}年 第${week}週`;
 }
 
-function TeleApptStatsView({ records, activityTypes }) {
+function TeleApptStatsView({ records, activityTypes, members, currentUser, isOwner }) {
   const [granularity, setGranularity] = useState('day');
-  const teleRecords = records.filter(r => r.type === 'テレアポ');
+  const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
+  const scopedRecords = scope === 'all' ? records : records.filter(r => r.assignedTo === scope);
+  const teleRecords = scopedRecords.filter(r => r.type === 'テレアポ');
   // 現在設定されているフラグ ＋ 過去に使われたことがあるが今は消えたフラグも漏らさず集計する
   const configuredFlags = activityTypes.find(a => a.name === 'テレアポ')?.flags || [];
   const usedFlags = [...new Set(teleRecords.map(r => r.flag).filter(Boolean))];
@@ -1455,10 +1459,18 @@ function TeleApptStatsView({ records, activityTypes }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        {[['day', '日別'], ['week', '週別'], ['month', '月別']].map(([v, l]) => (
-          <button key={v} onClick={() => setGranularity(v)} className={`px-4 py-2 rounded-lg text-sm font-bold ${granularity === v ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>{l}</button>
-        ))}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-2">
+          {[['day', '日別'], ['week', '週別'], ['month', '月別']].map(([v, l]) => (
+            <button key={v} onClick={() => setGranularity(v)} className={`px-4 py-2 rounded-lg text-sm font-bold ${granularity === v ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>{l}</button>
+          ))}
+        </div>
+        {isOwner && (
+          <select value={scope} onChange={e => setScope(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="all">全員</option>
+            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+          </select>
+        )}
       </div>
 
       {groups.length === 0 ? (
@@ -1785,6 +1797,30 @@ function GoogleCalendarStatusCard({ token }) {
 }
 
 // ---------- メンバー管理（オーナーのみ） ----------
+const ROLE_LABELS = { owner: 'オーナー', mgr: 'MGR', smgr: 'SMGR', general: '一般', member: '一般' };
+const ROLE_BADGE_CLASS = {
+  owner: 'bg-amber-100 text-amber-700', mgr: 'bg-indigo-100 text-indigo-700',
+  smgr: 'bg-teal-100 text-teal-700', general: 'bg-slate-200 text-slate-600', member: 'bg-slate-200 text-slate-600',
+};
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function Avatar({ photo, name, size = 'w-9 h-9' }) {
+  if (photo) return <img src={photo} alt={name} className={`${size} rounded-full object-cover`} />;
+  return (
+    <div className={`${size} rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold shrink-0`}>
+      {(name || '?').slice(0, 1)}
+    </div>
+  );
+}
+
 function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1831,10 +1867,18 @@ function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
     });
   };
 
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { showAlert('画像サイズが大きすぎます（2MB以下にしてください）。'); return; }
+    const dataUrl = await readFileAsDataUrl(file);
+    setEditing(prev => ({ ...prev, photo: dataUrl }));
+  };
+
   return (
     <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
       <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Users className="w-4 h-4" />メンバー管理</h3>
-      <button onClick={() => setEditing({ username: '', password: '', displayName: '', role: 'member' })}
+      <button onClick={() => setEditing({ username: '', password: '', displayName: '', role: 'general', department: '', photo: '' })}
         className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
         <Plus className="w-4 h-4" />メンバーを追加
       </button>
@@ -1842,11 +1886,17 @@ function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
         <ul className="space-y-2">
           {members.map(m => (
             <li key={m.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-center">
-              <div>
-                <p className="text-sm font-bold text-slate-700">{m.displayName} <span className="text-xs text-slate-400 font-normal">（{m.username}）</span></p>
-                <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${m.role === 'owner' ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'}`}>
-                  {m.role === 'owner' ? 'オーナー' : '一般メンバー'}
-                </span>
+              <div className="flex items-center gap-3">
+                <Avatar photo={m.photo} name={m.displayName} />
+                <div>
+                  <p className="text-sm font-bold text-slate-700">{m.displayName} <span className="text-xs text-slate-400 font-normal">（{m.username}）</span></p>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${ROLE_BADGE_CLASS[m.role] || ROLE_BADGE_CLASS.general}`}>
+                      {ROLE_LABELS[m.role] || '一般'}
+                    </span>
+                    {m.department && <span className="text-[10px] text-slate-400">{m.department}</span>}
+                  </div>
+                </div>
               </div>
               <div className="flex gap-1">
                 <button onClick={() => setEditing({ ...m, password: '' })} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
@@ -1862,13 +1912,26 @@ function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
       {editing && (
         <Modal title={editing.id ? 'メンバー編集' : '新しいメンバー'} onClose={() => setEditing(null)}>
           <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Avatar photo={editing.photo} name={editing.displayName} size="w-14 h-14" />
+              <label className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold cursor-pointer">
+                写真を選択
+                <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+              </label>
+              {editing.photo && (
+                <button onClick={() => setEditing({ ...editing, photo: '' })} className="text-xs text-red-500">削除</button>
+              )}
+            </div>
             <FormField label="ユーザー名（ログインID）" value={editing.username} onChange={e => setEditing({ ...editing, username: e.target.value })} />
             <FormField label="表示名" value={editing.displayName} onChange={e => setEditing({ ...editing, displayName: e.target.value })} />
+            <FormField label="課" value={editing.department || ''} onChange={e => setEditing({ ...editing, department: e.target.value })} placeholder="例：第一営業課" />
             <FormField label={editing.id ? '新しいパスワード（変更する場合のみ）' : 'パスワード'} type="password" value={editing.password} onChange={e => setEditing({ ...editing, password: e.target.value })} />
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-slate-500">権限</label>
+              <label className="text-xs font-semibold text-slate-500">役職</label>
               <select value={editing.role} onChange={e => setEditing({ ...editing, role: e.target.value })} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-                <option value="member">一般メンバー</option>
+                <option value="general">一般</option>
+                <option value="smgr">SMGR</option>
+                <option value="mgr">MGR</option>
                 <option value="owner">オーナー</option>
               </select>
             </div>
@@ -2121,7 +2184,7 @@ function NavItem({ icon, label, isActive, onClick }) {
 
 // ---------- App ----------
 export default function App() {
-  const { token, user, authLoading, login, logout } = useAuth();
+  const { token, user, authLoading, login, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [members, setMembers] = useState([]);
   const [alertMsg, setAlertMsg] = useState('');
@@ -2208,7 +2271,7 @@ export default function App() {
       <header className="md:hidden fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-slate-800 text-white z-30">
         <button onClick={() => setMenuOpen(true)} className="p-1"><LayoutMenuIcon /></button>
         <h1 className="font-bold text-sm">CRMシステム</h1>
-        <button onClick={() => setAccountOpen(true)} className="p-1"><Users className="w-5 h-5" /></button>
+        <button onClick={() => setAccountOpen(true)} className="p-0.5"><Avatar photo={user.photo} name={user.displayName} size="w-7 h-7" /></button>
       </header>
 
       {menuOpen && (
@@ -2228,9 +2291,12 @@ export default function App() {
         <nav className="flex-1 py-3">
           {menuItems.map(m => <NavItem key={m.id} {...m} isActive={activeTab === m.id} onClick={() => setActiveTab(m.id)} />)}
         </nav>
-        <button onClick={() => setAccountOpen(true)} className="mx-3 mb-2 px-3 py-2.5 bg-slate-700/60 hover:bg-slate-700 rounded-lg text-left">
-          <p className="text-sm font-bold text-white truncate">{user.displayName}</p>
-          <p className="text-[10px] text-slate-400">{isOwner ? 'オーナー' : '一般メンバー'} ・ アカウント設定</p>
+        <button onClick={() => setAccountOpen(true)} className="mx-3 mb-2 px-3 py-2.5 bg-slate-700/60 hover:bg-slate-700 rounded-lg text-left flex items-center gap-2.5">
+          <Avatar photo={user.photo} name={user.displayName} size="w-8 h-8" />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white truncate">{user.displayName}</p>
+            <p className="text-[10px] text-slate-400">{ROLE_LABELS[user.role] || '一般'} ・ アカウント設定</p>
+          </div>
         </button>
         <div className="px-5 pb-4 text-[10px] flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${syncError ? 'bg-red-400' : 'bg-teal-400'}`} />
@@ -2253,7 +2319,7 @@ export default function App() {
             showAlert={showAlert} showConfirm={showConfirm}
           />
         )}
-        {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} activityTypes={activityTypes} />}
+        {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} activityTypes={activityTypes} members={members} currentUser={user} isOwner={isOwner} />}
         {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} currentUser={user} isOwner={isOwner} />}
         {activeTab === 'daily_report' && <DailyReportView records={records} dailyReportTemplates={dailyReportTemplates} />}
         {activeTab === 'email' && (
@@ -2274,7 +2340,7 @@ export default function App() {
       </main>
 
       {accountOpen && (
-        <AccountModal user={user} token={token} onLogout={logout} onClose={() => setAccountOpen(false)} showAlert={showAlert} />
+        <AccountModal user={user} token={token} onLogout={logout} onClose={() => setAccountOpen(false)} showAlert={showAlert} onPhotoUpdated={(photo) => updateUser({ photo })} />
       )}
 
       {alertMsg && (
@@ -2303,8 +2369,9 @@ export default function App() {
 }
 
 // ---------- アカウント設定（パスワード変更・ログアウト） ----------
-function AccountModal({ user, token, onLogout, onClose, showAlert }) {
+function AccountModal({ user, token, onLogout, onClose, showAlert, onPhotoUpdated }) {
   const [password, setPassword] = useState('');
+  const [photo, setPhoto] = useState(user.photo || '');
 
   const changePassword = async () => {
     if (password.length < 4) { showAlert('パスワードは4文字以上にしてください。'); return; }
@@ -2323,12 +2390,40 @@ function AccountModal({ user, token, onLogout, onClose, showAlert }) {
     }
   };
 
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { showAlert('画像サイズが大きすぎます（2MB以下にしてください）。'); return; }
+    const dataUrl = await readFileAsDataUrl(file);
+    setPhoto(dataUrl);
+    try {
+      const res = await fetch('/api/me/photo', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ photo: dataUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '写真の更新に失敗しました');
+      onPhotoUpdated && onPhotoUpdated(dataUrl);
+      showAlert('写真を更新しました。');
+    } catch (err) {
+      showAlert(err.message);
+    }
+  };
+
   return (
     <Modal title="アカウント設定" onClose={onClose}>
       <div className="space-y-4">
-        <div>
-          <p className="text-sm font-bold text-slate-700">{user.displayName}</p>
-          <p className="text-xs text-slate-400">{user.role === 'owner' ? 'オーナー' : '一般メンバー'}</p>
+        <div className="flex items-center gap-3">
+          <Avatar photo={photo} name={user.displayName} size="w-14 h-14" />
+          <div>
+            <p className="text-sm font-bold text-slate-700">{user.displayName}</p>
+            <p className="text-xs text-slate-400">{ROLE_LABELS[user.role] || '一般'}{user.department ? ` ・ ${user.department}` : ''}</p>
+            <label className="inline-block mt-1 text-xs text-teal-600 font-semibold cursor-pointer">
+              写真を変更
+              <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+            </label>
+          </div>
         </div>
         <FormField label="新しいパスワード" type="password" value={password} onChange={e => setPassword(e.target.value)} />
         <button onClick={changePassword} className="w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">パスワードを変更する</button>
