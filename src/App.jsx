@@ -9,6 +9,7 @@ import {
 
 // ---------- 初期データ ----------
 const initialProducts = [{ id: 1, name: 'SP-MEO' }, { id: 2, name: 'SP' }];
+const initialAssociationTypes = [];
 
 const initialActivityTypes = [
   { id: 1, name: 'テレアポ', flags: ['時間設定', '再コール', '拒否', '廃業', '接触済み拒否', '当日確認案件', '長期見込み'] },
@@ -18,7 +19,7 @@ const initialActivityTypes = [
 ];
 
 const thisMonth = new Date().toISOString().substring(0, 7);
-const initialGoals = { [thisMonth]: { timeSetting: 50, firstVisit: 20, sales: 10, order: 5 } };
+const initialGoals = { [thisMonth]: { timeSetting: 50, firstVisit: 20, salesTimeSetting: 15, order: 5, profit: 500000, quantity: 10 } };
 
 const emptyCustomer = {
   id: null, gakuenName: '', enName: '', associationType: '', chairman: '', principal: '', address: '',
@@ -344,6 +345,23 @@ function ProgressCard({ label, actual, goal, unit = '件' }) {
   );
 }
 
+function RateCard({ label, rate }) {
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+      <div className="mb-2">
+        <span className="text-xs font-bold text-slate-500">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-1 mb-3">
+        <span className="text-2xl font-extrabold text-slate-800">{rate}</span>
+        <span className="text-sm text-slate-400">%</span>
+      </div>
+      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${Math.min(100, rate)}%` }} />
+      </div>
+    </div>
+  );
+}
+
 // ---------- ログイン画面 ----------
 function LoginView({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -394,14 +412,19 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
 
   const scopedRecords = scope === 'all' ? records : records.filter(r => r.assignedTo === scope);
   const filtered = period === 'all' ? scopedRecords : scopedRecords.filter(r => r.date?.startsWith(period));
-  const count = (type, flag) => filtered.filter(r => r.type === type && (!flag || r.flag === flag)).length;
 
-  const timeSetting = count('テレアポ', '時間設定');
-  const firstVisit = count('初回訪問');
-  const sales = count('営業');
-  const order = filtered.filter(r => r.flag === '受注' || r.flag === 'ユーザー').length;
+  // 指標の計算
+  const teleTimeSetting = filtered.filter(r => r.type === 'テレアポ' && r.flag === '時間設定').length; // 初回時間設定件数
+  const firstVisitCount = filtered.filter(r => r.type === '初回訪問').length; // 初回訪問件数
+  const salesTimeSetting = filtered.filter(r => r.type === '初回訪問' && r.flag === '営業時間設定').length; // 営業時間設定件数
+  const salesTimeSettingRate = firstVisitCount > 0 ? Math.round((salesTimeSetting / firstVisitCount) * 100) : 0; // 営業時間設定昇華率
+  const orderRecords = filtered.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
+  const orderCount = orderRecords.length; // 受注件数
+  const profitSum = orderRecords.reduce((s, r) => s + (Number(r.profit) || 0), 0); // 営業粗利（P）
+  const quantitySum = orderRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0); // 台数
+  const closeRate = salesTimeSetting > 0 ? Math.round((orderCount / salesTimeSetting) * 100) : 0; // 営業落率
 
-  const goal = goals[period] || { timeSetting: 0, firstVisit: 0, sales: 0, order: 0 };
+  const goal = goals[period] || { timeSetting: 0, firstVisit: 0, salesTimeSetting: 0, order: 0, profit: 0, quantity: 0 };
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(goal);
 
@@ -444,19 +467,25 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <ProgressCard label="時間設定" actual={timeSetting} goal={goal.timeSetting} />
-        <ProgressCard label="初回訪問" actual={firstVisit} goal={goal.firstVisit} />
-        <ProgressCard label="営業" actual={sales} goal={goal.sales} />
-        <ProgressCard label="受注" actual={order} goal={goal.order} />
+        <ProgressCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} />
+        <ProgressCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} />
+        <ProgressCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} />
+        <RateCard label="営業時間設定昇華率" rate={salesTimeSettingRate} />
+        <ProgressCard label="受注件数" actual={orderCount} goal={goal.order} />
+        <ProgressCard label="営業粗利" actual={profitSum} goal={goal.profit} unit="P" />
+        <ProgressCard label="台数" actual={quantitySum} goal={goal.quantity} unit="台" />
+        <RateCard label="営業落率" rate={closeRate} />
       </div>
 
       {editing && (
         <Modal title={`${period} の目標設定`} onClose={() => setEditing(false)}>
           <div className="grid grid-cols-2 gap-4">
-            <FormField label="時間設定 目標" type="number" value={draft.timeSetting} onChange={e => setDraft({ ...draft, timeSetting: Number(e.target.value) })} />
+            <FormField label="初回時間設定 目標" type="number" value={draft.timeSetting} onChange={e => setDraft({ ...draft, timeSetting: Number(e.target.value) })} />
             <FormField label="初回訪問 目標" type="number" value={draft.firstVisit} onChange={e => setDraft({ ...draft, firstVisit: Number(e.target.value) })} />
-            <FormField label="営業 目標" type="number" value={draft.sales} onChange={e => setDraft({ ...draft, sales: Number(e.target.value) })} />
+            <FormField label="営業時間設定 目標" type="number" value={draft.salesTimeSetting} onChange={e => setDraft({ ...draft, salesTimeSetting: Number(e.target.value) })} />
             <FormField label="受注 目標" type="number" value={draft.order} onChange={e => setDraft({ ...draft, order: Number(e.target.value) })} />
+            <FormField label="営業粗利 目標（P）" type="number" value={draft.profit} onChange={e => setDraft({ ...draft, profit: Number(e.target.value) })} />
+            <FormField label="台数 目標" type="number" value={draft.quantity} onChange={e => setDraft({ ...draft, quantity: Number(e.target.value) })} />
           </div>
           <button onClick={saveGoal} className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
         </Modal>
@@ -523,9 +552,14 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
 }
 
 // ---------- 顧客編集モーダル ----------
-function CustomerModal({ customer, existingAssociationTypes, members, currentUser, onSave, onClose }) {
+function CustomerModal({ customer, associationTypes, members, currentUser, onSave, onClose }) {
   const [form, setForm] = useState(customer ? { ...emptyCustomer, ...customer } : { ...emptyCustomer, assignedTo: currentUser?.displayName || '' });
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  // すでに設定済みの値が管理リストに無い場合（過去のデータ等）も選べるように残しておく
+  const associationOptions = form.associationType && !associationTypes.some(a => a.name === form.associationType)
+    ? [...associationTypes, { id: 'legacy', name: form.associationType }]
+    : associationTypes;
 
   return (
     <Modal title={form.id ? '顧客情報を編集' : '新規顧客登録'} onClose={onClose} wide>
@@ -534,16 +568,11 @@ function CustomerModal({ customer, existingAssociationTypes, members, currentUse
         <FormField label="園名" value={form.enName} onChange={set('enName')} />
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">協会の種類</label>
-          <input
-            list="association-type-options"
-            value={form.associationType}
-            onChange={set('associationType')}
-            placeholder="例：〇〇県私立幼稚園協会"
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-          />
-          <datalist id="association-type-options">
-            {existingAssociationTypes.map(t => <option key={t} value={t} />)}
-          </datalist>
+          <select value={form.associationType} onChange={set('associationType')} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">未設定</option>
+            {associationOptions.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+          </select>
+          <p className="text-[11px] text-slate-400">選択肢の追加・編集は「設定・管理」からオーナーが行えます。</p>
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">担当者</label>
@@ -562,7 +591,7 @@ function CustomerModal({ customer, existingAssociationTypes, members, currentUse
         <FormField label="Instagram URL" value={form.instagram} onChange={set('instagram')} />
         <FormField label="GBPリンク" value={form.gbpLink} onChange={set('gbpLink')} />
         <FormField label="口コミ評価（★の数）" type="number" value={form.reviewScore} onChange={set('reviewScore')} />
-        <FormField label="口コミ件数" type="number" value={form.reviewCount} onChange={set('reviewCount')} />
+        <FormField label="口コミ数" type="number" value={form.reviewCount} onChange={set('reviewCount')} />
       </div>
       <button
         onClick={() => onSave({ ...form, id: form.id || Date.now() })}
@@ -611,7 +640,7 @@ function ReportGenerator({ customer, reportTemplates, latestRecord }) {
 }
 
 // ---------- 顧客詳細（活動履歴＋記録登録）モーダル ----------
-function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, currentUser, showAlert, onClose, onEdit, startWithForm }) {
+function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, currentUser, token, showAlert, onClose, onEdit, startWithForm }) {
   const history = records.filter(r => r.customerId === customer.id).slice().reverse();
   const [showForm, setShowForm] = useState(!!startWithForm);
   const [showReport, setShowReport] = useState(false);
@@ -672,6 +701,7 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
             activityTypes={activityTypes}
             products={products}
             currentUser={currentUser}
+            token={token}
             showAlert={showAlert}
             onSaved={handleRecordSaved}
           />
@@ -730,7 +760,7 @@ function getCustomerStatus(customerId, records) {
 }
 
 // ---------- 顧客リスト ----------
-function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, members, currentUser, isOwner, showAlert, showConfirm }) {
+function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, members, currentUser, isOwner, token, showAlert, showConfirm }) {
   const [search, setSearch] = useState('');
   const [addressFilter, setAddressFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -1042,7 +1072,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
       {editing && (
         <CustomerModal
           customer={editing.id ? editing : null}
-          existingAssociationTypes={[...new Set(customers.map(c => c.associationType).filter(Boolean))]}
+          associationTypes={associationTypes}
           members={members}
           currentUser={currentUser}
           onSave={saveCustomer}
@@ -1058,6 +1088,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
           products={products}
           reportTemplates={reportTemplates}
           currentUser={currentUser}
+          token={token}
           showAlert={showAlert}
           startWithForm={viewingWithForm}
           onClose={() => { setViewing(null); setViewingWithForm(false); }}
@@ -1071,7 +1102,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 // ---------- 記録登録フォーム（顧客詳細モーダルの中で使う） ----------
 const SCHEDULE_FLAGS = ['時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
 
-function RecordFields({ customer, setRecords, activityTypes, products, currentUser, showAlert, onSaved }) {
+function RecordFields({ customer, setRecords, activityTypes, products, currentUser, token, showAlert, onSaved }) {
   const now = new Date();
   const [type, setType] = useState(activityTypes[0]?.name || '');
   const [flag, setFlag] = useState('');
@@ -1110,6 +1141,27 @@ function RecordFields({ customer, setRecords, activityTypes, products, currentUs
     showAlert('記録を保存しました。');
     reset();
     onSaved && onSaved(newRecord);
+
+    // 予定がある記録は、設定済みであれば自動でGoogleカレンダーにも登録する
+    if (needsSchedule && scheduledDate && token) {
+      fetch('/api/calendar/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          date: scheduledDate,
+          time: scheduledTime || '09:00',
+          title: `${customer.enName || customer.gakuenName} - ${type}${flag ? `（${flag}）` : ''}`,
+          description: memo,
+        }),
+      })
+        .then(res => res.json().then(data => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (ok && data.eventId) {
+            setRecords(prev => prev.map(r => r.id === newRecord.id ? { ...r, googleEventId: data.eventId } : r));
+          }
+        })
+        .catch(() => {});
+    }
   };
 
   return (
@@ -1629,7 +1681,41 @@ function AIAssistantView({ customers, records }) {
   );
 }
 
-// ---------- 設定・管理（報告フォーマット／データ運用） ----------
+// ---------- Googleカレンダー連携状況 ----------
+function GoogleCalendarStatusCard({ token }) {
+  const [status, setStatus] = useState(null); // null=読み込み中, true/false
+
+  useEffect(() => {
+    if (!token) return;
+    fetch('/api/calendar/status', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => setStatus(!!data.configured))
+      .catch(() => setStatus(false));
+  }, [token]);
+
+  return (
+    <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+      <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><CalendarDays className="w-4 h-4" />Googleカレンダー連携</h3>
+      <div className="flex items-center gap-2 mb-3">
+        <span className={`w-2 h-2 rounded-full ${status ? 'bg-teal-500' : 'bg-slate-300'}`} />
+        <span className="text-sm font-semibold text-slate-600">
+          {status === null ? '確認中...' : status ? '連携済み：予定を保存すると自動でGoogleカレンダーに登録されます' : '未連携'}
+        </span>
+      </div>
+      {!status && (
+        <div className="text-sm text-slate-600 leading-relaxed space-y-2">
+          <p>連携するには、Renderの環境変数に以下の2つを設定してください。</p>
+          <ul className="list-disc list-inside text-xs text-slate-500 space-y-1">
+            <li><code className="bg-slate-100 px-1 rounded">GOOGLE_CALENDAR_ID</code>：書き込み先のGoogleカレンダーのID</li>
+            <li><code className="bg-slate-100 px-1 rounded">GOOGLE_CALENDAR_CREDENTIALS_JSON</code>：サービスアカウントの認証情報（JSON）</li>
+          </ul>
+          <p className="text-xs text-slate-400">詳しい取得手順はサポートに聞いてください。設定後、このアプリを再デプロイすると「連携済み」に切り替わります。</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- メンバー管理（オーナーのみ） ----------
 function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
   const [members, setMembers] = useState([]);
@@ -1729,7 +1815,7 @@ function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
 // ---------- 設定・管理（オーナー専用：報告フォーマット／商品・フラグ／メンバー／データ運用） ----------
 function SettingsView({
   reportTemplates, setReportTemplates, dailyReportTemplates, setDailyReportTemplates,
-  products, setProducts, activityTypes, setActivityTypes,
+  products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes,
   token, currentUser, showAlert, showConfirm,
 }) {
   const [innerTab, setInnerTab] = useState('templates');
@@ -1808,7 +1894,7 @@ function SettingsView({
       )}
 
       {innerTab === 'products' && (
-        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} />
+        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} associationTypes={associationTypes} setAssociationTypes={setAssociationTypes} />
       )}
 
       {innerTab === 'members' && (
@@ -1816,17 +1902,18 @@ function SettingsView({
       )}
 
       {innerTab === 'data' && (
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-          <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Globe className="w-4 h-4" />スプレッドシートとの連携について</h3>
-          <p className="text-sm text-slate-600 leading-relaxed">
-            このアプリはデータをデータベースに保存する仕組みのため、Googleスプレッドシートと自動で常時同期することはできません。
-          </p>
-          <p className="text-sm text-slate-600 leading-relaxed mt-2">
-            代わりに「顧客リスト」画面の <strong>CSV出力</strong> ボタンで最新データをダウンロードし、スプレッドシートに貼り付けてください。逆にスプレッドシート側の情報をこのアプリに取り込みたい場合は、スプレッドシートを「CSV形式（UTF-8）」で書き出し、<strong>CSVインポート</strong> ボタンから読み込んでください。
-          </p>
-          <p className="text-xs text-slate-400 mt-3">
-            ※本格的な自動同期（複数人でのリアルタイム共有）が必要な場合は、認証情報を安全に扱うための簡易サーバーを別途用意する必要があります。ご希望であれば構成をお手伝いします。
-          </p>
+        <div className="space-y-6">
+          <GoogleCalendarStatusCard token={token} />
+
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Globe className="w-4 h-4" />スプレッドシートとの連携について</h3>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              このアプリはデータをデータベースに保存する仕組みのため、Googleスプレッドシートと自動で常時同期することはできません。
+            </p>
+            <p className="text-sm text-slate-600 leading-relaxed mt-2">
+              代わりに「顧客リスト」画面の <strong>CSV出力</strong> ボタンで最新データをダウンロードし、スプレッドシートに貼り付けてください。逆にスプレッドシート側の情報をこのアプリに取り込みたい場合は、スプレッドシートを「CSV形式（UTF-8）」で書き出し、<strong>CSVインポート</strong> ボタンから読み込んでください。
+            </p>
+          </div>
         </div>
       )}
 
@@ -1849,10 +1936,11 @@ function SettingsView({
 }
 
 // ---------- 商品・フラグ管理 ----------
-function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes }) {
+function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes }) {
   const [newProduct, setNewProduct] = useState('');
   const [newType, setNewType] = useState('');
   const [flagDraft, setFlagDraft] = useState({});
+  const [newAssociationType, setNewAssociationType] = useState('');
 
   const addProduct = () => {
     if (!newProduct.trim()) return;
@@ -1877,6 +1965,12 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
     setActivityTypes(activityTypes.map(a => a.id === typeId ? { ...a, flags: a.flags.filter(f => f !== flag) } : a));
   };
 
+  const addAssociationType = () => {
+    if (!newAssociationType.trim()) return;
+    setAssociationTypes([...associationTypes, { id: Date.now(), name: newAssociationType.trim() }]);
+    setNewAssociationType('');
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
@@ -1897,6 +1991,24 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
       </div>
 
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" />協会の種類管理</h3>
+        <p className="text-xs text-slate-400 mb-3">ここで登録した選択肢が、顧客登録フォームの「協会の種類」プルダウンに反映されます。</p>
+        <div className="flex gap-2 mb-4">
+          <input value={newAssociationType} onChange={e => setNewAssociationType(e.target.value)} placeholder="例：〇〇県私立幼稚園協会"
+            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          <button onClick={addAssociationType} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
+        </div>
+        <ul className="space-y-1.5">
+          {associationTypes.map(a => (
+            <li key={a.id} className="flex justify-between items-center px-3 py-2 bg-slate-50 rounded-lg text-sm">
+              {a.name}
+              <button onClick={() => setAssociationTypes(associationTypes.filter(x => x.id !== a.id))} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
         <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Filter className="w-4 h-4" />活動種別・結果フラグ管理</h3>
         <div className="flex gap-2 mb-4">
           <input value={newType} onChange={e => setNewType(e.target.value)} placeholder="新しい活動種別"
@@ -1956,10 +2068,10 @@ export default function App() {
   const { data, makeSetter, loaded: dataLoaded, syncError } = useSyncedData({
     customers: [], records: [], products: initialProducts, activityTypes: initialActivityTypes,
     goals: initialGoals, emailTemplates: initialEmailTemplates, reportTemplates: initialReportTemplates,
-    dailyReportTemplates: initialDailyReportTemplates,
+    dailyReportTemplates: initialDailyReportTemplates, associationTypes: initialAssociationTypes,
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates } = data;
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes } = data;
   const setCustomers = makeSetter('customers');
   const setRecords = makeSetter('records');
   const setProducts = makeSetter('products');
@@ -1968,6 +2080,7 @@ export default function App() {
   const setEmailTemplates = makeSetter('emailTemplates');
   const setReportTemplates = makeSetter('reportTemplates');
   const setDailyReportTemplates = makeSetter('dailyReportTemplates');
+  const setAssociationTypes = makeSetter('associationTypes');
 
   // メンバー一覧（担当者選択・絞り込み用）を取得
   useEffect(() => {
@@ -2067,8 +2180,8 @@ export default function App() {
             customers={customers} setCustomers={setCustomers}
             records={records} setRecords={setRecords}
             activityTypes={activityTypes} products={products}
-            reportTemplates={reportTemplates}
-            members={members} currentUser={user} isOwner={isOwner}
+            reportTemplates={reportTemplates} associationTypes={associationTypes}
+            members={members} currentUser={user} isOwner={isOwner} token={token}
             showAlert={showAlert} showConfirm={showConfirm}
           />
         )}
@@ -2085,6 +2198,7 @@ export default function App() {
             dailyReportTemplates={dailyReportTemplates} setDailyReportTemplates={setDailyReportTemplates}
             products={products} setProducts={setProducts}
             activityTypes={activityTypes} setActivityTypes={setActivityTypes}
+            associationTypes={associationTypes} setAssociationTypes={setAssociationTypes}
             token={token} currentUser={user}
             showAlert={showAlert} showConfirm={showConfirm}
           />
