@@ -15,7 +15,7 @@ const initialCaseStudies = [];
 const initialKnowledgeArticles = [];
 
 const initialActivityTypes = [
-  { id: 1, name: 'テレアポ', flags: ['再コール', '留守電・不通', '初回時間設定（代表）', '初回時間設定（担当）', '受付拒否', '代表接触拒否', '当日確認案件'] },
+  { id: 1, name: 'テレアポ', flags: ['再コール', '留守電・不通', '初回時間設定（代表）', '初回時間設定（担当）', '飛び込み初回時間設定', '受付拒否', '代表接触拒否', '当日確認案件'] },
   { id: 2, name: '初回訪問', flags: ['営業時間設定', '資料メール送り'] },
   { id: 3, name: '営業（代表）', flags: ['返事待ち', '返事待ちNG', 'NG'] },
   { id: 6, name: '営業（担当）', flags: ['返事待ち', '返事待ちNG', 'NG'] },
@@ -408,7 +408,7 @@ function LoginView({ onLogin }) {
 }
 
 // ---------- HOME ----------
-function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onNavigate }) {
+function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onNavigate, onOpenCustomer }) {
   const [period, setPeriod] = useState(thisMonth);
   const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
   const months = useMemo(() => {
@@ -509,9 +509,11 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
           ) : (
             <ul className="space-y-2">
               {upcoming.map(r => (
-                <li key={r.id} className="text-sm">
-                  <p className="font-semibold text-slate-700">{r.customerName || '不明な顧客'}</p>
-                  <p className="text-xs text-indigo-600">{r.scheduledDate} {r.scheduledTime}</p>
+                <li key={r.id}>
+                  <button onClick={() => onOpenCustomer(r.customerId)} className="w-full text-left text-sm hover:bg-slate-50 rounded-lg px-1.5 py-1 -mx-1.5 transition">
+                    <p className="font-semibold text-teal-700 hover:underline">{r.customerName || '不明な顧客'}</p>
+                    <p className="text-xs text-indigo-600">{r.scheduledDate} {r.scheduledTime}</p>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -543,12 +545,14 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
         ) : (
           <ul className="divide-y divide-slate-100">
             {filtered.slice().reverse().slice(0, 8).map(r => (
-              <li key={r.id} className="py-2.5 flex justify-between items-center text-sm">
-                <div>
-                  <span className="font-semibold text-slate-700">{r.customerName || '不明な顧客'}</span>
-                  <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
-                </div>
-                <span className="text-xs text-slate-400">{r.date}</span>
+              <li key={r.id} className="py-2.5">
+                <button onClick={() => onOpenCustomer(r.customerId)} className="w-full flex justify-between items-center text-sm hover:bg-slate-50 rounded-lg px-1.5 -mx-1.5 py-0.5 transition text-left">
+                  <div>
+                    <span className="font-semibold text-teal-700 hover:underline">{r.customerName || '不明な顧客'}</span>
+                    <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
+                  </div>
+                  <span className="text-xs text-slate-400">{r.date}</span>
+                </button>
               </li>
             ))}
           </ul>
@@ -934,7 +938,7 @@ function BulkEditModal({ count, members, associationTypes, onApply, onClose }) {
 }
 
 // ---------- 顧客リスト ----------
-function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, members, currentUser, isOwner, token, showAlert, showConfirm, filters, setFilters }) {
+function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, members, currentUser, isOwner, token, showAlert, showConfirm, filters, setFilters, pendingViewCustomerId, clearPendingViewCustomer }) {
   const { search, addressFilter, statusFilter, associationFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitOnly } = filters;
   const setSearch = (v) => setFilters(prev => ({ ...prev, search: v }));
   const setAddressFilter = (v) => setFilters(prev => ({ ...prev, addressFilter: v }));
@@ -949,6 +953,14 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 
   const [editing, setEditing] = useState(null); // customer being edited, or {} for new
   const [viewing, setViewing] = useState(null); // customer being viewed
+
+  // HOME画面の「直近の予定」「最近の記録」から遷移してきた場合、該当の顧客を自動で開く
+  useEffect(() => {
+    if (!pendingViewCustomerId) return;
+    const target = customers.find(c => c.id === pendingViewCustomerId);
+    if (target) setViewing(target);
+    clearPendingViewCustomer();
+  }, [pendingViewCustomerId, customers]);
   const [viewingWithForm, setViewingWithForm] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -1345,7 +1357,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 }
 
 // ---------- 記録登録フォーム（顧客詳細モーダルの中で使う） ----------
-const SCHEDULE_FLAGS = ['初回時間設定（代表）', '初回時間設定（担当）', '営業時間設定', '返事待ち', '返事待ちNG'];
+const SCHEDULE_FLAGS = ['初回時間設定（代表）', '初回時間設定（担当）', '飛び込み初回時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
 const SALES_TYPES = ['営業（代表）', '営業（担当）'];
 const isInitialTimeSettingFlag = (flag) => flag === '初回時間設定（代表）' || flag === '初回時間設定（担当）';
 
@@ -3098,6 +3110,11 @@ export default function App() {
     search: '', addressFilter: '', statusFilter: '', associationFilter: '',
     activityTypeFilter: '', flagFilter: '', assigneeFilter: '', viewMode: 'card', firstVisitOnly: false,
   });
+  const [pendingViewCustomerId, setPendingViewCustomerId] = useState(null);
+  const openCustomerFromHome = (customerId) => {
+    setPendingViewCustomerId(customerId);
+    setActiveTab('customers');
+  };
   const [accountOpen, setAccountOpen] = useState(false);
 
   const showAlert = (msg) => setAlertMsg(msg);
@@ -3222,7 +3239,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
         <h2 className="hidden md:block text-xl font-bold text-slate-800 mb-6">{titles[activeTab]}</h2>
         {activeTab === 'home' && (
-          <HomeView records={records} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} onNavigate={setActiveTab} />
+          <HomeView records={records} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
         )}
         {activeTab === 'customers' && (
           <CustomersView
@@ -3233,6 +3250,7 @@ export default function App() {
             members={members} currentUser={user} isOwner={isOwner} token={token}
             showAlert={showAlert} showConfirm={showConfirm}
             filters={customerFilters} setFilters={setCustomerFilters}
+            pendingViewCustomerId={pendingViewCustomerId} clearPendingViewCustomer={() => setPendingViewCustomerId(null)}
           />
         )}
         {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} activityTypes={activityTypes} members={members} currentUser={user} isOwner={isOwner} />}
