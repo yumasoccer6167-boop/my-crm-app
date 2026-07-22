@@ -893,6 +893,9 @@ function getCustomerStatus(customerId, records) {
   const hasTele = custRecords.some(r => r.type === 'テレアポ');
   if (hasTele) return { label: 'テレアポ中', badge: 'bg-pink-100 text-pink-700', card: 'border-pink-300 bg-pink-50/60' };
 
+  const hasCompanyOverlap = custRecords.some(r => r.flag === '法人被り');
+  if (hasCompanyOverlap) return { label: '法人被り', badge: 'bg-slate-300 text-slate-700', card: 'border-slate-300 bg-slate-200/60' };
+
   return { label: '記録あり', badge: 'bg-slate-100 text-slate-600', card: 'border-slate-200' };
 }
 
@@ -969,7 +972,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const fileInputRef = useRef(null);
 
-  const STATUS_OPTIONS = ['ユーザー', '営業実行済み', '初回訪問済み・営業時間設定', '初回訪問済み', 'テレアポ中', '記録あり', '記録なし'];
+  const STATUS_OPTIONS = ['ユーザー', '営業実行済み', '初回訪問済み・営業時間設定', '初回訪問済み', 'テレアポ中', '法人被り', '記録あり', '記録なし'];
   const associationOptions = [...new Set(customers.map(c => c.associationType).filter(Boolean))];
   const flagOptions = activityTypeFilter
     ? (activityTypes.find(a => a.name === activityTypeFilter)?.flags || [])
