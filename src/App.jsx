@@ -906,18 +906,24 @@ function getCustomerStatus(customerId, records) {
 }
 
 // ---------- 一括編集（担当者・協会の種類）モーダル ----------
-function BulkEditModal({ count, members, associationTypes, onApply, onClose }) {
+function BulkEditModal({ count, members, associationTypes, activityTypes, onApply, onClose }) {
   const [assignedTo, setAssignedTo] = useState('__unchanged__');
   const [associationType, setAssociationType] = useState('__unchanged__');
+  const [activityType, setActivityType] = useState('__none__');
+  const [flag, setFlag] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().substring(0, 10));
+
+  const currentFlags = activityType !== '__none__' ? (activityTypes.find(a => a.name === activityType)?.flags || []) : [];
 
   const apply = () => {
     onApply({
       assignedTo: assignedTo === '__unchanged__' ? null : assignedTo,
       associationType: associationType === '__unchanged__' ? null : associationType,
+      record: activityType === '__none__' ? null : { type: activityType, flag, date },
     });
   };
 
-  const noChange = assignedTo === '__unchanged__' && associationType === '__unchanged__';
+  const noChange = assignedTo === '__unchanged__' && associationType === '__unchanged__' && activityType === '__none__';
 
   return (
     <Modal title={`選択した${count}件を一括編集`} onClose={onClose}>
@@ -937,6 +943,32 @@ function BulkEditModal({ count, members, associationTypes, onApply, onClose }) {
             <option value="">未設定にする</option>
             {associationTypes.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
           </select>
+        </div>
+
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-xs font-bold text-slate-500 mb-2">記録の一括登録（任意）</p>
+          <p className="text-[11px] text-slate-400 mb-3">選択した活動種別・結果フラグで、対象全員に同じ内容の記録を1件ずつ追加します。受注詳細（商品・粗利など）は個別に記録画面から追記してください。</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-500">活動種別</label>
+              <select value={activityType} onChange={e => { setActivityType(e.target.value); setFlag(''); }} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+                <option value="__none__">記録を追加しない</option>
+                {activityTypes.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-500">結果フラグ</label>
+              <select value={flag} onChange={e => setFlag(e.target.value)} disabled={activityType === '__none__'} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white disabled:bg-slate-50 disabled:text-slate-300">
+                <option value="">なし</option>
+                {currentFlags.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+          </div>
+          {activityType !== '__none__' && (
+            <div className="mt-3">
+              <FormField label="日付" type="date" value={date} onChange={e => setDate(e.target.value)} />
+            </div>
+          )}
         </div>
       </div>
       <button onClick={apply} disabled={noChange}
@@ -1211,7 +1243,8 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
           count={selectedIds.length}
           members={members}
           associationTypes={associationTypes}
-          onApply={({ assignedTo, associationType }) => {
+          activityTypes={activityTypes}
+          onApply={({ assignedTo, associationType, record }) => {
             setCustomers(prev => prev.map(c => {
               if (!selectedIds.includes(c.id)) return c;
               const patch = {};
@@ -1219,6 +1252,27 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
               if (associationType !== null) patch.associationType = associationType;
               return { ...c, ...patch };
             }));
+            if (record) {
+              const now = new Date();
+              setRecords(prev => [
+                ...prev,
+                ...selectedIds.map((customerId, i) => {
+                  const c = customers.find(x => x.id === customerId);
+                  const finalAssignedTo = assignedTo !== null ? assignedTo : (c?.assignedTo || currentUser?.displayName || '');
+                  return {
+                    id: Date.now() + i,
+                    customerId,
+                    customerName: c ? (c.enName || c.gakuenName) : '',
+                    type: record.type,
+                    flag: record.flag,
+                    date: record.date,
+                    time: now.toTimeString().substring(0, 5),
+                    memo: '',
+                    assignedTo: finalAssignedTo,
+                  };
+                }),
+              ]);
+            }
             setBulkEditOpen(false);
             setSelectMode(false);
             setSelectedIds([]);
