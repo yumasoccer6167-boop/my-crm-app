@@ -28,18 +28,18 @@ const thisMonth = new Date().toISOString().substring(0, 7);
 const initialGoals = { [thisMonth]: { timeSetting: 50, firstVisit: 20, salesTimeSetting: 15, order: 5, profit: 500000, quantity: 10 } };
 
 const emptyCustomer = {
-  id: null, gakuenName: '', enName: '', associationType: '', chairman: '', principal: '', address: '',
-  tel: '', mobile: '', email: '', hpLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
+  id: null, gakuenName: '', gakuenNameKana: '', enName: '', enNameKana: '', associationType: '', chairman: '', principal: '', address: '',
+  tel: '', mobile: '', email: '', hpLink: '', recruitSiteLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
 };
 
 const initialEmailTemplates = [
-  { id: 1, name: '初回訪問後の御礼', subject: '【御礼】お打ち合わせについて（{{学園名}} {{園名}} 様）',
-    body: '{{学園名}}\n{{園名}}\n{{理事長}} 様\n\nいつも大変お世話になっております。\n\n本日はお忙しい中、お時間をいただき誠にありがとうございました。\n次回のご提案を準備してまいります。\n\n引き続き何卒よろしくお願い申し上げます。' },
+  { id: 1, name: '初回訪問後の御礼', subject: '【御礼】お打ち合わせについて（{{法人名}} {{園名}} 様）',
+    body: '{{法人名}}\n{{園名}}\n{{理事長}} 様\n\nいつも大変お世話になっております。\n\n本日はお忙しい中、お時間をいただき誠にありがとうございました。\n次回のご提案を準備してまいります。\n\n引き続き何卒よろしくお願い申し上げます。' },
 ];
 
 const initialReportTemplates = [
   { id: 1, name: '基本報告フォーマット',
-    body: '《法人》{{学園名}}\n《園名》{{園名}}\n《代表》{{理事長}}\n《住所》{{住所}}\n《URL》{{HPリンク}}\n《連絡先》{{TEL}}\n\n【5W1H】\n{{メモ}}\n\n【結果】\n{{結果}}' },
+    body: '《法人》{{法人名}}\n《園名》{{園名}}\n《代表》{{理事長}}\n《住所》{{住所}}\n《URL》{{HPリンク}}\n《連絡先》{{TEL}}\n\n【5W1H】\n{{メモ}}\n\n【結果】\n{{結果}}' },
 ];
 
 const initialDailyReportTemplates = [
@@ -50,7 +50,8 @@ const initialDailyReportTemplates = [
 // ---------- テンプレート変数の置換 ----------
 function fillTemplate(str, customer, extra = {}) {
   const map = {
-    '{{学園名}}': customer?.gakuenName || '',
+    '{{法人名}}': customer?.gakuenName || '',
+    '{{学園名}}': customer?.gakuenName || '', // 旧テンプレート互換用
     '{{園名}}': customer?.enName || '',
     '{{理事長}}': customer?.chairman || '',
     '{{園長}}': customer?.principal || '',
@@ -92,12 +93,13 @@ function polishText(raw) {
 // ---------- CSV ヘルパー ----------
 // [キー, 出力時の見出し, 取り込み時に受け付ける他の見出し...]
 const CSV_FIELDS = [
-  ['gakuenName', '学園名'], ['enName', '園名'],
+  ['gakuenName', '法人名', '学園名'], ['gakuenNameKana', '法人名ふりがな'],
+  ['enName', '園名'], ['enNameKana', '園名ふりがな'],
   ['associationType', '協会の種類', '協会関係'],
   ['chairman', '理事長'], ['principal', '園長'],
   ['address', '住所'], ['tel', 'TEL'], ['mobile', '携帯番号'],
   ['email', 'メール', 'メールアドレス'],
-  ['hpLink', 'HPリンク'], ['hpVendor', 'HP業者'],
+  ['hpLink', 'HPリンク'], ['recruitSiteLink', '採用サイトリンク'], ['hpVendor', 'HP業者'],
   ['instagram', 'InstagramURL', 'Instagram'],
   ['gbpLink', 'GBPプロフィールリンク', 'GBPリンク'],
   ['reviewScore', '口コミ評価'],
@@ -576,8 +578,10 @@ function CustomerModal({ customer, associationTypes, members, currentUser, onSav
   return (
     <Modal title={form.id ? '顧客情報を編集' : '新規顧客登録'} onClose={onClose} wide>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <FormField label="学園名" value={form.gakuenName} onChange={set('gakuenName')} />
+        <FormField label="法人名" value={form.gakuenName} onChange={set('gakuenName')} />
+        <FormField label="法人名ふりがな" value={form.gakuenNameKana} onChange={set('gakuenNameKana')} />
         <FormField label="園名" value={form.enName} onChange={set('enName')} />
+        <FormField label="園名ふりがな" value={form.enNameKana} onChange={set('enNameKana')} />
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">協会の種類</label>
           <select value={form.associationType} onChange={set('associationType')} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
@@ -600,6 +604,7 @@ function CustomerModal({ customer, associationTypes, members, currentUser, onSav
         <FormField label="携帯番号" value={form.mobile} onChange={set('mobile')} />
         <FormField label="メールアドレス" value={form.email} onChange={set('email')} />
         <FormField label="HPリンク" value={form.hpLink} onChange={set('hpLink')} />
+        <FormField label="採用サイトリンク" value={form.recruitSiteLink} onChange={set('recruitSiteLink')} />
         <FormField label="HP業者" value={form.hpVendor} onChange={set('hpVendor')} />
         <FormField label="Instagram URL" value={form.instagram} onChange={set('instagram')} />
         <FormField label="GBPプロフィールリンク" value={form.gbpLink} onChange={set('gbpLink')} />
@@ -797,6 +802,7 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
         {customer.email && <a href={`mailto:${customer.email}`} className="flex items-center gap-1 text-teal-700"><Mail className="w-4 h-4" />{customer.email}</a>}
         {customer.address && <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{customer.address}</span>}
         {customer.hpLink && <a href={customer.hpLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-600"><Globe className="w-4 h-4" />HP</a>}
+        {customer.recruitSiteLink && <a href={customer.recruitSiteLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-emerald-600"><Briefcase className="w-4 h-4" />採用サイト</a>}
         {customer.instagram && <a href={customer.instagram} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-pink-600"><Camera className="w-4 h-4" />Instagram</a>}
         {customer.reviewScore && <span className="flex items-center gap-1 text-amber-500"><Star className="w-4 h-4 fill-amber-400" />{customer.reviewScore}（{customer.reviewCount || 0}件）</span>}
       </div>
@@ -1277,11 +1283,16 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                     {c.email && <p className="flex items-center gap-1.5"><Mail className="w-3 h-3" />{c.email}</p>}
                     {c.address && <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3" />{c.address}</p>}
                   </div>
-                  {(c.hpLink || c.instagram || c.gbpLink) && (
+                  {(c.hpLink || c.recruitSiteLink || c.instagram || c.gbpLink) && (
                     <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {c.hpLink && (
                         <a href={c.hpLink} target="_blank" rel="noreferrer" title="HP" className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100">
                           <Globe className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {c.recruitSiteLink && (
+                        <a href={c.recruitSiteLink} target="_blank" rel="noreferrer" title="採用サイト" className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100">
+                          <Briefcase className="w-3.5 h-3.5" />
                         </a>
                       )}
                       {c.instagram && (
@@ -1630,7 +1641,7 @@ function EmailBuilderView({ customers, emailTemplates, setEmailTemplates, showAl
               </li>
             ))}
           </ul>
-          <p className="text-xs text-slate-400 pt-2">利用可能な変数: {'{{学園名}} {{園名}} {{理事長}} {{園長}} {{住所}} {{TEL}} {{メール}} {{HPリンク}}'}</p>
+          <p className="text-xs text-slate-400 pt-2">利用可能な変数: {'{{法人名}} {{園名}} {{理事長}} {{園長}} {{住所}} {{TEL}} {{メール}} {{HPリンク}}'}</p>
         </div>
       )}
 
@@ -2938,7 +2949,7 @@ function SettingsView({
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{学園名}} {{園名}} {{理事長}} {{園長}} {{住所}} {{TEL}} {{HPリンク}} {{メモ}} {{結果}}'}</p>
+            <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{法人名}} {{園名}} {{理事長}} {{園長}} {{住所}} {{TEL}} {{HPリンク}} {{メモ}} {{結果}}'}</p>
           </div>
 
           <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
