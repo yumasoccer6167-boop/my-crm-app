@@ -1089,6 +1089,15 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
+  const allFilteredSelected = filtered.length > 0 && filtered.every(c => selectedIds.includes(c.id));
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(prev => prev.filter(id => !filtered.some(c => c.id === id)));
+    } else {
+      setSelectedIds(prev => [...new Set([...prev, ...filtered.map(c => c.id)])]);
+    }
+  };
+
   const deleteSelected = () => {
     if (selectedIds.length === 0) return;
     showConfirm(`選択した${selectedIds.length}件の顧客を削除しますか？関連する活動履歴も削除されます。`, () => {
@@ -1166,6 +1175,11 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
           >
             <CheckSquare className="w-4 h-4" /> {selectMode ? '選択を終了' : '複数選択'}
           </button>
+          {selectMode && (
+            <button onClick={toggleSelectAll} className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50">
+              <CheckSquare className="w-4 h-4" /> {allFilteredSelected ? '全解除' : `全件選択（${filtered.length}件）`}
+            </button>
+          )}
           {selectMode && isOwner && (
             <button onClick={() => setBulkEditOpen(true)} disabled={selectedIds.length === 0}
               className="flex items-center gap-1.5 px-3 py-2.5 bg-indigo-600 disabled:bg-indigo-200 text-white rounded-lg text-sm font-bold">
