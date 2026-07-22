@@ -751,7 +751,7 @@ function RecordEditForm({ record, activityTypes, products, onSave, onCancel }) {
 }
 
 // ---------- 顧客詳細（活動履歴＋記録登録）モーダル ----------
-function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, currentUser, token, showAlert, showConfirm, onClose, onEdit, startWithForm }) {
+function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, currentUser, token, canDelete, showAlert, showConfirm, onClose, onEdit, startWithForm }) {
   const history = records
     .filter(r => r.customerId === customer.id)
     .slice()
@@ -857,7 +857,9 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-xs text-slate-400">{r.date} {r.time}</span>
                       <button onClick={() => setEditingRecordId(r.id)} className="p-1 text-slate-300 hover:text-teal-600"><Edit className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => deleteRecord(r.id)} className="p-1 text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                      {canDelete && (
+                        <button onClick={() => deleteRecord(r.id)} className="p-1 text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                      )}
                     </div>
                   </div>
                   {r.memo && <p className="text-slate-500 mt-1">{r.memo}</p>}
@@ -980,7 +982,7 @@ function BulkEditModal({ count, members, associationTypes, activityTypes, onAppl
 }
 
 // ---------- 顧客リスト ----------
-function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, members, currentUser, isOwner, token, showAlert, showConfirm, filters, setFilters, pendingViewCustomerId, clearPendingViewCustomer }) {
+function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, members, currentUser, isOwner, canDeleteCustomer, canBulkEdit, token, showAlert, showConfirm, filters, setFilters, pendingViewCustomerId, clearPendingViewCustomer }) {
   const { search, addressFilter, statusFilter, associationFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitFilter, excludeCompanyOverlap } = filters;
   const setSearch = (v) => setFilters(prev => ({ ...prev, search: v }));
   const setAddressFilter = (v) => setFilters(prev => ({ ...prev, addressFilter: v }));
@@ -1218,13 +1220,13 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
               <CheckSquare className="w-4 h-4" /> {allFilteredSelected ? '全解除' : `全件選択（${filtered.length}件）`}
             </button>
           )}
-          {selectMode && isOwner && (
+          {selectMode && canBulkEdit && (
             <button onClick={() => setBulkEditOpen(true)} disabled={selectedIds.length === 0}
               className="flex items-center gap-1.5 px-3 py-2.5 bg-indigo-600 disabled:bg-indigo-200 text-white rounded-lg text-sm font-bold">
               <Edit className="w-4 h-4" /> {selectedIds.length}件を一括編集
             </button>
           )}
-          {selectMode && (
+          {selectMode && canDeleteCustomer && (
             <button onClick={deleteSelected} disabled={selectedIds.length === 0}
               className="flex items-center gap-1.5 px-3 py-2.5 bg-red-600 disabled:bg-red-200 text-white rounded-lg text-sm font-bold">
               <Trash2 className="w-4 h-4" /> {selectedIds.length}件を削除
@@ -1323,9 +1325,11 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                         <button onClick={(e) => { e.stopPropagation(); setViewing(c); setViewingWithForm(true); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="記録登録">
                           <PenTool className="w-4 h-4" />
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canDeleteCustomer && (
+                          <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1410,7 +1414,9 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1">
                           <button onClick={(e) => { e.stopPropagation(); setViewing(c); setViewingWithForm(true); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><PenTool className="w-4 h-4" /></button>
-                          <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                          {canDeleteCustomer && (
+                            <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                          )}
                         </div>
                       </td>
                     )}
@@ -1433,6 +1439,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
           reportTemplates={reportTemplates}
           currentUser={currentUser}
           token={token}
+          canDelete={canDeleteCustomer}
           showAlert={showAlert}
           showConfirm={showConfirm}
           startWithForm={viewingWithForm}
@@ -2403,11 +2410,33 @@ function GoogleCalendarStatusCard({ token }) {
 }
 
 // ---------- メンバー管理（オーナーのみ） ----------
-const ROLE_LABELS = { owner: 'オーナー', mgr: 'MGR', smgr: 'SMGR', general: '一般', member: '一般' };
+const ROLE_LABELS = { owner: 'オーナー', executive: '役員', emgr: 'EMGR', mgr: 'MGR', smgr: 'SMGR', general: '一般', member: '一般' };
 const ROLE_BADGE_CLASS = {
-  owner: 'bg-amber-100 text-amber-700', mgr: 'bg-indigo-100 text-indigo-700',
-  smgr: 'bg-teal-100 text-teal-700', general: 'bg-slate-200 text-slate-600', member: 'bg-slate-200 text-slate-600',
+  owner: 'bg-amber-100 text-amber-700', executive: 'bg-rose-100 text-rose-700', emgr: 'bg-violet-100 text-violet-700',
+  mgr: 'bg-indigo-100 text-indigo-700', smgr: 'bg-teal-100 text-teal-700',
+  general: 'bg-slate-200 text-slate-600', member: 'bg-slate-200 text-slate-600',
 };
+
+// ---------- 役職ごとの権限管理 ----------
+const EDITABLE_ROLES = ['executive', 'emgr', 'mgr', 'smgr', 'general'];
+const PERMISSION_DEFS = [
+  { key: 'viewSettings', label: '設定・管理ページの閲覧' },
+  { key: 'deleteCustomer', label: '顧客・記録の削除' },
+  { key: 'bulkEdit', label: '顧客の一括編集' },
+  { key: 'editCaseStudies', label: 'ユーザー管理（導入事例）の編集' },
+  { key: 'editKnowledge', label: '営業ノウハウの編集' },
+];
+const initialRolePermissions = {
+  executive: { viewSettings: true, deleteCustomer: true, bulkEdit: true, editCaseStudies: true, editKnowledge: true },
+  emgr: { viewSettings: false, deleteCustomer: true, bulkEdit: true, editCaseStudies: true, editKnowledge: true },
+  mgr: { viewSettings: false, deleteCustomer: true, bulkEdit: false, editCaseStudies: true, editKnowledge: true },
+  smgr: { viewSettings: false, deleteCustomer: false, bulkEdit: false, editCaseStudies: false, editKnowledge: false },
+  general: { viewSettings: false, deleteCustomer: false, bulkEdit: false, editCaseStudies: false, editKnowledge: false },
+};
+function hasPermission(role, key, rolePermissions) {
+  if (role === 'owner') return true;
+  return !!(rolePermissions?.[role]?.[key]);
+}
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -2538,6 +2567,8 @@ function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
                 <option value="general">一般</option>
                 <option value="smgr">SMGR</option>
                 <option value="mgr">MGR</option>
+                <option value="emgr">EMGR</option>
+                <option value="executive">役員</option>
                 <option value="owner">オーナー</option>
               </select>
             </div>
@@ -2946,10 +2977,55 @@ function KnowledgeBaseView({ articles, setArticles, currentUser, showConfirm, ca
   );
 }
 
+// ---------- 権限管理（役職ごとの公開設定） ----------
+function RolePermissionsView({ rolePermissions, setRolePermissions }) {
+  const toggle = (role, key) => {
+    setRolePermissions(prev => ({
+      ...prev,
+      [role]: { ...(prev[role] || {}), [key]: !(prev[role]?.[key]) },
+    }));
+  };
+
+  return (
+    <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+      <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2"><Settings className="w-4 h-4" />役職ごとの権限管理</h3>
+      <p className="text-xs text-slate-400 mb-4">オーナーはすべての権限を常に持っています（変更できません）。各役職ごとに、機能の利用可否を設定してください。</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+              <th className="px-3 py-2">機能</th>
+              {EDITABLE_ROLES.map(role => <th key={role} className="px-3 py-2 text-center">{ROLE_LABELS[role]}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {PERMISSION_DEFS.map(p => (
+              <tr key={p.key} className="border-b border-slate-50">
+                <td className="px-3 py-2.5 text-slate-700">{p.label}</td>
+                {EDITABLE_ROLES.map(role => (
+                  <td key={role} className="px-3 py-2.5 text-center">
+                    <input
+                      type="checkbox"
+                      checked={!!rolePermissions?.[role]?.[p.key]}
+                      onChange={() => toggle(role, p.key)}
+                      className="w-4 h-4 accent-teal-600 cursor-pointer"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ---------- 設定・管理（オーナー専用：報告フォーマット／商品・フラグ／メンバー／データ運用） ----------
 function SettingsView({
   reportTemplates, setReportTemplates, dailyReportTemplates, setDailyReportTemplates,
   products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes,
+  rolePermissions, setRolePermissions, isOwner,
   token, currentUser, showAlert, showConfirm,
 }) {
   const [innerTab, setInnerTab] = useState('templates');
@@ -2973,7 +3049,7 @@ function SettingsView({
   const TABS = [
     ['templates', '報告フォーマット'],
     ['products', '商品・フラグ管理'],
-    ['members', 'メンバー管理'],
+    ...(isOwner ? [['members', 'メンバー管理'], ['permissions', '権限管理']] : []),
     ['data', 'データ運用'],
   ];
 
@@ -3033,6 +3109,10 @@ function SettingsView({
 
       {innerTab === 'members' && (
         <MembersManagement token={token} currentUser={currentUser} showAlert={showAlert} showConfirm={showConfirm} />
+      )}
+
+      {innerTab === 'permissions' && (
+        <RolePermissionsView rolePermissions={rolePermissions} setRolePermissions={setRolePermissions} />
       )}
 
       {innerTab === 'data' && (
@@ -3218,16 +3298,21 @@ export default function App() {
   const showAlert = (msg) => setAlertMsg(msg);
   const showConfirm = (msg, onConfirm) => setConfirmState({ msg, onConfirm });
   const isOwner = user?.role === 'owner';
-  const canEditContent = user?.role === 'owner' || user?.role === 'mgr'; // ユーザー管理・営業ノウハウの編集権限
 
   const { data, makeSetter, loaded: dataLoaded, syncError } = useSyncedData({
     customers: [], records: [], products: initialProducts, activityTypes: initialActivityTypes,
     goals: initialGoals, emailTemplates: initialEmailTemplates, reportTemplates: initialReportTemplates,
     dailyReportTemplates: initialDailyReportTemplates, associationTypes: initialAssociationTypes, dailyReportLogs: [],
     caseStudies: initialCaseStudies, knowledgeArticles: initialKnowledgeArticles,
+    rolePermissions: initialRolePermissions,
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, caseStudies, knowledgeArticles } = data;
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, caseStudies, knowledgeArticles, rolePermissions } = data;
+  const canViewSettings = isOwner || hasPermission(user?.role, 'viewSettings', rolePermissions);
+  const canDeleteCustomer = isOwner || hasPermission(user?.role, 'deleteCustomer', rolePermissions);
+  const canBulkEdit = isOwner || hasPermission(user?.role, 'bulkEdit', rolePermissions);
+  const canEditCaseStudies = isOwner || hasPermission(user?.role, 'editCaseStudies', rolePermissions);
+  const canEditKnowledge = isOwner || hasPermission(user?.role, 'editKnowledge', rolePermissions);
   const setCustomers = makeSetter('customers');
   const setRecords = makeSetter('records');
   const setProducts = makeSetter('products');
@@ -3240,6 +3325,7 @@ export default function App() {
   const setDailyReportLogs = makeSetter('dailyReportLogs');
   const setCaseStudies = makeSetter('caseStudies');
   const setKnowledgeArticles = makeSetter('knowledgeArticles');
+  const setRolePermissions = makeSetter('rolePermissions');
 
   // メンバー一覧（担当者選択・絞り込み用）を取得
   useEffect(() => {
@@ -3252,8 +3338,8 @@ export default function App() {
 
   // 権限のないタブ（設定・管理）に一般メンバーが残ってしまっていたらHOMEへ戻す
   useEffect(() => {
-    if (activeTab === 'settings' && !isOwner) setActiveTab('home');
-  }, [activeTab, isOwner]);
+    if (activeTab === 'settings' && !canViewSettings) setActiveTab('home');
+  }, [activeTab, canViewSettings]);
 
   const menuItems = [
     { id: 'home', icon: <Home className="w-4 h-4" />, label: 'HOME' },
@@ -3265,7 +3351,7 @@ export default function App() {
     { id: 'case_studies', icon: <Briefcase className="w-4 h-4" />, label: 'ユーザー管理' },
     { id: 'knowledge', icon: <BookOpen className="w-4 h-4" />, label: '営業ノウハウ' },
     { id: 'ai', icon: <Sparkles className="w-4 h-4" />, label: 'AIアシスタント' },
-    ...(isOwner ? [{ id: 'settings', icon: <Settings className="w-4 h-4" />, label: '設定・管理' }] : []),
+    ...(canViewSettings ? [{ id: 'settings', icon: <Settings className="w-4 h-4" />, label: '設定・管理' }] : []),
   ];
 
   const titles = {
@@ -3346,6 +3432,7 @@ export default function App() {
             activityTypes={activityTypes} products={products}
             reportTemplates={reportTemplates} associationTypes={associationTypes}
             members={members} currentUser={user} isOwner={isOwner} token={token}
+            canDeleteCustomer={canDeleteCustomer} canBulkEdit={canBulkEdit}
             showAlert={showAlert} showConfirm={showConfirm}
             filters={customerFilters} setFilters={setCustomerFilters}
             pendingViewCustomerId={pendingViewCustomerId} clearPendingViewCustomer={() => setPendingViewCustomerId(null)}
@@ -3364,19 +3451,20 @@ export default function App() {
           <EmailBuilderView customers={customers} emailTemplates={emailTemplates} setEmailTemplates={setEmailTemplates} showAlert={showAlert} showConfirm={showConfirm} />
         )}
         {activeTab === 'case_studies' && (
-          <CaseStudiesView caseStudies={caseStudies} setCaseStudies={setCaseStudies} products={products} members={members} currentUser={user} showConfirm={showConfirm} canEdit={canEditContent} />
+          <CaseStudiesView caseStudies={caseStudies} setCaseStudies={setCaseStudies} products={products} members={members} currentUser={user} showConfirm={showConfirm} canEdit={canEditCaseStudies} />
         )}
         {activeTab === 'knowledge' && (
-          <KnowledgeBaseView articles={knowledgeArticles} setArticles={setKnowledgeArticles} currentUser={user} showConfirm={showConfirm} canEdit={canEditContent} />
+          <KnowledgeBaseView articles={knowledgeArticles} setArticles={setKnowledgeArticles} currentUser={user} showConfirm={showConfirm} canEdit={canEditKnowledge} />
         )}
         {activeTab === 'ai' && <AIAssistantView customers={customers} records={records} />}
-        {activeTab === 'settings' && isOwner && (
+        {activeTab === 'settings' && canViewSettings && (
           <SettingsView
             reportTemplates={reportTemplates} setReportTemplates={setReportTemplates}
             dailyReportTemplates={dailyReportTemplates} setDailyReportTemplates={setDailyReportTemplates}
             products={products} setProducts={setProducts}
             activityTypes={activityTypes} setActivityTypes={setActivityTypes}
             associationTypes={associationTypes} setAssociationTypes={setAssociationTypes}
+            rolePermissions={rolePermissions} setRolePermissions={setRolePermissions} isOwner={isOwner}
             token={token} currentUser={user}
             showAlert={showAlert} showConfirm={showConfirm}
           />

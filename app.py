@@ -212,7 +212,7 @@ def list_users():
     ])
 
 
-VALID_ROLES = ('owner', 'general', 'smgr', 'mgr')
+VALID_ROLES = ('owner', 'executive', 'emgr', 'mgr', 'smgr', 'general')
 
 
 @app.route('/api/users', methods=['POST'])
