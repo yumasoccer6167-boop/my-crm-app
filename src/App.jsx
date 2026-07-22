@@ -5,7 +5,7 @@ import {
   ChevronDown, Star, Camera, Upload, Download, Copy, BarChart,
   Bot, Sparkles, Send, FileText, ClipboardList, CalendarDays,
   ChevronLeft, ChevronRight, CheckSquare, Square, Mic, LayoutGrid, List,
-  Heart, Video, MessageCircle, BookOpen, Briefcase
+  Heart, Video, MessageCircle, BookOpen, Briefcase, AlertTriangle
 } from 'lucide-react';
 
 // ---------- 初期データ ----------
@@ -21,6 +21,7 @@ const initialActivityTypes = [
   { id: 6, name: '営業（担当）', flags: ['返事待ち', '返事待ちNG', 'NG'] },
   { id: 4, name: '過去ログ登録', flags: ['ユーザー', '過去営業履歴あり', '他者見込み', '営業提案NG'] },
   { id: 5, name: '受注登録', flags: ['受注'] },
+  { id: 7, name: '法人被り', flags: ['法人被り', '受注'] },
 ];
 
 const thisMonth = new Date().toISOString().substring(0, 7);
@@ -939,7 +940,7 @@ function BulkEditModal({ count, members, associationTypes, onApply, onClose }) {
 
 // ---------- 顧客リスト ----------
 function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, members, currentUser, isOwner, token, showAlert, showConfirm, filters, setFilters, pendingViewCustomerId, clearPendingViewCustomer }) {
-  const { search, addressFilter, statusFilter, associationFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitOnly } = filters;
+  const { search, addressFilter, statusFilter, associationFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitFilter, excludeCompanyOverlap } = filters;
   const setSearch = (v) => setFilters(prev => ({ ...prev, search: v }));
   const setAddressFilter = (v) => setFilters(prev => ({ ...prev, addressFilter: v }));
   const setStatusFilter = (v) => setFilters(prev => ({ ...prev, statusFilter: v }));
@@ -948,7 +949,8 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
   const setFlagFilter = (v) => setFilters(prev => ({ ...prev, flagFilter: v }));
   const setAssigneeFilter = (v) => setFilters(prev => ({ ...prev, assigneeFilter: v }));
   const setViewMode = (v) => setFilters(prev => ({ ...prev, viewMode: v }));
-  const setFirstVisitOnly = (v) => setFilters(prev => ({ ...prev, firstVisitOnly: v }));
+  const setFirstVisitFilter = (v) => setFilters(prev => ({ ...prev, firstVisitFilter: v }));
+  const setExcludeCompanyOverlap = (v) => setFilters(prev => ({ ...prev, excludeCompanyOverlap: v }));
   const effectiveAssigneeFilter = isOwner ? assigneeFilter : (currentUser?.displayName || '');
 
   const [editing, setEditing] = useState(null); // customer being edited, or {} for new
@@ -1056,8 +1058,11 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
     const matchesActivityType = !activityTypeFilter || custRecords.some(r => r.type === activityTypeFilter);
     const matchesFlag = !flagFilter || custRecords.some(r => r.flag === flagFilter);
     const matchesAssignee = !effectiveAssigneeFilter || c.assignedTo === effectiveAssigneeFilter;
-    const matchesFirstVisit = !firstVisitOnly || custRecords.some(r => r.type === '初回訪問');
-    return matchesSearch && matchesAddress && matchesStatus && matchesAssociation && matchesActivityType && matchesFlag && matchesAssignee && matchesFirstVisit;
+    const hasFirstVisit = custRecords.some(r => r.type === '初回訪問');
+    const matchesFirstVisit = !firstVisitFilter || (firstVisitFilter === 'has' ? hasFirstVisit : !hasFirstVisit);
+    const hasCompanyOverlap = custRecords.some(r => r.type === '法人被り' || r.flag === '法人被り');
+    const matchesOverlap = !excludeCompanyOverlap || !hasCompanyOverlap;
+    return matchesSearch && matchesAddress && matchesStatus && matchesAssociation && matchesActivityType && matchesFlag && matchesAssignee && matchesFirstVisit && matchesOverlap;
   });
 
   const saveCustomer = (c) => {
@@ -1124,10 +1129,15 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
+          <select value={firstVisitFilter} onChange={e => setFirstVisitFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">初回訪問：すべて</option>
+            <option value="has">初回訪問済みのみ</option>
+            <option value="none">初回訪問済みでないのみ</option>
+          </select>
           <label className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
-            <input type="checkbox" checked={firstVisitOnly} onChange={e => setFirstVisitOnly(e.target.checked)} className="accent-violet-600" />
-            <CheckCircle className="w-3.5 h-3.5 text-violet-500" />
-            初回訪問済みのみ
+            <input type="checkbox" checked={excludeCompanyOverlap} onChange={e => setExcludeCompanyOverlap(e.target.checked)} className="accent-orange-600" />
+            <AlertTriangle className="w-3.5 h-3.5 text-orange-500" />
+            法人被りリストを除く
           </label>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1202,6 +1212,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
             const latest = custRecords.slice(-1)[0];
             const status = getCustomerStatus(c.id, records);
             const hasFirstVisit = custRecords.some(r => r.type === '初回訪問');
+            const hasCompanyOverlap = custRecords.some(r => r.type === '法人被り' || r.flag === '法人被り');
             const isSelected = selectedIds.includes(c.id);
             return (
               <div key={c.id} onClick={() => selectMode ? toggleSelect(c.id) : setViewing(c)}
@@ -1219,6 +1230,11 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                           {hasFirstVisit && (
                             <span title="初回訪問済み" className="inline-flex items-center justify-center w-4 h-4 bg-violet-100 text-violet-600 rounded-full shrink-0">
                               <CheckCircle className="w-3 h-3" />
+                            </span>
+                          )}
+                          {hasCompanyOverlap && (
+                            <span title="法人被り" className="inline-flex items-center justify-center w-4 h-4 bg-orange-100 text-orange-600 rounded-full shrink-0">
+                              <AlertTriangle className="w-3 h-3" />
                             </span>
                           )}
                         </div>
@@ -3108,7 +3124,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [customerFilters, setCustomerFilters] = useState({
     search: '', addressFilter: '', statusFilter: '', associationFilter: '',
-    activityTypeFilter: '', flagFilter: '', assigneeFilter: '', viewMode: 'card', firstVisitOnly: false,
+    activityTypeFilter: '', flagFilter: '', assigneeFilter: '', viewMode: 'card', firstVisitFilter: '', excludeCompanyOverlap: false,
   });
   const [pendingViewCustomerId, setPendingViewCustomerId] = useState(null);
   const openCustomerFromHome = (customerId) => {
