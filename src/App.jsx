@@ -23,6 +23,8 @@ const initialKnowledgeTags = [
 const initialDepartments = [
   { id: 1, name: 'WEB営業　東京　１課' },
   { id: 2, name: 'WEB営業　東京　２課' },
+  { id: 3, name: '退職者' },
+  { id: 4, name: 'インターン生' },
 ];
 
 const initialActivityTypes = [
@@ -1901,9 +1903,12 @@ function getWeekKey(dateStr) {
   return `${d.getFullYear()}年 第${week}週`;
 }
 
-function TeleApptStatsView({ records, customers, activityTypes, members, currentUser, isOwner }) {
+function TeleApptStatsView({ records, customers, activityTypes, members, departments, currentUser, isOwner, onOpenCustomer }) {
   const [granularity, setGranularity] = useState('day');
-  const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
+  const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
+  const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
+  const [drilldown, setDrilldown] = useState(null); // { title, records }
+
   // 記録に担当者が無い場合は顧客側の担当者で補う
   const customerAssigneeById = useMemo(() => {
     const map = {};
@@ -1911,7 +1916,16 @@ function TeleApptStatsView({ records, customers, activityTypes, members, current
     return map;
   }, [customers]);
   const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
-  const scopedRecords = scope === 'all' ? records : records.filter(r => effectiveAssignee(r) === scope);
+  const membersInDept = (deptName) => members.filter(m => m.department === deptName).map(m => m.displayName);
+
+  const scopedRecords = (() => {
+    if (scopeType === 'all') return records;
+    if (scopeType === 'department') {
+      const names = membersInDept(scopeValue);
+      return records.filter(r => names.includes(effectiveAssignee(r)));
+    }
+    return records.filter(r => effectiveAssignee(r) === scopeValue);
+  })();
   const teleRecords = scopedRecords.filter(r => r.type === 'テレアポ');
   // 現在設定されているフラグ ＋ 過去に使われたことがあるが今は消えたフラグも漏らさず集計する
   const configuredFlags = activityTypes.find(a => a.name === 'テレアポ')?.flags || [];
@@ -1979,12 +1993,33 @@ function TeleApptStatsView({ records, customers, activityTypes, members, current
             <button key={v} onClick={() => setGranularity(v)} className={`px-4 py-2 rounded-lg text-sm font-bold ${granularity === v ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>{l}</button>
           ))}
         </div>
-        {isOwner && (
-          <select value={scope} onChange={e => setScope(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-            <option value="all">全員</option>
-            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-          </select>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+            {[['all', '全体'], ['department', '課'], ['personal', '個人']].map(([v, l]) => (
+              <button key={v}
+                onClick={() => {
+                  setScopeType(v);
+                  if (v === 'department') setScopeValue(currentUser?.department || (departments[0]?.name || ''));
+                  else if (v === 'personal') setScopeValue(currentUser?.displayName || '');
+                }}
+                className={`px-3 py-2 text-sm font-bold ${scopeType === v ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {scopeType === 'department' && (
+            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+              <option value="">課を選択</option>
+              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            </select>
+          )}
+          {scopeType === 'personal' && (
+            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} disabled={!isOwner}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white disabled:bg-slate-50">
+              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+            </select>
+          )}
+        </div>
       </div>
 
       {groups.length === 0 ? (
@@ -2003,21 +2038,22 @@ function TeleApptStatsView({ records, customers, activityTypes, members, current
 
                 <div className="grid grid-cols-4 lg:grid-cols-10 gap-2 mb-3">
                   {[
-                    ['コール数', f.callCount, '件'],
-                    ['有効コール数', f.validCount, '件'],
-                    ['無効コール数', f.invalidCount, '件'],
-                    ['代表接触数', f.repContactCount, '件'],
-                    ['時間設定件数', f.timeSettingCount, '件'],
-                    ['　├代表', f.repTimeSettingCount, '件'],
-                    ['　└担当', f.staffTimeSettingCount, '件'],
-                    ['有効コール率', f.validRate, '%'],
-                    ['代表接触率', f.repContactRate, '%'],
-                    ['接続アポ率', f.apptRate, '%'],
-                  ].map(([label, value, unit]) => (
-                    <div key={label} className="bg-slate-50 rounded-lg p-2 text-center">
+                    ['コール数', f.callCount, '件', items],
+                    ['有効コール数', f.validCount, '件', items.filter(i => i.flag !== '留守電・不通')],
+                    ['無効コール数', f.invalidCount, '件', items.filter(i => i.flag === '留守電・不通')],
+                    ['代表接触数', f.repContactCount, '件', items.filter(i => isInitialTimeSettingFlag(i.flag) || ['代表接触拒否', '当日確認案件'].includes(i.flag))],
+                    ['時間設定件数', f.timeSettingCount, '件', items.filter(i => isInitialTimeSettingFlag(i.flag))],
+                    ['　├代表', f.repTimeSettingCount, '件', items.filter(i => i.flag === '初回時間設定（代表）')],
+                    ['　└担当', f.staffTimeSettingCount, '件', items.filter(i => i.flag === '初回時間設定（担当）')],
+                    ['有効コール率', f.validRate, '%', items.filter(i => i.flag !== '留守電・不通')],
+                    ['代表接触率', f.repContactRate, '%', items.filter(i => isInitialTimeSettingFlag(i.flag) || ['代表接触拒否', '当日確認案件'].includes(i.flag))],
+                    ['接続アポ率', f.apptRate, '%', items.filter(i => isInitialTimeSettingFlag(i.flag))],
+                  ].map(([label, value, unit, recs]) => (
+                    <button key={label} onClick={() => setDrilldown({ title: `${key} ${label.trim()}`, records: recs })}
+                      className="bg-slate-50 rounded-lg p-2 text-center hover:bg-slate-100 hover:ring-1 hover:ring-teal-300 transition">
                       <p className="text-base font-extrabold text-slate-800">{value}<span className="text-xs font-normal text-slate-400">{unit}</span></p>
                       <p className="text-[10px] text-slate-400">{label}</p>
-                    </div>
+                    </button>
                   ))}
                 </div>
 
@@ -2034,6 +2070,31 @@ function TeleApptStatsView({ records, customers, activityTypes, members, current
             );
           })}
         </div>
+      )}
+
+      {drilldown && (
+        <Modal title={`${drilldown.title}（${drilldown.records.length}件）`} onClose={() => setDrilldown(null)} wide>
+          {drilldown.records.length === 0 ? (
+            <p className="text-sm text-slate-400">該当する記録がありません。</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {drilldown.records.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(r => {
+                const cust = (customers || []).find(c => c.id === r.customerId);
+                return (
+                  <button key={r.id}
+                    onClick={() => { setDrilldown(null); onOpenCustomer && onOpenCustomer(r.customerId); }}
+                    className="text-left bg-white rounded-xl border border-slate-100 p-3 hover:shadow-md hover:border-teal-200 transition">
+                    <p className="text-xs text-slate-400">{cust?.gakuenName || ''}{cust?.associationType ? ` ・ ${cust.associationType}` : ''}</p>
+                    <p className="font-bold text-slate-800 text-sm">{r.customerName || cust?.enName || '不明な顧客'}</p>
+                    <p className="text-xs text-slate-500 mt-1">{r.type}{r.flag ? `（${r.flag}）` : ''} ・ {r.date} {r.time || ''}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">担当: {effectiveAssignee(r) || '未設定'}</p>
+                    {r.memo && <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{r.memo}</p>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </Modal>
       )}
     </div>
   );
@@ -2372,11 +2433,12 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
 }
 
 // ---------- カレンダー（訪問予定・再コール予定） ----------
-function CalendarView({ records, customers, members, currentUser, isOwner }) {
+function CalendarView({ records, customers, members, departments, currentUser, isOwner, onOpenCustomer }) {
   const [viewMode, setViewMode] = useState('month'); // 'month' | 'week' | 'day'
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(null);
-  const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
+  const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
+  const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
 
   const customerAssigneeById = useMemo(() => {
     const map = {};
@@ -2384,7 +2446,16 @@ function CalendarView({ records, customers, members, currentUser, isOwner }) {
     return map;
   }, [customers]);
   const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
-  const scoped = scope === 'all' ? records : records.filter(r => effectiveAssignee(r) === scope);
+  const membersInDept = (deptName) => members.filter(m => m.department === deptName).map(m => m.displayName);
+
+  const scoped = (() => {
+    if (scopeType === 'all') return records;
+    if (scopeType === 'department') {
+      const names = membersInDept(scopeValue);
+      return records.filter(r => names.includes(effectiveAssignee(r)));
+    }
+    return records.filter(r => effectiveAssignee(r) === scopeValue);
+  })();
   const scheduled = scoped.filter(r => r.scheduledDate);
   const byDate = useMemo(() => {
     const map = {};
@@ -2472,13 +2543,14 @@ function CalendarView({ records, customers, members, currentUser, isOwner }) {
                 {items.map(r => {
                   const cust = findCustomer(r);
                   return (
-                    <div key={r.id} style={eventStyle(r)}
-                      className="absolute left-0.5 right-0.5 bg-indigo-500 text-white rounded-md px-1.5 py-1 overflow-hidden shadow-sm">
+                    <button key={r.id} style={eventStyle(r)}
+                      onClick={() => onOpenCustomer && onOpenCustomer(r.customerId)}
+                      className="absolute left-0.5 right-0.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md px-1.5 py-1 overflow-hidden shadow-sm text-left transition">
                       <p className="text-[10px] font-bold leading-tight truncate">{r.scheduledTime}</p>
                       <p className="text-[10px] leading-tight truncate">{r.customerName || '不明な顧客'}</p>
                       <p className="text-[9px] leading-tight opacity-80 truncate">{r.type}{r.flag ? `（${r.flag}）` : ''}</p>
                       {cust?.address && <p className="text-[9px] leading-tight opacity-70 truncate">{cust.address}</p>}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -2512,12 +2584,33 @@ function CalendarView({ records, customers, members, currentUser, isOwner }) {
           ))}
           <button onClick={() => setCursor(new Date())} className="px-4 py-2 rounded-lg text-sm font-bold bg-white border border-slate-200 text-slate-600">今日</button>
         </div>
-        {isOwner && (
-          <select value={scope} onChange={e => setScope(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-            <option value="all">全員</option>
-            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-          </select>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+            {[['all', '全体'], ['department', '課'], ['personal', '個人']].map(([v, l]) => (
+              <button key={v}
+                onClick={() => {
+                  setScopeType(v);
+                  if (v === 'department') setScopeValue(currentUser?.department || (departments[0]?.name || ''));
+                  else if (v === 'personal') setScopeValue(currentUser?.displayName || '');
+                }}
+                className={`px-3 py-2 text-sm font-bold ${scopeType === v ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {scopeType === 'department' && (
+            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+              <option value="">課を選択</option>
+              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            </select>
+          )}
+          {scopeType === 'personal' && (
+            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} disabled={!isOwner}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white disabled:bg-slate-50">
+              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+            </select>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between bg-white rounded-xl border border-slate-100 p-4">
@@ -2565,13 +2658,16 @@ function CalendarView({ records, customers, members, currentUser, isOwner }) {
                   {selectedItems.map(r => {
                     const cust = findCustomer(r);
                     return (
-                      <li key={r.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 text-sm">
-                        <div>
-                          <span className="font-semibold text-slate-700">{r.customerName || '不明な顧客'}</span>
-                          <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
-                          {cust?.address && <p className="text-xs text-slate-400 mt-0.5">{cust.address}</p>}
-                        </div>
-                        <span className="text-xs text-indigo-600 font-bold shrink-0">{r.scheduledTime || '時間未設定'}</span>
+                      <li key={r.id}>
+                        <button onClick={() => onOpenCustomer && onOpenCustomer(r.customerId)}
+                          className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 rounded-lg px-3 py-2 text-sm text-left transition">
+                          <div>
+                            <span className="font-semibold text-teal-700 hover:underline">{r.customerName || '不明な顧客'}</span>
+                            <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
+                            {cust?.address && <p className="text-xs text-slate-400 mt-0.5">{cust.address}</p>}
+                          </div>
+                          <span className="text-xs text-indigo-600 font-bold shrink-0">{r.scheduledTime || '時間未設定'}</span>
+                        </button>
                       </li>
                     );
                   })}
@@ -3916,8 +4012,8 @@ export default function App() {
             pendingViewCustomerId={pendingViewCustomerId} clearPendingViewCustomer={() => setPendingViewCustomerId(null)}
           />
         )}
-        {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} customers={customers} activityTypes={activityTypes} members={members} currentUser={user} isOwner={isOwner} />}
-        {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} currentUser={user} isOwner={isOwner} />}
+        {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} customers={customers} activityTypes={activityTypes} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} onOpenCustomer={openCustomerFromHome} />}
+        {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} onOpenCustomer={openCustomerFromHome} />}
         {activeTab === 'daily_report' && (
           <DailyReportView
             records={records} customers={customers} currentUser={user}
