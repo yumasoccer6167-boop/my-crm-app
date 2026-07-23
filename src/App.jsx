@@ -5,7 +5,7 @@ import {
   ChevronDown, Star, Camera, Upload, Download, Copy, BarChart,
   Bot, Sparkles, Send, FileText, ClipboardList, CalendarDays,
   ChevronLeft, ChevronRight, CheckSquare, Square, Mic, LayoutGrid, List,
-  Heart, Video, MessageCircle, BookOpen, Briefcase, AlertTriangle
+  Heart, Video, MessageCircle, BookOpen, Briefcase, AlertTriangle, PieChart
 } from 'lucide-react';
 
 // ---------- 初期データ ----------
@@ -387,6 +387,42 @@ function RateCard({ label, rate, onClick }) {
   );
 }
 
+// ---------- 円グラフ（ドーナツ）カード ----------
+function DonutCard({ label, actual, goal, unit = '件', rate = null, onClick }) {
+  // rate が指定されていれば率カード、そうでなければ達成率を計算する
+  const isRateCard = rate !== null;
+  const pct = isRateCard ? rate : (goal > 0 ? Math.round((actual / goal) * 100) : 0);
+  const shown = Math.min(100, Math.max(0, pct));
+  const R = 42;
+  const C = 2 * Math.PI * R;
+  const dash = (shown / 100) * C;
+  const over = !isRateCard && goal > 0 && actual >= goal;
+  const color = isRateCard ? '#fbbf24' : over ? '#14b8a6' : '#818cf8';
+  const Tag = onClick ? 'button' : 'div';
+
+  return (
+    <Tag onClick={onClick} className={`bg-white rounded-xl p-4 shadow-sm border border-slate-100 w-full flex flex-col items-center ${onClick ? 'hover:shadow-md hover:border-teal-200 transition cursor-pointer' : ''}`}>
+      <span className="text-xs font-bold text-slate-500 mb-2 text-center">{label}</span>
+      <div className="relative">
+        <svg width="110" height="110" viewBox="0 0 110 110">
+          <circle cx="55" cy="55" r={R} fill="none" stroke="#f1f5f9" strokeWidth="12" />
+          <circle
+            cx="55" cy="55" r={R} fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"
+            strokeDasharray={`${dash} ${C - dash}`}
+            transform="rotate(-90 55 55)"
+            style={{ transition: 'stroke-dasharray 0.4s' }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-xl font-extrabold text-slate-800">{pct}%</span>
+          {!isRateCard && <span className="text-[10px] text-slate-400">{actual}/{goal}{unit}</span>}
+        </div>
+      </div>
+      {isRateCard && <span className="text-[11px] text-slate-400 mt-1">達成状況</span>}
+    </Tag>
+  );
+}
+
 // ---------- ログイン画面 ----------
 function LoginView({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -477,6 +513,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
 
   // カードをクリックした時に表示する内訳
   const [drilldown, setDrilldown] = useState(null); // { title, records }
+  const [summaryView, setSummaryView] = useState('card'); // 'card' | 'chart'
   const openDrilldown = (title, recs) => setDrilldown({ title, records: recs });
 
   const goal = goals[period] || { timeSetting: 0, firstVisit: 0, salesTimeSetting: 0, order: 0, profit: 0, quantity: 0 };
@@ -576,22 +613,45 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
           {period !== 'all' && (
             <button onClick={() => { setDraft(goal); setEditing(true); }} className="px-3 py-2 text-sm font-semibold text-teal-700 bg-teal-50 rounded-lg hover:bg-teal-100">目標設定</button>
           )}
+          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+            <button onClick={() => setSummaryView('card')} title="カード表示"
+              className={`p-2 ${summaryView === 'card' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button onClick={() => setSummaryView('chart')} title="円グラフ表示"
+              className={`p-2 ${summaryView === 'chart' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+              <PieChart className="w-4 h-4" />
+            </button>
+          </div>
           <button onClick={exportPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-slate-700 rounded-lg hover:bg-slate-600">
             <Download className="w-4 h-4" />PDF出力
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <ProgressCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} onClick={() => openDrilldown('初回時間設定件数', teleTimeSettingRecs)} />
-        <ProgressCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} onClick={() => openDrilldown('初回訪問件数', firstVisitRecs)} />
-        <ProgressCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} onClick={() => openDrilldown('営業時間設定件数', salesTimeSettingRecs)} />
-        <RateCard label="営業時間設定昇華率" rate={salesTimeSettingRate} onClick={() => openDrilldown('営業時間設定昇華率の内訳（営業時間設定）', salesTimeSettingRecs)} />
-        <ProgressCard label="受注件数" actual={orderCount} goal={goal.order} onClick={() => openDrilldown('受注件数', orderRecords)} />
-        <ProgressCard label="営業粗利" actual={profitSum} goal={goal.profit} unit="P" onClick={() => openDrilldown('営業粗利の内訳', orderRecords)} />
-        <ProgressCard label="台数" actual={quantitySum} goal={goal.quantity} unit="台" onClick={() => openDrilldown('台数の内訳', orderRecords)} />
-        <RateCard label="営業落率" rate={closeRate} onClick={() => openDrilldown('営業落率の内訳（受注）', orderRecords)} />
-      </div>
+      {summaryView === 'card' ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <ProgressCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} onClick={() => openDrilldown('初回時間設定件数', teleTimeSettingRecs)} />
+          <ProgressCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} onClick={() => openDrilldown('初回訪問件数', firstVisitRecs)} />
+          <ProgressCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} onClick={() => openDrilldown('営業時間設定件数', salesTimeSettingRecs)} />
+          <RateCard label="営業時間設定昇華率" rate={salesTimeSettingRate} onClick={() => openDrilldown('営業時間設定昇華率の内訳（営業時間設定）', salesTimeSettingRecs)} />
+          <ProgressCard label="受注件数" actual={orderCount} goal={goal.order} onClick={() => openDrilldown('受注件数', orderRecords)} />
+          <ProgressCard label="営業粗利" actual={profitSum} goal={goal.profit} unit="P" onClick={() => openDrilldown('営業粗利の内訳', orderRecords)} />
+          <ProgressCard label="台数" actual={quantitySum} goal={goal.quantity} unit="台" onClick={() => openDrilldown('台数の内訳', orderRecords)} />
+          <RateCard label="営業落率" rate={closeRate} onClick={() => openDrilldown('営業落率の内訳（受注）', orderRecords)} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <DonutCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} onClick={() => openDrilldown('初回時間設定件数', teleTimeSettingRecs)} />
+          <DonutCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} onClick={() => openDrilldown('初回訪問件数', firstVisitRecs)} />
+          <DonutCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} onClick={() => openDrilldown('営業時間設定件数', salesTimeSettingRecs)} />
+          <DonutCard label="営業時間設定昇華率" rate={salesTimeSettingRate} onClick={() => openDrilldown('営業時間設定昇華率の内訳（営業時間設定）', salesTimeSettingRecs)} />
+          <DonutCard label="受注件数" actual={orderCount} goal={goal.order} onClick={() => openDrilldown('受注件数', orderRecords)} />
+          <DonutCard label="営業粗利" actual={profitSum} goal={goal.profit} unit="P" onClick={() => openDrilldown('営業粗利の内訳', orderRecords)} />
+          <DonutCard label="台数" actual={quantitySum} goal={goal.quantity} unit="台" onClick={() => openDrilldown('台数の内訳', orderRecords)} />
+          <DonutCard label="営業落率" rate={closeRate} onClick={() => openDrilldown('営業落率の内訳（受注）', orderRecords)} />
+        </div>
+      )}
 
       {editing && (
         <Modal title={`${period} の目標設定`} onClose={() => setEditing(false)}>
