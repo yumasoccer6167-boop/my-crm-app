@@ -13,6 +13,13 @@ const initialProducts = [{ id: 1, name: 'SP-MEO' }, { id: 2, name: 'SP' }];
 const initialAssociationTypes = [];
 const initialCaseStudies = [];
 const initialKnowledgeArticles = [];
+const initialKnowledgeTags = [
+  { id: 1, name: 'テレアポ' },
+  { id: 2, name: '営業' },
+  { id: 3, name: '契約後の流れ' },
+  { id: 4, name: '商材' },
+  { id: 5, name: '制度・ルール' },
+];
 
 const initialActivityTypes = [
   { id: 1, name: 'テレアポ', flags: ['再コール', '留守電・不通', '初回時間設定（代表）', '初回時間設定（担当）', '飛び込み初回時間設定', '受付拒否', '代表接触拒否', '当日確認案件'] },
@@ -2875,17 +2882,22 @@ function CaseStudiesView({ caseStudies, setCaseStudies, products, members, curre
 }
 
 // ---------- 営業ノウハウページ ----------
-function KnowledgeBaseView({ articles, setArticles, currentUser, showConfirm, canEdit }) {
+function KnowledgeBaseView({ articles, setArticles, knowledgeTags, members, currentUser, showConfirm, showAlert, canEdit }) {
   const [search, setSearch] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
   const [selected, setSelected] = useState(null); // article being viewed
   const [editing, setEditing] = useState(null); // article being edited/created
 
-  const filtered = articles.filter(a => !search || a.title.toLowerCase().includes(search.toLowerCase()));
+  const filtered = articles.filter(a => {
+    const matchesSearch = !search || a.title.toLowerCase().includes(search.toLowerCase());
+    const matchesTag = !tagFilter || (a.tags || []).includes(tagFilter);
+    return matchesSearch && matchesTag;
+  });
 
   const save = () => {
     setArticles(prev => {
       const exists = prev.some(a => a.id === editing.id);
-      const clean = { ...editing, updatedAt: new Date().toISOString().substring(0, 10), updatedBy: currentUser?.displayName || '' };
+      const clean = { ...editing, id: editing.id || Date.now(), updatedAt: new Date().toISOString().substring(0, 10), updatedBy: currentUser?.displayName || '' };
       return exists ? prev.map(a => a.id === editing.id ? clean : a) : [...prev, clean];
     });
     setSelected(null);
@@ -2899,11 +2911,81 @@ function KnowledgeBaseView({ articles, setArticles, currentUser, showConfirm, ca
     });
   };
 
+  const toggleTag = (tagName) => {
+    setEditing(prev => {
+      const tags = prev.tags || [];
+      return { ...prev, tags: tags.includes(tagName) ? tags.filter(t => t !== tagName) : [...tags, tagName] };
+    });
+  };
+
+  const handleFileAdd = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // データベースに保存するため、大きすぎるファイルは制限する
+    if (file.size > 3 * 1024 * 1024) {
+      showAlert('ファイルサイズが大きすぎます（3MB以下にしてください）。大きい資料はGoogleドライブ等のリンクを本文に貼る方法をおすすめします。');
+      e.target.value = '';
+      return;
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    setEditing(prev => ({ ...prev, files: [...(prev.files || []), { id: Date.now(), name: file.name, data: dataUrl }] }));
+    e.target.value = '';
+  };
+
+  const removeFile = (fileId) => {
+    setEditing(prev => ({ ...prev, files: (prev.files || []).filter(f => f.id !== fileId) }));
+  };
+
   if (editing) {
     return (
       <div className="max-w-2xl space-y-4">
         <FormField label="タイトル" value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} />
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-slate-500">フラグ（複数選択可）</label>
+          <div className="flex flex-wrap gap-2">
+            {knowledgeTags.map(t => {
+              const active = (editing.tags || []).includes(t.name);
+              return (
+                <button key={t.id} onClick={() => toggleTag(t.name)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${active ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                  {t.name}
+                </button>
+              );
+            })}
+            {knowledgeTags.length === 0 && <p className="text-xs text-slate-400">フラグが未登録です。「設定・管理」から追加できます。</p>}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-slate-500">担当者</label>
+          <select value={editing.assignedTo || ''} onChange={e => setEditing({ ...editing, assignedTo: e.target.value })}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">未設定</option>
+            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+          </select>
+        </div>
+
         <FormField label="YouTubeリンク（任意）" value={editing.ytLink || ''} onChange={e => setEditing({ ...editing, ytLink: e.target.value })} placeholder="https://www.youtube.com/watch?v=..." />
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-slate-500">資料（PDFなど・1ファイル3MBまで）</label>
+          {(editing.files || []).length > 0 && (
+            <ul className="space-y-1.5 mb-2">
+              {(editing.files || []).map(f => (
+                <li key={f.id} className="flex justify-between items-center px-3 py-2 bg-slate-50 rounded-lg text-xs">
+                  <span className="flex items-center gap-1.5 truncate"><FileText className="w-3.5 h-3.5 shrink-0" />{f.name}</span>
+                  <button onClick={() => removeFile(f.id)} className="text-slate-300 hover:text-red-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold cursor-pointer self-start">
+            <Upload className="w-3.5 h-3.5" />資料を追加
+            <input type="file" onChange={handleFileAdd} className="hidden" />
+          </label>
+        </div>
+
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">内容</label>
           <textarea value={editing.body} onChange={e => setEditing({ ...editing, body: e.target.value })} rows={16}
@@ -2931,11 +3013,35 @@ function KnowledgeBaseView({ articles, setArticles, currentUser, showConfirm, ca
               </div>
             )}
           </div>
-          <p className="text-xs text-slate-400 mb-4">最終更新: {selected.updatedAt}（{selected.updatedBy}）</p>
+          {(selected.tags || []).length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {(selected.tags || []).map(t => (
+                <span key={t} className="px-2.5 py-1 bg-teal-50 text-teal-700 rounded-full text-[11px] font-bold">{t}</span>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-slate-400 mb-4">
+            最終更新: {selected.updatedAt}（{selected.updatedBy}）
+            {selected.assignedTo ? ` ・ 担当: ${selected.assignedTo}` : ''}
+          </p>
           {selected.ytLink && (
             <a href={selected.ytLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 mb-4 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100">
               <Video className="w-4 h-4" />YouTubeで動画を見る
             </a>
+          )}
+          {(selected.files || []).length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-bold text-slate-500 mb-2">添付資料</p>
+              <ul className="space-y-1.5">
+                {(selected.files || []).map(f => (
+                  <li key={f.id}>
+                    <a href={f.data} download={f.name} className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-semibold hover:bg-indigo-100">
+                      <FileText className="w-3.5 h-3.5" />{f.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{selected.body}</div>
         </div>
@@ -2946,19 +3052,37 @@ function KnowledgeBaseView({ articles, setArticles, currentUser, showConfirm, ca
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="タイトルで検索"
-            className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white" />
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="タイトルで検索"
+              className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white" />
+          </div>
+          <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべてのフラグ</option>
+            {knowledgeTags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+          </select>
         </div>
         {canEdit && (
-          <button onClick={() => setEditing({ id: null, title: '', body: '', ytLink: '' })} className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">
+          <button onClick={() => setEditing({ id: null, title: '', body: '', ytLink: '', tags: [], files: [], assignedTo: '' })} className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">
             <Plus className="w-4 h-4" />新しい記事
           </button>
         )}
       </div>
+
+      {knowledgeTags.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setTagFilter('')} className={`px-3 py-1.5 rounded-full text-xs font-bold border ${!tagFilter ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-500 border-slate-200'}`}>すべて</button>
+          {knowledgeTags.map(t => (
+            <button key={t.id} onClick={() => setTagFilter(t.name)} className={`px-3 py-1.5 rounded-full text-xs font-bold border ${tagFilter === t.name ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+              {t.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {filtered.length === 0 ? (
-        <p className="text-sm text-slate-400 text-center py-10">まだ記事がありません。研修資料やルールを登録してみてください。</p>
+        <p className="text-sm text-slate-400 text-center py-10">該当する記事がありません。</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {filtered.map(a => (
@@ -2966,8 +3090,14 @@ function KnowledgeBaseView({ articles, setArticles, currentUser, showConfirm, ca
               <p className="font-bold text-slate-800 flex items-center gap-1.5">
                 <BookOpen className="w-4 h-4 text-teal-600" />{a.title}
                 {a.ytLink && <Video className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                {(a.files || []).length > 0 && <FileText className="w-3.5 h-3.5 text-indigo-500 shrink-0" />}
               </p>
-              <p className="text-xs text-slate-400 mt-1">{a.updatedAt}（{a.updatedBy}）</p>
+              {(a.tags || []).length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {(a.tags || []).map(t => <span key={t} className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded-full text-[10px] font-bold">{t}</span>)}
+                </div>
+              )}
+              <p className="text-xs text-slate-400 mt-1.5">{a.updatedAt}（{a.updatedBy}）{a.assignedTo ? ` ・ 担当: ${a.assignedTo}` : ''}</p>
               <p className="text-xs text-slate-500 mt-2 line-clamp-2">{a.body}</p>
             </button>
           ))}
@@ -3025,6 +3155,7 @@ function RolePermissionsView({ rolePermissions, setRolePermissions }) {
 function SettingsView({
   reportTemplates, setReportTemplates, dailyReportTemplates, setDailyReportTemplates,
   products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes,
+  knowledgeTags, setKnowledgeTags,
   rolePermissions, setRolePermissions, isOwner,
   token, currentUser, showAlert, showConfirm,
 }) {
@@ -3104,7 +3235,7 @@ function SettingsView({
       )}
 
       {innerTab === 'products' && (
-        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} associationTypes={associationTypes} setAssociationTypes={setAssociationTypes} showConfirm={showConfirm} />
+        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} associationTypes={associationTypes} setAssociationTypes={setAssociationTypes} knowledgeTags={knowledgeTags} setKnowledgeTags={setKnowledgeTags} showConfirm={showConfirm} />
       )}
 
       {innerTab === 'members' && (
@@ -3150,11 +3281,12 @@ function SettingsView({
 }
 
 // ---------- 商品・フラグ管理 ----------
-function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, showConfirm }) {
+function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, knowledgeTags, setKnowledgeTags, showConfirm }) {
   const [newProduct, setNewProduct] = useState('');
   const [newType, setNewType] = useState('');
   const [flagDraft, setFlagDraft] = useState({});
   const [newAssociationType, setNewAssociationType] = useState('');
+  const [newKnowledgeTag, setNewKnowledgeTag] = useState('');
 
   const addProduct = () => {
     if (!newProduct.trim()) return;
@@ -3189,6 +3321,12 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
     if (!newAssociationType.trim()) return;
     setAssociationTypes([...associationTypes, { id: Date.now(), name: newAssociationType.trim() }]);
     setNewAssociationType('');
+  };
+
+  const addKnowledgeTag = () => {
+    if (!newKnowledgeTag.trim()) return;
+    setKnowledgeTags([...(knowledgeTags || []), { id: Date.now(), name: newKnowledgeTag.trim() }]);
+    setNewKnowledgeTag('');
   };
 
   return (
@@ -3226,6 +3364,25 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
+        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><BookOpen className="w-4 h-4" />営業ノウハウのフラグ管理</h3>
+        <p className="text-xs text-slate-400 mb-3">ここで登録したフラグが、営業ノウハウページの記事に付けられるようになります。</p>
+        <div className="flex gap-2 mb-4">
+          <input value={newKnowledgeTag} onChange={e => setNewKnowledgeTag(e.target.value)} placeholder="例：テレアポ" autoComplete="off"
+            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          <button onClick={addKnowledgeTag} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(knowledgeTags || []).map(t => (
+            <span key={t.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-full text-sm">
+              {t.name}
+              <button onClick={() => setKnowledgeTags((knowledgeTags || []).filter(x => x.id !== t.id))} className="text-slate-300 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+            </span>
+          ))}
+          {(knowledgeTags || []).length === 0 && <p className="text-xs text-slate-400">フラグが未登録です。</p>}
+        </div>
       </div>
 
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
@@ -3304,10 +3461,11 @@ export default function App() {
     goals: initialGoals, emailTemplates: initialEmailTemplates, reportTemplates: initialReportTemplates,
     dailyReportTemplates: initialDailyReportTemplates, associationTypes: initialAssociationTypes, dailyReportLogs: [],
     caseStudies: initialCaseStudies, knowledgeArticles: initialKnowledgeArticles,
+    knowledgeTags: initialKnowledgeTags,
     rolePermissions: initialRolePermissions,
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, caseStudies, knowledgeArticles, rolePermissions } = data;
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, caseStudies, knowledgeArticles, rolePermissions, knowledgeTags } = data;
   const canViewSettings = isOwner || hasPermission(user?.role, 'viewSettings', rolePermissions);
   const canDeleteCustomer = isOwner || hasPermission(user?.role, 'deleteCustomer', rolePermissions);
   const canBulkEdit = isOwner || hasPermission(user?.role, 'bulkEdit', rolePermissions);
@@ -3326,6 +3484,7 @@ export default function App() {
   const setCaseStudies = makeSetter('caseStudies');
   const setKnowledgeArticles = makeSetter('knowledgeArticles');
   const setRolePermissions = makeSetter('rolePermissions');
+  const setKnowledgeTags = makeSetter('knowledgeTags');
 
   // メンバー一覧（担当者選択・絞り込み用）を取得
   useEffect(() => {
@@ -3454,7 +3613,7 @@ export default function App() {
           <CaseStudiesView caseStudies={caseStudies} setCaseStudies={setCaseStudies} products={products} members={members} currentUser={user} showConfirm={showConfirm} canEdit={canEditCaseStudies} />
         )}
         {activeTab === 'knowledge' && (
-          <KnowledgeBaseView articles={knowledgeArticles} setArticles={setKnowledgeArticles} currentUser={user} showConfirm={showConfirm} canEdit={canEditKnowledge} />
+          <KnowledgeBaseView articles={knowledgeArticles} setArticles={setKnowledgeArticles} knowledgeTags={knowledgeTags || []} members={members} currentUser={user} showConfirm={showConfirm} showAlert={showAlert} canEdit={canEditKnowledge} />
         )}
         {activeTab === 'ai' && <AIAssistantView customers={customers} records={records} />}
         {activeTab === 'settings' && canViewSettings && (
@@ -3465,6 +3624,7 @@ export default function App() {
             activityTypes={activityTypes} setActivityTypes={setActivityTypes}
             associationTypes={associationTypes} setAssociationTypes={setAssociationTypes}
             rolePermissions={rolePermissions} setRolePermissions={setRolePermissions} isOwner={isOwner}
+            knowledgeTags={knowledgeTags || []} setKnowledgeTags={setKnowledgeTags}
             token={token} currentUser={user}
             showAlert={showAlert} showConfirm={showConfirm}
           />
