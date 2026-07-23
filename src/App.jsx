@@ -346,11 +346,12 @@ function CopyButton({ text, label = 'コピー', className = '' }) {
   );
 }
 
-function ProgressCard({ label, actual, goal, unit = '件' }) {
+function ProgressCard({ label, actual, goal, unit = '件', onClick }) {
   const pct = goal > 0 ? Math.min(100, Math.round((actual / goal) * 100)) : 0;
   const over = goal > 0 && actual >= goal;
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+    <Tag onClick={onClick} className={`bg-white rounded-xl p-4 shadow-sm border border-slate-100 text-left w-full ${onClick ? 'hover:shadow-md hover:border-teal-200 transition cursor-pointer' : ''}`}>
       <div className="flex justify-between items-baseline mb-2">
         <span className="text-xs font-bold text-slate-500">{label}</span>
         <span className={`text-xs font-bold ${over ? 'text-teal-600' : 'text-slate-400'}`}>{pct}%</span>
@@ -362,13 +363,14 @@ function ProgressCard({ label, actual, goal, unit = '件' }) {
       <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${over ? 'bg-teal-500' : 'bg-indigo-400'}`} style={{ width: `${pct}%` }} />
       </div>
-    </div>
+    </Tag>
   );
 }
 
-function RateCard({ label, rate }) {
+function RateCard({ label, rate, onClick }) {
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+    <Tag onClick={onClick} className={`bg-white rounded-xl p-4 shadow-sm border border-slate-100 text-left w-full ${onClick ? 'hover:shadow-md hover:border-teal-200 transition cursor-pointer' : ''}`}>
       <div className="mb-2">
         <span className="text-xs font-bold text-slate-500">{label}</span>
       </div>
@@ -379,7 +381,7 @@ function RateCard({ label, rate }) {
       <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
         <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${Math.min(100, rate)}%` }} />
       </div>
-    </div>
+    </Tag>
   );
 }
 
@@ -422,7 +424,7 @@ function LoginView({ onLogin }) {
 }
 
 // ---------- HOME ----------
-function HomeView({ records, goals, setGoals, currentUser, isOwner, members, departments, onNavigate, onOpenCustomer }) {
+function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, members, departments, onNavigate, onOpenCustomer }) {
   const [period, setPeriod] = useState(thisMonth);
   const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
   const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
@@ -435,28 +437,45 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, dep
   // 課に所属するメンバー名の一覧を取得
   const membersInDept = (deptName) => members.filter(m => m.department === deptName).map(m => m.displayName);
 
+  // 記録に担当者が無い場合（CSV取込や担当者機能の追加前に作られた記録）は、
+  // その顧客に設定されている担当者を担当者とみなして集計に含める
+  const customerAssigneeById = useMemo(() => {
+    const map = {};
+    customers.forEach(c => { map[c.id] = c.assignedTo || ''; });
+    return map;
+  }, [customers]);
+  const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
+
   const scopedRecords = (() => {
     if (scopeType === 'all') return records;
     if (scopeType === 'department') {
       const names = membersInDept(scopeValue);
-      return records.filter(r => names.includes(r.assignedTo));
+      return records.filter(r => names.includes(effectiveAssignee(r)));
     }
-    return records.filter(r => r.assignedTo === scopeValue);
+    return records.filter(r => effectiveAssignee(r) === scopeValue);
   })();
   const filtered = period === 'all' ? scopedRecords : scopedRecords.filter(r => r.date?.startsWith(period));
 
   const scopeLabel = scopeType === 'all' ? '全体' : scopeType === 'department' ? `課: ${scopeValue || '未選択'}` : `個人: ${scopeValue || '未選択'}`;
 
-  // 指標の計算
-  const teleTimeSetting = filtered.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag)).length; // 初回時間設定件数
-  const firstVisitCount = filtered.filter(r => r.type === '初回訪問').length; // 初回訪問件数
-  const salesTimeSetting = filtered.filter(r => r.type === '初回訪問' && r.flag === '営業時間設定').length; // 営業時間設定件数
-  const salesTimeSettingRate = firstVisitCount > 0 ? Math.round((salesTimeSetting / firstVisitCount) * 100) : 0; // 営業時間設定昇華率
+  // 指標の計算（内訳表示のため、対象となった記録も保持しておく）
+  const teleTimeSettingRecs = filtered.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag));
+  const firstVisitRecs = filtered.filter(r => r.type === '初回訪問');
+  const salesTimeSettingRecs = filtered.filter(r => r.type === '初回訪問' && r.flag === '営業時間設定');
   const orderRecords = filtered.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
+
+  const teleTimeSetting = teleTimeSettingRecs.length; // 初回時間設定件数
+  const firstVisitCount = firstVisitRecs.length; // 初回訪問件数
+  const salesTimeSetting = salesTimeSettingRecs.length; // 営業時間設定件数
+  const salesTimeSettingRate = firstVisitCount > 0 ? Math.round((salesTimeSetting / firstVisitCount) * 100) : 0; // 営業時間設定昇華率
   const orderCount = orderRecords.length; // 受注件数
   const profitSum = orderRecords.reduce((s, r) => s + (Number(r.profit) || 0), 0); // 営業粗利（P）
   const quantitySum = orderRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0); // 台数
   const closeRate = salesTimeSetting > 0 ? Math.round((orderCount / salesTimeSetting) * 100) : 0; // 営業落率
+
+  // カードをクリックした時に表示する内訳
+  const [drilldown, setDrilldown] = useState(null); // { title, records }
+  const openDrilldown = (title, recs) => setDrilldown({ title, records: recs });
 
   const goal = goals[period] || { timeSetting: 0, firstVisit: 0, salesTimeSetting: 0, order: 0, profit: 0, quantity: 0 };
   const [editing, setEditing] = useState(false);
@@ -562,14 +581,14 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, dep
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <ProgressCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} />
-        <ProgressCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} />
-        <ProgressCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} />
-        <RateCard label="営業時間設定昇華率" rate={salesTimeSettingRate} />
-        <ProgressCard label="受注件数" actual={orderCount} goal={goal.order} />
-        <ProgressCard label="営業粗利" actual={profitSum} goal={goal.profit} unit="P" />
-        <ProgressCard label="台数" actual={quantitySum} goal={goal.quantity} unit="台" />
-        <RateCard label="営業落率" rate={closeRate} />
+        <ProgressCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} onClick={() => openDrilldown('初回時間設定件数', teleTimeSettingRecs)} />
+        <ProgressCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} onClick={() => openDrilldown('初回訪問件数', firstVisitRecs)} />
+        <ProgressCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} onClick={() => openDrilldown('営業時間設定件数', salesTimeSettingRecs)} />
+        <RateCard label="営業時間設定昇華率" rate={salesTimeSettingRate} onClick={() => openDrilldown('営業時間設定昇華率の内訳（営業時間設定）', salesTimeSettingRecs)} />
+        <ProgressCard label="受注件数" actual={orderCount} goal={goal.order} onClick={() => openDrilldown('受注件数', orderRecords)} />
+        <ProgressCard label="営業粗利" actual={profitSum} goal={goal.profit} unit="P" onClick={() => openDrilldown('営業粗利の内訳', orderRecords)} />
+        <ProgressCard label="台数" actual={quantitySum} goal={goal.quantity} unit="台" onClick={() => openDrilldown('台数の内訳', orderRecords)} />
+        <RateCard label="営業落率" rate={closeRate} onClick={() => openDrilldown('営業落率の内訳（受注）', orderRecords)} />
       </div>
 
       {editing && (
@@ -583,6 +602,33 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, dep
             <FormField label="台数 目標" type="number" value={draft.quantity} onChange={e => setDraft({ ...draft, quantity: Number(e.target.value) })} />
           </div>
           <button onClick={saveGoal} className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
+        </Modal>
+      )}
+
+      {drilldown && (
+        <Modal title={`${drilldown.title}（${drilldown.records.length}件）`} onClose={() => setDrilldown(null)} wide>
+          {drilldown.records.length === 0 ? (
+            <p className="text-sm text-slate-400">該当する記録がありません。</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {drilldown.records.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(r => {
+                const cust = customers.find(c => c.id === r.customerId);
+                return (
+                  <button key={r.id}
+                    onClick={() => { setDrilldown(null); onOpenCustomer(r.customerId); }}
+                    className="text-left bg-white rounded-xl border border-slate-100 p-3 hover:shadow-md hover:border-teal-200 transition">
+                    <p className="text-xs text-slate-400">{cust?.gakuenName || ''}{cust?.associationType ? ` ・ ${cust.associationType}` : ''}</p>
+                    <p className="font-bold text-slate-800 text-sm">{r.customerName || cust?.enName || '不明な顧客'}</p>
+                    <p className="text-xs text-slate-500 mt-1">{r.type}{r.flag ? `（${r.flag}）` : ''} ・ {r.date}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">担当: {effectiveAssignee(r) || '未設定'}</p>
+                    {r.productName && (
+                      <p className="text-[11px] text-amber-700 mt-1">{r.productName} / 粗利{r.profit || 0}P / 台数{r.quantity || 0}</p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Modal>
       )}
 
@@ -1855,10 +1901,17 @@ function getWeekKey(dateStr) {
   return `${d.getFullYear()}年 第${week}週`;
 }
 
-function TeleApptStatsView({ records, activityTypes, members, currentUser, isOwner }) {
+function TeleApptStatsView({ records, customers, activityTypes, members, currentUser, isOwner }) {
   const [granularity, setGranularity] = useState('day');
   const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
-  const scopedRecords = scope === 'all' ? records : records.filter(r => r.assignedTo === scope);
+  // 記録に担当者が無い場合は顧客側の担当者で補う
+  const customerAssigneeById = useMemo(() => {
+    const map = {};
+    (customers || []).forEach(c => { map[c.id] = c.assignedTo || ''; });
+    return map;
+  }, [customers]);
+  const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
+  const scopedRecords = scope === 'all' ? records : records.filter(r => effectiveAssignee(r) === scope);
   const teleRecords = scopedRecords.filter(r => r.type === 'テレアポ');
   // 現在設定されているフラグ ＋ 過去に使われたことがあるが今は消えたフラグも漏らさず集計する
   const configuredFlags = activityTypes.find(a => a.name === 'テレアポ')?.flags || [];
@@ -2325,7 +2378,13 @@ function CalendarView({ records, customers, members, currentUser, isOwner }) {
   const [selectedDate, setSelectedDate] = useState(null);
   const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
 
-  const scoped = scope === 'all' ? records : records.filter(r => r.assignedTo === scope);
+  const customerAssigneeById = useMemo(() => {
+    const map = {};
+    (customers || []).forEach(c => { map[c.id] = c.assignedTo || ''; });
+    return map;
+  }, [customers]);
+  const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
+  const scoped = scope === 'all' ? records : records.filter(r => effectiveAssignee(r) === scope);
   const scheduled = scoped.filter(r => r.scheduledDate);
   const byDate = useMemo(() => {
     const map = {};
@@ -3842,7 +3901,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
         <h2 className="hidden md:block text-xl font-bold text-slate-800 mb-6">{titles[activeTab]}</h2>
         {activeTab === 'home' && (
-          <HomeView records={records} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
+          <HomeView records={records} customers={customers} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
         )}
         {activeTab === 'customers' && (
           <CustomersView
@@ -3857,7 +3916,7 @@ export default function App() {
             pendingViewCustomerId={pendingViewCustomerId} clearPendingViewCustomer={() => setPendingViewCustomerId(null)}
           />
         )}
-        {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} activityTypes={activityTypes} members={members} currentUser={user} isOwner={isOwner} />}
+        {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} customers={customers} activityTypes={activityTypes} members={members} currentUser={user} isOwner={isOwner} />}
         {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} currentUser={user} isOwner={isOwner} />}
         {activeTab === 'daily_report' && (
           <DailyReportView
