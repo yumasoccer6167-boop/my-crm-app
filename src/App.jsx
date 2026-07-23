@@ -665,12 +665,13 @@ function ReportGenerator({ customer, reportTemplates, latestRecord }) {
 }
 
 // ---------- 過去の記録の編集フォーム ----------
-function RecordEditForm({ record, activityTypes, products, onSave, onCancel }) {
+function RecordEditForm({ record, activityTypes, products, members, onSave, onCancel }) {
   const [type, setType] = useState(record.type);
   const [flag, setFlag] = useState(record.flag || '');
   const [date, setDate] = useState(record.date || '');
   const [time, setTime] = useState(record.time || '');
   const [memo, setMemo] = useState(record.memo || '');
+  const [assignedTo, setAssignedTo] = useState(record.assignedTo || '');
   const [productName, setProductName] = useState(record.productName || products[0]?.name || '');
   const [monthlyFee, setMonthlyFee] = useState(record.monthlyFee || '');
   const [years, setYears] = useState(record.years || '');
@@ -688,7 +689,7 @@ function RecordEditForm({ record, activityTypes, products, onSave, onCancel }) {
 
   const save = () => {
     onSave({
-      ...record, type, flag, date, time, memo,
+      ...record, type, flag, date, time, memo, assignedTo,
       ...(isOrder ? { productName, monthlyFee, years, quantity, profit } : { productName: undefined, monthlyFee: undefined, years: undefined, quantity: undefined, profit: undefined }),
       ...(needsSchedule && scheduledDate ? { scheduledDate, scheduledTime } : { scheduledDate: undefined, scheduledTime: undefined }),
       ...(isTele && (voiceLink || voiceMemo) ? { voiceLink, voiceMemo } : { voiceLink: undefined, voiceMemo: undefined }),
@@ -713,6 +714,13 @@ function RecordEditForm({ record, activityTypes, products, onSave, onCancel }) {
         </div>
         <FormField label="日付" type="date" value={date} onChange={e => setDate(e.target.value)} />
         <FormField label="時間" type="time" value={time} onChange={e => setTime(e.target.value)} />
+        <div className="flex flex-col gap-1 col-span-2">
+          <label className="text-[11px] font-semibold text-slate-500">担当者</label>
+          <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+            <option value="">未設定</option>
+            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+          </select>
+        </div>
       </div>
 
       {needsSchedule && (
@@ -758,7 +766,7 @@ function RecordEditForm({ record, activityTypes, products, onSave, onCancel }) {
 }
 
 // ---------- 顧客詳細（活動履歴＋記録登録）モーダル ----------
-function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, currentUser, token, canDelete, showAlert, showConfirm, onClose, onEdit, startWithForm }) {
+function CustomerDetailModal({ customer, records, setRecords, activityTypes, products, reportTemplates, members, currentUser, token, canDelete, showAlert, showConfirm, onClose, onEdit, startWithForm }) {
   const history = records
     .filter(r => r.customerId === customer.id)
     .slice()
@@ -840,6 +848,7 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
             setRecords={setRecords}
             activityTypes={activityTypes}
             products={products}
+            members={members}
             currentUser={currentUser}
             token={token}
             showAlert={showAlert}
@@ -856,11 +865,14 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
           {history.map(r => (
             <li key={r.id}>
               {editingRecordId === r.id ? (
-                <RecordEditForm record={r} activityTypes={activityTypes} products={products} onSave={updateRecord} onCancel={() => setEditingRecordId(null)} />
+                <RecordEditForm record={r} activityTypes={activityTypes} products={products} members={members} onSave={updateRecord} onCancel={() => setEditingRecordId(null)} />
               ) : (
                 <div className="bg-slate-50 rounded-lg p-3 text-sm">
                   <div className="flex justify-between items-start">
-                    <span className="font-semibold text-slate-700">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-700">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
+                      {r.assignedTo && <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full text-[10px] font-bold">担当: {r.assignedTo}</span>}
+                    </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-xs text-slate-400">{r.date} {r.time}</span>
                       <button onClick={() => setEditingRecordId(r.id)} className="p-1 text-slate-300 hover:text-teal-600"><Edit className="w-3.5 h-3.5" /></button>
@@ -1444,6 +1456,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
           activityTypes={activityTypes}
           products={products}
           reportTemplates={reportTemplates}
+          members={members}
           currentUser={currentUser}
           token={token}
           canDelete={canDeleteCustomer}
@@ -1473,7 +1486,7 @@ const SCHEDULE_FLAGS = ['初回時間設定（代表）', '初回時間設定（
 const SALES_TYPES = ['営業（代表）', '営業（担当）'];
 const isInitialTimeSettingFlag = (flag) => flag === '初回時間設定（代表）' || flag === '初回時間設定（担当）';
 
-function RecordFields({ customer, setRecords, activityTypes, products, currentUser, token, showAlert, onSaved }) {
+function RecordFields({ customer, setRecords, activityTypes, products, members, currentUser, token, showAlert, onSaved }) {
   const now = new Date();
   const [type, setType] = useState(activityTypes[0]?.name || '');
   const [flag, setFlag] = useState('');
@@ -1489,6 +1502,7 @@ function RecordFields({ customer, setRecords, activityTypes, products, currentUs
   const [scheduledTime, setScheduledTime] = useState('');
   const [voiceLink, setVoiceLink] = useState('');
   const [voiceMemo, setVoiceMemo] = useState('');
+  const [assignedTo, setAssignedTo] = useState(currentUser?.displayName || '');
 
   const currentFlags = activityTypes.find(a => a.name === type)?.flags || [];
   const isOrder = flag === '受注' || flag === 'ユーザー';
@@ -1498,12 +1512,13 @@ function RecordFields({ customer, setRecords, activityTypes, products, currentUs
   const reset = () => {
     setFlag(''); setMemo(''); setMonthlyFee(''); setYears(''); setQuantity(''); setProfit('');
     setScheduledDate(''); setScheduledTime(''); setVoiceLink(''); setVoiceMemo('');
+    setAssignedTo(currentUser?.displayName || '');
   };
 
   const save = () => {
     const newRecord = {
       id: Date.now(), customerId: customer.id, customerName: customer.enName || customer.gakuenName,
-      type, flag, date, time, memo, assignedTo: currentUser?.displayName || '',
+      type, flag, date, time, memo, assignedTo,
       ...(isOrder ? { productName, monthlyFee, years, quantity, profit } : {}),
       ...(needsSchedule && scheduledDate ? { scheduledDate, scheduledTime } : {}),
       ...(isTele && (voiceLink || voiceMemo) ? { voiceLink, voiceMemo } : {}),
@@ -1555,6 +1570,13 @@ function RecordFields({ customer, setRecords, activityTypes, products, currentUs
 
         <FormField label="日付" type="date" value={date} onChange={e => setDate(e.target.value)} />
         <FormField label="時間" type="time" value={time} onChange={e => setTime(e.target.value)} />
+        <div className="flex flex-col gap-1 md:col-span-2">
+          <label className="text-xs font-semibold text-slate-500">担当者</label>
+          <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">未設定</option>
+            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+          </select>
+        </div>
       </div>
 
       {needsSchedule && (
