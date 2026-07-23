@@ -20,6 +20,10 @@ const initialKnowledgeTags = [
   { id: 4, name: '商材' },
   { id: 5, name: '制度・ルール' },
 ];
+const initialDepartments = [
+  { id: 1, name: 'WEB営業　東京　１課' },
+  { id: 2, name: 'WEB営業　東京　２課' },
+];
 
 const initialActivityTypes = [
   { id: 1, name: 'テレアポ', flags: ['再コール', '留守電・不通', '初回時間設定（代表）', '初回時間設定（担当）', '飛び込み初回時間設定', '受付拒否', '代表接触拒否', '当日確認案件'] },
@@ -418,17 +422,30 @@ function LoginView({ onLogin }) {
 }
 
 // ---------- HOME ----------
-function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onNavigate, onOpenCustomer }) {
+function HomeView({ records, goals, setGoals, currentUser, isOwner, members, departments, onNavigate, onOpenCustomer }) {
   const [period, setPeriod] = useState(thisMonth);
-  const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
+  const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
+  const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
   const months = useMemo(() => {
     const set = new Set([thisMonth]);
     records.forEach(r => set.add(r.date?.substring(0, 7)));
     return Array.from(set).filter(Boolean).sort();
   }, [records]);
 
-  const scopedRecords = scope === 'all' ? records : records.filter(r => r.assignedTo === scope);
+  // 課に所属するメンバー名の一覧を取得
+  const membersInDept = (deptName) => members.filter(m => m.department === deptName).map(m => m.displayName);
+
+  const scopedRecords = (() => {
+    if (scopeType === 'all') return records;
+    if (scopeType === 'department') {
+      const names = membersInDept(scopeValue);
+      return records.filter(r => names.includes(r.assignedTo));
+    }
+    return records.filter(r => r.assignedTo === scopeValue);
+  })();
   const filtered = period === 'all' ? scopedRecords : scopedRecords.filter(r => r.date?.startsWith(period));
+
+  const scopeLabel = scopeType === 'all' ? '全体' : scopeType === 'department' ? `課: ${scopeValue || '未選択'}` : `個人: ${scopeValue || '未選択'}`;
 
   // 指標の計算
   const teleTimeSetting = filtered.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag)).length; // 初回時間設定件数
@@ -450,6 +467,45 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
     setEditing(false);
   };
 
+  // 実績サマリーを表にしてPDF化（ブラウザの印刷機能でPDF保存）
+  const exportPdf = () => {
+    const rows = [
+      ['初回時間設定件数', `${teleTimeSetting}件`, `${goal.timeSetting || 0}件`, goal.timeSetting > 0 ? `${Math.round(teleTimeSetting / goal.timeSetting * 100)}%` : '-'],
+      ['初回訪問件数', `${firstVisitCount}件`, `${goal.firstVisit || 0}件`, goal.firstVisit > 0 ? `${Math.round(firstVisitCount / goal.firstVisit * 100)}%` : '-'],
+      ['営業時間設定件数', `${salesTimeSetting}件`, `${goal.salesTimeSetting || 0}件`, goal.salesTimeSetting > 0 ? `${Math.round(salesTimeSetting / goal.salesTimeSetting * 100)}%` : '-'],
+      ['営業時間設定昇華率', `${salesTimeSettingRate}%`, '-', '-'],
+      ['受注件数', `${orderCount}件`, `${goal.order || 0}件`, goal.order > 0 ? `${Math.round(orderCount / goal.order * 100)}%` : '-'],
+      ['営業粗利', `${profitSum}P`, `${goal.profit || 0}P`, goal.profit > 0 ? `${Math.round(profitSum / goal.profit * 100)}%` : '-'],
+      ['台数', `${quantitySum}台`, `${goal.quantity || 0}台`, goal.quantity > 0 ? `${Math.round(quantitySum / goal.quantity * 100)}%` : '-'],
+      ['営業落率', `${closeRate}%`, '-', '-'],
+    ];
+    const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>実績レポート</title>
+<style>
+  body { font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; padding: 32px; color: #1e293b; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  p.meta { font-size: 12px; color: #64748b; margin: 0 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; }
+  th { background: #f1f5f9; font-weight: bold; }
+  td.num { text-align: right; }
+  @media print { body { padding: 0; } }
+</style></head><body>
+<h1>実績レポート</h1>
+<p class="meta">対象: ${scopeLabel} ／ 期間: ${period === 'all' ? '全期間' : period} ／ 出力日: ${new Date().toISOString().substring(0, 10)}</p>
+<table>
+  <thead><tr><th>項目</th><th>実績</th><th>目標</th><th>達成率</th></tr></thead>
+  <tbody>
+    ${rows.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td><td class="num">${r[3]}</td></tr>`).join('')}
+  </tbody>
+</table>
+<script>window.onload = function(){ window.print(); };<\/script>
+</body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+  };
+
   // カレンダー：直近の予定（3件）
   const todayStr = new Date().toISOString().substring(0, 10);
   const upcoming = scopedRecords
@@ -467,9 +523,28 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-slate-800">実績サマリー</h2>
         <div className="flex items-center gap-2 flex-wrap">
-          {isOwner && (
-            <select value={scope} onChange={e => setScope(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-              <option value="all">全員</option>
+          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+            {[['all', '全体'], ['department', '課'], ['personal', '個人']].map(([v, l]) => (
+              <button key={v}
+                onClick={() => {
+                  setScopeType(v);
+                  if (v === 'department') setScopeValue(currentUser?.department || (departments[0]?.name || ''));
+                  else if (v === 'personal') setScopeValue(currentUser?.displayName || '');
+                }}
+                className={`px-3 py-2 text-sm font-bold ${scopeType === v ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {scopeType === 'department' && (
+            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+              <option value="">課を選択</option>
+              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            </select>
+          )}
+          {scopeType === 'personal' && (
+            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} disabled={!isOwner}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white disabled:bg-slate-50">
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
@@ -480,6 +555,9 @@ function HomeView({ records, goals, setGoals, currentUser, isOwner, members, onN
           {period !== 'all' && (
             <button onClick={() => { setDraft(goal); setEditing(true); }} className="px-3 py-2 text-sm font-semibold text-teal-700 bg-teal-50 rounded-lg hover:bg-teal-100">目標設定</button>
           )}
+          <button onClick={exportPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-slate-700 rounded-lg hover:bg-slate-600">
+            <Download className="w-4 h-4" />PDF出力
+          </button>
         </div>
       </div>
 
@@ -1002,7 +1080,7 @@ function BulkEditModal({ count, members, associationTypes, activityTypes, onAppl
 
 // ---------- 顧客リスト ----------
 function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, members, currentUser, isOwner, canDeleteCustomer, canBulkEdit, token, showAlert, showConfirm, filters, setFilters, pendingViewCustomerId, clearPendingViewCustomer }) {
-  const { search, addressFilter, statusFilter, associationFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitFilter, excludeCompanyOverlap } = filters;
+  const { search, addressFilter, statusFilter, associationFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitFilter, excludeCompanyOverlap, excludeUser } = filters;
   const setSearch = (v) => setFilters(prev => ({ ...prev, search: v }));
   const setAddressFilter = (v) => setFilters(prev => ({ ...prev, addressFilter: v }));
   const setStatusFilter = (v) => setFilters(prev => ({ ...prev, statusFilter: v }));
@@ -1013,6 +1091,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
   const setViewMode = (v) => setFilters(prev => ({ ...prev, viewMode: v }));
   const setFirstVisitFilter = (v) => setFilters(prev => ({ ...prev, firstVisitFilter: v }));
   const setExcludeCompanyOverlap = (v) => setFilters(prev => ({ ...prev, excludeCompanyOverlap: v }));
+  const setExcludeUser = (v) => setFilters(prev => ({ ...prev, excludeUser: v }));
   const effectiveAssigneeFilter = isOwner ? assigneeFilter : (currentUser?.displayName || '');
 
   const [editing, setEditing] = useState(null); // customer being edited, or {} for new
@@ -1124,7 +1203,9 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
     const matchesFirstVisit = !firstVisitFilter || (firstVisitFilter === 'has' ? hasFirstVisit : !hasFirstVisit);
     const hasCompanyOverlap = custRecords.some(r => r.type === '法人被り' || r.flag === '法人被り');
     const matchesOverlap = !excludeCompanyOverlap || !hasCompanyOverlap;
-    return matchesSearch && matchesAddress && matchesStatus && matchesAssociation && matchesActivityType && matchesFlag && matchesAssignee && matchesFirstVisit && matchesOverlap;
+    const isUser = statusLabel === 'ユーザー';
+    const matchesUserExclusion = !excludeUser || !isUser;
+    return matchesSearch && matchesAddress && matchesStatus && matchesAssociation && matchesActivityType && matchesFlag && matchesAssignee && matchesFirstVisit && matchesOverlap && matchesUserExclusion;
   });
 
   const saveCustomer = (c) => {
@@ -1209,6 +1290,11 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
             <input type="checkbox" checked={excludeCompanyOverlap} onChange={e => setExcludeCompanyOverlap(e.target.checked)} className="accent-orange-600" />
             <AlertTriangle className="w-3.5 h-3.5 text-orange-500" />
             法人被りリストを除く
+          </label>
+          <label className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
+            <input type="checkbox" checked={excludeUser} onChange={e => setExcludeUser(e.target.checked)} className="accent-amber-600" />
+            <Star className="w-3.5 h-3.5 text-amber-500" />
+            ユーザーを除く
           </label>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1359,6 +1445,12 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                     {c.mobile && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.mobile}（携帯）</p>}
                     {c.email && <p className="flex items-center gap-1.5"><Mail className="w-3 h-3" />{c.email}</p>}
                     {c.address && <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3" />{c.address}</p>}
+                    {(c.reviewScore || c.reviewCount) && (
+                      <p className="flex items-center gap-1.5 text-amber-600">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        {c.reviewScore || '-'}（口コミ{c.reviewCount || 0}件）
+                      </p>
+                    )}
                   </div>
                   {(c.hpLink || c.recruitSiteLink || c.instagram || c.gbpLink) && (
                     <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -2228,7 +2320,8 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
 
 // ---------- カレンダー（訪問予定・再コール予定） ----------
 function CalendarView({ records, customers, members, currentUser, isOwner }) {
-  const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d; });
+  const [viewMode, setViewMode] = useState('month'); // 'month' | 'week' | 'day'
+  const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [scope, setScope] = useState(isOwner ? 'all' : (currentUser?.displayName || 'all'));
 
@@ -2244,84 +2337,194 @@ function CalendarView({ records, customers, members, currentUser, isOwner }) {
     return map;
   }, [scheduled]);
 
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const startWeekday = firstDay.getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayStr = new Date().toISOString().substring(0, 10);
+  const toDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const todayStr = toDateStr(new Date());
 
-  const cells = [];
-  for (let i = 0; i < startWeekday; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  // 表示範囲の移動
+  const move = (dir) => {
+    const d = new Date(cursor);
+    if (viewMode === 'month') d.setMonth(d.getMonth() + dir);
+    else if (viewMode === 'week') d.setDate(d.getDate() + dir * 7);
+    else d.setDate(d.getDate() + dir);
+    setCursor(d);
+  };
 
-  const dateStr = (d) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  // 週の開始日（日曜）を求める
+  const weekStart = (() => {
+    const d = new Date(cursor);
+    d.setDate(d.getDate() - d.getDay());
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
 
-  const selectedItems = selectedDate ? (byDate[selectedDate] || []) : [];
+  const HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7時〜21時
+  const HOUR_HEIGHT = 56; // 1時間あたりの高さ(px)
 
-  return (
-    <div className="space-y-4">
-      {isOwner && (
-        <div className="flex justify-end">
-          <select value={scope} onChange={e => setScope(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-            <option value="all">全員</option>
-            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-          </select>
-        </div>
-      )}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-100 p-4">
-        <button onClick={() => setCursor(new Date(year, month - 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronLeft className="w-5 h-5" /></button>
-        <p className="font-bold text-slate-700">{year}年 {month + 1}月</p>
-        <button onClick={() => setCursor(new Date(year, month + 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronRight className="w-5 h-5" /></button>
+  const headerLabel = viewMode === 'month'
+    ? `${cursor.getFullYear()}年 ${cursor.getMonth() + 1}月`
+    : viewMode === 'week'
+      ? `${weekStart.getMonth() + 1}月${weekStart.getDate()}日 〜 ${weekDays[6].getMonth() + 1}月${weekDays[6].getDate()}日`
+      : `${cursor.getFullYear()}年 ${cursor.getMonth() + 1}月${cursor.getDate()}日（${WEEKDAY_JA[cursor.getDay()]}）`;
+
+  // 時間グリッド上に予定を配置するための計算
+  const eventStyle = (r) => {
+    const [h, m] = (r.scheduledTime || '09:00').split(':').map(Number);
+    const top = ((h - 7) * 60 + (m || 0)) / 60 * HOUR_HEIGHT;
+    return { top: `${Math.max(top, 0)}px`, height: `${HOUR_HEIGHT}px` };
+  };
+
+  const findCustomer = (r) => customers.find(c => c.id === r.customerId);
+
+  const renderTimeGrid = (days) => (
+    <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+      <div className="flex border-b border-slate-100">
+        <div className="w-14 shrink-0 border-r border-slate-100" />
+        {days.map(d => {
+          const ds = toDateStr(d);
+          const isToday = ds === todayStr;
+          return (
+            <div key={ds} className={`flex-1 text-center py-2 ${isToday ? 'bg-teal-50' : ''}`}>
+              <p className="text-[11px] text-slate-400">{WEEKDAY_JA[d.getDay()]}</p>
+              <p className={`text-lg font-bold ${isToday ? 'text-teal-600' : 'text-slate-700'}`}>{d.getDate()}</p>
+            </div>
+          );
+        })}
       </div>
-
-      <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 mb-2">
-          {['日', '月', '火', '水', '木', '金', '土'].map(d => <div key={d}>{d}</div>)}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {cells.map((d, i) => {
-            if (d === null) return <div key={i} />;
-            const ds = dateStr(d);
+      <div className="overflow-y-auto max-h-[60vh]">
+        <div className="flex relative">
+          <div className="w-14 shrink-0 border-r border-slate-100">
+            {HOURS.map(h => (
+              <div key={h} style={{ height: HOUR_HEIGHT }} className="text-[10px] text-slate-400 text-right pr-1.5 -mt-1.5">
+                {h}:00
+              </div>
+            ))}
+          </div>
+          {days.map(d => {
+            const ds = toDateStr(d);
             const items = byDate[ds] || [];
-            const isToday = ds === todayStr;
             return (
-              <button key={i} onClick={() => setSelectedDate(ds)}
-                className={`aspect-square rounded-lg p-1 text-left border transition ${
-                  selectedDate === ds ? 'border-teal-500 bg-teal-50' : isToday ? 'border-teal-300' : 'border-transparent hover:border-slate-200'
-                }`}>
-                <span className={`text-xs ${isToday ? 'font-bold text-teal-600' : 'text-slate-600'}`}>{d}</span>
-                {items.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-0.5">
-                    {items.slice(0, 3).map((it, idx) => <span key={idx} className="w-1.5 h-1.5 rounded-full bg-indigo-400" />)}
-                  </div>
-                )}
-              </button>
+              <div key={ds} className="flex-1 relative border-r border-slate-50 last:border-r-0">
+                {HOURS.map(h => <div key={h} style={{ height: HOUR_HEIGHT }} className="border-b border-slate-50" />)}
+                {items.map(r => {
+                  const cust = findCustomer(r);
+                  return (
+                    <div key={r.id} style={eventStyle(r)}
+                      className="absolute left-0.5 right-0.5 bg-indigo-500 text-white rounded-md px-1.5 py-1 overflow-hidden shadow-sm">
+                      <p className="text-[10px] font-bold leading-tight truncate">{r.scheduledTime}</p>
+                      <p className="text-[10px] leading-tight truncate">{r.customerName || '不明な顧客'}</p>
+                      <p className="text-[9px] leading-tight opacity-80 truncate">{r.type}{r.flag ? `（${r.flag}）` : ''}</p>
+                      {cust?.address && <p className="text-[9px] leading-tight opacity-70 truncate">{cust.address}</p>}
+                    </div>
+                  );
+                })}
+              </div>
             );
           })}
         </div>
       </div>
+    </div>
+  );
 
-      {selectedDate && (
-        <div className="bg-white rounded-xl border border-slate-100 p-4">
-          <p className="text-sm font-bold text-slate-700 mb-3">{selectedDate} の予定（{selectedItems.length}件）</p>
-          {selectedItems.length === 0 ? (
-            <p className="text-sm text-slate-400">この日の予定はありません。</p>
-          ) : (
-            <ul className="space-y-2">
-              {selectedItems.map(r => (
-                <li key={r.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 text-sm">
-                  <div>
-                    <span className="font-semibold text-slate-700">{r.customerName || '不明な顧客'}</span>
-                    <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
-                  </div>
-                  <span className="text-xs text-indigo-600 font-bold">{r.scheduledTime || '時間未設定'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+  // 月表示用のセル
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const startWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthCells = [];
+  for (let i = 0; i < startWeekday; i++) monthCells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) monthCells.push(d);
+  const monthDateStr = (d) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const selectedItems = selectedDate ? (byDate[selectedDate] || []) : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          {[['month', '月'], ['week', '週'], ['day', '日']].map(([v, l]) => (
+            <button key={v} onClick={() => setViewMode(v)}
+              className={`px-4 py-2 rounded-lg text-sm font-bold ${viewMode === v ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>
+              {l}
+            </button>
+          ))}
+          <button onClick={() => setCursor(new Date())} className="px-4 py-2 rounded-lg text-sm font-bold bg-white border border-slate-200 text-slate-600">今日</button>
         </div>
+        {isOwner && (
+          <select value={scope} onChange={e => setScope(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="all">全員</option>
+            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+          </select>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-100 p-4">
+        <button onClick={() => move(-1)} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronLeft className="w-5 h-5" /></button>
+        <p className="font-bold text-slate-700">{headerLabel}</p>
+        <button onClick={() => move(1)} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronRight className="w-5 h-5" /></button>
+      </div>
+
+      {viewMode === 'month' && (
+        <>
+          <div className="bg-white rounded-xl border border-slate-100 p-4">
+            <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 mb-2">
+              {WEEKDAY_JA.map(d => <div key={d}>{d}</div>)}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {monthCells.map((d, i) => {
+                if (d === null) return <div key={i} />;
+                const ds = monthDateStr(d);
+                const items = byDate[ds] || [];
+                const isToday = ds === todayStr;
+                return (
+                  <button key={i} onClick={() => setSelectedDate(ds)}
+                    className={`aspect-square rounded-lg p-1 text-left border transition ${
+                      selectedDate === ds ? 'border-teal-500 bg-teal-50' : isToday ? 'border-teal-300' : 'border-transparent hover:border-slate-200'
+                    }`}>
+                    <span className={`text-xs ${isToday ? 'font-bold text-teal-600' : 'text-slate-600'}`}>{d}</span>
+                    {items.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-0.5">
+                        {items.slice(0, 3).map((it, idx) => <span key={idx} className="w-1.5 h-1.5 rounded-full bg-indigo-400" />)}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedDate && (
+            <div className="bg-white rounded-xl border border-slate-100 p-4">
+              <p className="text-sm font-bold text-slate-700 mb-3">{selectedDate} の予定（{selectedItems.length}件）</p>
+              {selectedItems.length === 0 ? (
+                <p className="text-sm text-slate-400">この日の予定はありません。</p>
+              ) : (
+                <ul className="space-y-2">
+                  {selectedItems.map(r => {
+                    const cust = findCustomer(r);
+                    return (
+                      <li key={r.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 text-sm">
+                        <div>
+                          <span className="font-semibold text-slate-700">{r.customerName || '不明な顧客'}</span>
+                          <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
+                          {cust?.address && <p className="text-xs text-slate-400 mt-0.5">{cust.address}</p>}
+                        </div>
+                        <span className="text-xs text-indigo-600 font-bold shrink-0">{r.scheduledTime || '時間未設定'}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
       )}
+
+      {viewMode === 'week' && renderTimeGrid(weekDays)}
+      {viewMode === 'day' && renderTimeGrid([cursor])}
     </div>
   );
 }
@@ -2485,7 +2688,7 @@ function Avatar({ photo, name, size = 'w-9 h-9' }) {
   );
 }
 
-function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
+function MembersManagement({ token, currentUser, departments, showAlert, showConfirm }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -2588,7 +2791,15 @@ function MembersManagement({ token, currentUser, showAlert, showConfirm }) {
             </div>
             <FormField label="ユーザー名（ログインID）" value={editing.username} onChange={e => setEditing({ ...editing, username: e.target.value })} />
             <FormField label="表示名" value={editing.displayName} onChange={e => setEditing({ ...editing, displayName: e.target.value })} />
-            <FormField label="課" value={editing.department || ''} onChange={e => setEditing({ ...editing, department: e.target.value })} placeholder="例：第一営業課" />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-500">課</label>
+              <select value={editing.department || ''} onChange={e => setEditing({ ...editing, department: e.target.value })}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+                <option value="">未設定</option>
+                {(departments || []).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              </select>
+              <p className="text-[11px] text-slate-400">課の追加・削除は「商品・フラグ管理」から行えます。</p>
+            </div>
             <FormField label={editing.id ? '新しいパスワード（変更する場合のみ）' : 'パスワード'} type="password" value={editing.password} onChange={e => setEditing({ ...editing, password: e.target.value })} />
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">役職</label>
@@ -3177,7 +3388,7 @@ function RolePermissionsView({ rolePermissions, setRolePermissions }) {
 function SettingsView({
   reportTemplates, setReportTemplates, dailyReportTemplates, setDailyReportTemplates,
   products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes,
-  knowledgeTags, setKnowledgeTags,
+  knowledgeTags, setKnowledgeTags, departments, setDepartments,
   rolePermissions, setRolePermissions, isOwner,
   token, currentUser, showAlert, showConfirm,
 }) {
@@ -3257,11 +3468,11 @@ function SettingsView({
       )}
 
       {innerTab === 'products' && (
-        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} associationTypes={associationTypes} setAssociationTypes={setAssociationTypes} knowledgeTags={knowledgeTags} setKnowledgeTags={setKnowledgeTags} showConfirm={showConfirm} />
+        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} associationTypes={associationTypes} setAssociationTypes={setAssociationTypes} knowledgeTags={knowledgeTags} setKnowledgeTags={setKnowledgeTags} departments={departments} setDepartments={setDepartments} showConfirm={showConfirm} />
       )}
 
       {innerTab === 'members' && (
-        <MembersManagement token={token} currentUser={currentUser} showAlert={showAlert} showConfirm={showConfirm} />
+        <MembersManagement token={token} currentUser={currentUser} departments={departments} showAlert={showAlert} showConfirm={showConfirm} />
       )}
 
       {innerTab === 'permissions' && (
@@ -3303,12 +3514,13 @@ function SettingsView({
 }
 
 // ---------- 商品・フラグ管理 ----------
-function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, knowledgeTags, setKnowledgeTags, showConfirm }) {
+function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, knowledgeTags, setKnowledgeTags, departments, setDepartments, showConfirm }) {
   const [newProduct, setNewProduct] = useState('');
   const [newType, setNewType] = useState('');
   const [flagDraft, setFlagDraft] = useState({});
   const [newAssociationType, setNewAssociationType] = useState('');
   const [newKnowledgeTag, setNewKnowledgeTag] = useState('');
+  const [newDepartment, setNewDepartment] = useState('');
 
   const addProduct = () => {
     if (!newProduct.trim()) return;
@@ -3351,6 +3563,12 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
     setNewKnowledgeTag('');
   };
 
+  const addDepartment = () => {
+    if (!newDepartment.trim()) return;
+    setDepartments([...(departments || []), { id: Date.now(), name: newDepartment.trim() }]);
+    setNewDepartment('');
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
@@ -3386,6 +3604,25 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
+        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Users className="w-4 h-4" />課の管理</h3>
+        <p className="text-xs text-slate-400 mb-3">ここで登録した課が、メンバー管理の「課」プルダウンとHOME画面の集計切り替えに反映されます。</p>
+        <div className="flex gap-2 mb-4">
+          <input value={newDepartment} onChange={e => setNewDepartment(e.target.value)} placeholder="例：WEB営業　東京　１課" autoComplete="off"
+            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          <button onClick={addDepartment} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(departments || []).map(d => (
+            <span key={d.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-full text-sm">
+              {d.name}
+              <button onClick={() => setDepartments((departments || []).filter(x => x.id !== d.id))} className="text-slate-300 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+            </span>
+          ))}
+          {(departments || []).length === 0 && <p className="text-xs text-slate-400">課が未登録です。</p>}
+        </div>
       </div>
 
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
@@ -3465,7 +3702,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [customerFilters, setCustomerFilters] = useState({
     search: '', addressFilter: '', statusFilter: '', associationFilter: '',
-    activityTypeFilter: '', flagFilter: '', assigneeFilter: '', viewMode: 'card', firstVisitFilter: '', excludeCompanyOverlap: false,
+    activityTypeFilter: '', flagFilter: '', assigneeFilter: '', viewMode: 'card', firstVisitFilter: '', excludeCompanyOverlap: false, excludeUser: false,
   });
   const [pendingViewCustomerId, setPendingViewCustomerId] = useState(null);
   const openCustomerFromHome = (customerId) => {
@@ -3483,11 +3720,11 @@ export default function App() {
     goals: initialGoals, emailTemplates: initialEmailTemplates, reportTemplates: initialReportTemplates,
     dailyReportTemplates: initialDailyReportTemplates, associationTypes: initialAssociationTypes, dailyReportLogs: [],
     caseStudies: initialCaseStudies, knowledgeArticles: initialKnowledgeArticles,
-    knowledgeTags: initialKnowledgeTags,
+    knowledgeTags: initialKnowledgeTags, departments: initialDepartments,
     rolePermissions: initialRolePermissions,
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, caseStudies, knowledgeArticles, rolePermissions, knowledgeTags } = data;
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, caseStudies, knowledgeArticles, rolePermissions, knowledgeTags, departments } = data;
   const canViewSettings = isOwner || hasPermission(user?.role, 'viewSettings', rolePermissions);
   const canDeleteCustomer = isOwner || hasPermission(user?.role, 'deleteCustomer', rolePermissions);
   const canBulkEdit = isOwner || hasPermission(user?.role, 'bulkEdit', rolePermissions);
@@ -3507,6 +3744,7 @@ export default function App() {
   const setKnowledgeArticles = makeSetter('knowledgeArticles');
   const setRolePermissions = makeSetter('rolePermissions');
   const setKnowledgeTags = makeSetter('knowledgeTags');
+  const setDepartments = makeSetter('departments');
 
   // メンバー一覧（担当者選択・絞り込み用）を取得
   useEffect(() => {
@@ -3604,7 +3842,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
         <h2 className="hidden md:block text-xl font-bold text-slate-800 mb-6">{titles[activeTab]}</h2>
         {activeTab === 'home' && (
-          <HomeView records={records} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
+          <HomeView records={records} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
         )}
         {activeTab === 'customers' && (
           <CustomersView
@@ -3647,6 +3885,7 @@ export default function App() {
             associationTypes={associationTypes} setAssociationTypes={setAssociationTypes}
             rolePermissions={rolePermissions} setRolePermissions={setRolePermissions} isOwner={isOwner}
             knowledgeTags={knowledgeTags || []} setKnowledgeTags={setKnowledgeTags}
+            departments={departments || []} setDepartments={setDepartments}
             token={token} currentUser={user}
             showAlert={showAlert} showConfirm={showConfirm}
           />
