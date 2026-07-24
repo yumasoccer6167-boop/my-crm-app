@@ -3468,6 +3468,33 @@ function KnowledgeBaseView({ articles, setArticles, knowledgeTags, members, curr
     });
   };
 
+  // ---- 手順表（表形式）の行操作 ----
+  const addRow = () => {
+    setEditing(prev => ({
+      ...prev,
+      rows: [...(prev.rows || []), { id: Date.now(), category: '', step: '', link: '', note: '', warn: false }],
+    }));
+  };
+  const updateRow = (rowId, key, value) => {
+    setEditing(prev => ({
+      ...prev,
+      rows: (prev.rows || []).map(r => r.id === rowId ? { ...r, [key]: value } : r),
+    }));
+  };
+  const removeRow = (rowId) => {
+    setEditing(prev => ({ ...prev, rows: (prev.rows || []).filter(r => r.id !== rowId) }));
+  };
+  const moveRow = (rowId, dir) => {
+    setEditing(prev => {
+      const rows = [...(prev.rows || [])];
+      const i = rows.findIndex(r => r.id === rowId);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= rows.length) return prev;
+      [rows[i], rows[j]] = [rows[j], rows[i]];
+      return { ...prev, rows };
+    });
+  };
+
   const handleFileAdd = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -3536,9 +3563,48 @@ function KnowledgeBaseView({ articles, setArticles, knowledgeTags, members, curr
           </label>
         </div>
 
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-slate-500">手順表（任意）</label>
+            <button onClick={addRow} className="flex items-center gap-1 text-xs text-teal-600 font-bold"><Plus className="w-3.5 h-3.5" />行を追加</button>
+          </div>
+          {(editing.rows || []).length === 0 ? (
+            <p className="text-xs text-slate-400">「行を追加」で、大分類・手順・リンク・注意点を表形式で登録できます。</p>
+          ) : (
+            <div className="space-y-2">
+              {(editing.rows || []).map((row, idx) => (
+                <div key={row.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-400">{idx + 1}行目</span>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => moveRow(row.id, -1)} disabled={idx === 0} className="p-1 text-slate-400 hover:text-teal-600 disabled:opacity-30">↑</button>
+                      <button onClick={() => moveRow(row.id, 1)} disabled={idx === (editing.rows || []).length - 1} className="p-1 text-slate-400 hover:text-teal-600 disabled:opacity-30">↓</button>
+                      <button onClick={() => removeRow(row.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <input value={row.category} onChange={e => updateRow(row.id, 'category', e.target.value)} placeholder="大分類（例：SP-MEO）"
+                      className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
+                    <input value={row.link} onChange={e => updateRow(row.id, 'link', e.target.value)} placeholder="リンク（URL・任意）"
+                      className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
+                  </div>
+                  <textarea value={row.step} onChange={e => updateRow(row.id, 'step', e.target.value)} rows={2} placeholder="手順（例：①受注）"
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
+                  <textarea value={row.note} onChange={e => updateRow(row.id, 'note', e.target.value)} rows={2} placeholder="注意点（任意）"
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
+                  <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
+                    <input type="checkbox" checked={!!row.warn} onChange={e => updateRow(row.id, 'warn', e.target.checked)} className="accent-red-600" />
+                    注意点を赤字で強調する
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">内容</label>
-          <textarea value={editing.body} onChange={e => setEditing({ ...editing, body: e.target.value })} rows={16}
+          <label className="text-xs font-semibold text-slate-500">内容（補足メモ・任意）</label>
+          <textarea value={editing.body} onChange={e => setEditing({ ...editing, body: e.target.value })} rows={10}
             className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm font-mono" />
         </div>
         <div className="flex gap-2">
@@ -3593,6 +3659,34 @@ function KnowledgeBaseView({ articles, setArticles, knowledgeTags, members, curr
               </ul>
             </div>
           )}
+          {(selected.rows || []).length > 0 && (
+            <div className="mb-5 overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-left text-xs text-slate-500">
+                    <th className="border border-slate-200 px-3 py-2 w-28">大分類</th>
+                    <th className="border border-slate-200 px-3 py-2">手順</th>
+                    <th className="border border-slate-200 px-3 py-2 w-32">リンク</th>
+                    <th className="border border-slate-200 px-3 py-2 w-56">注意点</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(selected.rows || []).map(row => (
+                    <tr key={row.id} className="align-top">
+                      <td className="border border-slate-200 px-3 py-2 font-bold text-slate-700">{row.category}</td>
+                      <td className="border border-slate-200 px-3 py-2 text-slate-700 whitespace-pre-wrap">{row.step}</td>
+                      <td className="border border-slate-200 px-3 py-2">
+                        {row.link && (
+                          <a href={row.link} target="_blank" rel="noreferrer" className="text-indigo-600 underline break-all text-xs">開く</a>
+                        )}
+                      </td>
+                      <td className={`border border-slate-200 px-3 py-2 whitespace-pre-wrap text-xs ${row.warn ? 'text-red-600 font-bold' : 'text-slate-600'}`}>{row.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{selected.body}</div>
         </div>
       </div>
@@ -3614,7 +3708,7 @@ function KnowledgeBaseView({ articles, setArticles, knowledgeTags, members, curr
           </select>
         </div>
         {canEdit && (
-          <button onClick={() => setEditing({ id: null, title: '', body: '', ytLink: '', tags: [], files: [], assignedTo: '' })} className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">
+          <button onClick={() => setEditing({ id: null, title: '', body: '', ytLink: '', tags: [], files: [], rows: [], assignedTo: '' })} className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">
             <Plus className="w-4 h-4" />新しい記事
           </button>
         )}
@@ -3641,6 +3735,7 @@ function KnowledgeBaseView({ articles, setArticles, knowledgeTags, members, curr
                 <BookOpen className="w-4 h-4 text-teal-600" />{a.title}
                 {a.ytLink && <Video className="w-3.5 h-3.5 text-red-500 shrink-0" />}
                 {(a.files || []).length > 0 && <FileText className="w-3.5 h-3.5 text-indigo-500 shrink-0" />}
+                {(a.rows || []).length > 0 && <List className="w-3.5 h-3.5 text-teal-600 shrink-0" />}
               </p>
               {(a.tags || []).length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
