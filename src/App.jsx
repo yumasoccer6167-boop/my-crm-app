@@ -1005,7 +1005,18 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
         {customer.hpLink && <a href={customer.hpLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-600"><Globe className="w-4 h-4" />HP</a>}
         {customer.recruitSiteLink && <a href={customer.recruitSiteLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-emerald-600"><Briefcase className="w-4 h-4" />採用サイト</a>}
         {customer.instagram && <a href={customer.instagram} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-pink-600"><Camera className="w-4 h-4" />Instagram</a>}
-        {customer.reviewScore && <span className="flex items-center gap-1 text-amber-500"><Star className="w-4 h-4 fill-amber-400" />{customer.reviewScore}（{customer.reviewCount || 0}件）</span>}
+        {customer.reviewScore && (
+          customer.gbpLink ? (
+            <a href={customer.gbpLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-amber-500 hover:text-amber-600 hover:underline">
+              <Star className="w-4 h-4 fill-amber-400" />{customer.reviewScore}（{customer.reviewCount || 0}件）
+            </a>
+          ) : (
+            <span className="flex items-center gap-1 text-amber-500"><Star className="w-4 h-4 fill-amber-400" />{customer.reviewScore}（{customer.reviewCount || 0}件）</span>
+          )
+        )}
+        {!customer.reviewScore && customer.gbpLink && (
+          <a href={customer.gbpLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-amber-500 hover:underline"><Star className="w-4 h-4" />GBP</a>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-4 mb-5">
@@ -1204,12 +1215,18 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 
   const [editing, setEditing] = useState(null); // customer being edited, or {} for new
   const [viewing, setViewing] = useState(null); // customer being viewed
+  // 他のページ（HOME・カレンダー等）から特定の顧客を開いた場合、
+  // カードを閉じた後もその顧客だけがリストに残るようにする
+  const [focusedCustomerId, setFocusedCustomerId] = useState(null);
 
   // HOME画面の「直近の予定」「最近の記録」から遷移してきた場合、該当の顧客を自動で開く
   useEffect(() => {
     if (!pendingViewCustomerId) return;
     const target = customers.find(c => c.id === pendingViewCustomerId);
-    if (target) setViewing(target);
+    if (target) {
+      setViewing(target);
+      setFocusedCustomerId(target.id);
+    }
     clearPendingViewCustomer();
   }, [pendingViewCustomerId, customers]);
   const [viewingWithForm, setViewingWithForm] = useState(false);
@@ -1295,7 +1312,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
     reader.readAsText(file, 'UTF-8');
   };
 
-  const filtered = customers.filter(c => {
+  const filteredBase = customers.filter(c => {
     const q = search.toLowerCase();
     const matchesSearch = !q || [c.gakuenName, c.enName, c.chairman, c.principal].some(v => (v || '').toLowerCase().includes(q));
     const matchesAddress = !addressFilter || (c.address || '').toLowerCase().includes(addressFilter.toLowerCase());
@@ -1315,6 +1332,10 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
     const matchesUserExclusion = !excludeUser || !isUser;
     return matchesSearch && matchesAddress && matchesStatus && matchesAssociation && matchesActivityType && matchesFlag && matchesAssignee && matchesFirstVisit && matchesOverlap && matchesUserExclusion;
   });
+
+  // 他ページから特定の顧客を開いた場合は、その顧客だけを表示する
+  const focusedCustomer = focusedCustomerId ? customers.find(c => c.id === focusedCustomerId) : null;
+  const filtered = focusedCustomer ? [focusedCustomer] : filteredBase;
 
   const saveCustomer = (c) => {
     setCustomers(prev => {
@@ -1358,6 +1379,16 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 
   return (
     <div className="space-y-4">
+      {focusedCustomer && (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5">
+          <p className="text-sm text-teal-800">
+            <strong>{focusedCustomer.enName || focusedCustomer.gakuenName}</strong> のみを表示しています
+          </p>
+          <button onClick={() => setFocusedCustomerId(null)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-teal-200 text-teal-700 rounded-lg text-xs font-bold hover:bg-teal-100">
+            <X className="w-3.5 h-3.5" />すべての顧客を表示
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -1554,10 +1585,18 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                     {c.email && <p className="flex items-center gap-1.5"><Mail className="w-3 h-3" />{c.email}</p>}
                     {c.address && <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3" />{c.address}</p>}
                     {(c.reviewScore || c.reviewCount) && (
-                      <p className="flex items-center gap-1.5 text-amber-600">
-                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        {c.reviewScore || '-'}（口コミ{c.reviewCount || 0}件）
-                      </p>
+                      c.gbpLink ? (
+                        <a href={c.gbpLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1.5 text-amber-600 hover:text-amber-700 hover:underline w-fit">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          {c.reviewScore || '-'}（口コミ{c.reviewCount || 0}件）
+                        </a>
+                      ) : (
+                        <p className="flex items-center gap-1.5 text-amber-600">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          {c.reviewScore || '-'}（口コミ{c.reviewCount || 0}件）
+                        </p>
+                      )
                     )}
                   </div>
                   {(c.hpLink || c.recruitSiteLink || c.instagram || c.gbpLink) && (
@@ -2570,6 +2609,40 @@ function CalendarView({ records, customers, members, departments, currentUser, i
 
   const findCustomer = (r) => customers.find(c => c.id === r.customerId);
 
+  // 予定の色分けモード：'type'（初回訪問／営業など種別ごと）か 'member'（担当者ごと）
+  const [colorMode, setColorMode] = useState('type');
+
+  // 種別ごとの色
+  const typeColor = (r) => {
+    const t = r.type || '';
+    if (t === '初回訪問' || r.flag === '初回時間設定（代表）' || r.flag === '初回時間設定（担当）' || r.flag === '飛び込み初回時間設定') {
+      return { bg: 'bg-violet-500', hover: 'hover:bg-violet-600', dot: 'bg-violet-500', label: '初回訪問' };
+    }
+    if (t.startsWith('営業')) return { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', dot: 'bg-blue-500', label: '営業' };
+    if (t === 'テレアポ') return { bg: 'bg-pink-500', hover: 'hover:bg-pink-600', dot: 'bg-pink-500', label: 'テレアポ' };
+    if (t === '受注登録' || r.flag === '受注') return { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', dot: 'bg-amber-500', label: '受注' };
+    return { bg: 'bg-slate-500', hover: 'hover:bg-slate-600', dot: 'bg-slate-500', label: 'その他' };
+  };
+
+  // 担当者ごとの色（メンバーの並び順で固定の色を割り当てる）
+  const MEMBER_COLORS = [
+    { bg: 'bg-teal-500', hover: 'hover:bg-teal-600', dot: 'bg-teal-500' },
+    { bg: 'bg-indigo-500', hover: 'hover:bg-indigo-600', dot: 'bg-indigo-500' },
+    { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', dot: 'bg-rose-500' },
+    { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', dot: 'bg-amber-500' },
+    { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', dot: 'bg-emerald-500' },
+    { bg: 'bg-fuchsia-500', hover: 'hover:bg-fuchsia-600', dot: 'bg-fuchsia-500' },
+    { bg: 'bg-cyan-500', hover: 'hover:bg-cyan-600', dot: 'bg-cyan-500' },
+    { bg: 'bg-orange-500', hover: 'hover:bg-orange-600', dot: 'bg-orange-500' },
+  ];
+  const memberColor = (name) => {
+    if (!name) return { bg: 'bg-slate-400', hover: 'hover:bg-slate-500', dot: 'bg-slate-400' };
+    const idx = members.findIndex(m => m.displayName === name);
+    return MEMBER_COLORS[(idx >= 0 ? idx : name.length) % MEMBER_COLORS.length];
+  };
+
+  const eventColor = (r) => colorMode === 'member' ? memberColor(effectiveAssignee(r)) : typeColor(r);
+
   const renderTimeGrid = (days) => (
     <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
       <div className="flex border-b border-slate-100">
@@ -2602,10 +2675,11 @@ function CalendarView({ records, customers, members, departments, currentUser, i
                 {HOURS.map(h => <div key={h} style={{ height: HOUR_HEIGHT }} className="border-b border-slate-50" />)}
                 {items.map(r => {
                   const cust = findCustomer(r);
+                  const col = eventColor(r);
                   return (
                     <button key={r.id} style={eventStyle(r)}
                       onClick={() => onOpenCustomer && onOpenCustomer(r.customerId)}
-                      className="absolute left-0.5 right-0.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md px-1.5 py-1 overflow-hidden shadow-sm text-left transition">
+                      className={`absolute left-0.5 right-0.5 ${col.bg} ${col.hover} text-white rounded-md px-1.5 py-1 overflow-hidden shadow-sm text-left transition`}>
                       <p className="text-[10px] font-bold leading-tight truncate">{r.scheduledTime}</p>
                       <p className="text-[10px] leading-tight truncate">{r.customerName || '不明な顧客'}</p>
                       <p className="text-[9px] leading-tight opacity-80 truncate">{r.type}{r.flag ? `（${r.flag}）` : ''}</p>
@@ -2643,6 +2717,14 @@ function CalendarView({ records, customers, members, departments, currentUser, i
             </button>
           ))}
           <button onClick={() => setCursor(new Date())} className="px-4 py-2 rounded-lg text-sm font-bold bg-white border border-slate-200 text-slate-600">今日</button>
+          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+            {[['type', '種別で色分け'], ['member', '担当者で色分け']].map(([v, l]) => (
+              <button key={v} onClick={() => setColorMode(v)}
+                className={`px-3 py-2 text-sm font-bold ${colorMode === v ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                {l}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex border border-slate-200 rounded-lg overflow-hidden">
@@ -2679,6 +2761,22 @@ function CalendarView({ records, customers, members, departments, currentUser, i
         <button onClick={() => move(1)} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronRight className="w-5 h-5" /></button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 px-1">
+        {colorMode === 'type' ? (
+          [['初回訪問', 'bg-violet-500'], ['営業', 'bg-blue-500'], ['テレアポ', 'bg-pink-500'], ['受注', 'bg-amber-500'], ['その他', 'bg-slate-500']].map(([l, c]) => (
+            <span key={l} className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className={`w-2.5 h-2.5 rounded-full ${c}`} />{l}
+            </span>
+          ))
+        ) : (
+          members.map(m => (
+            <span key={m.id} className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className={`w-2.5 h-2.5 rounded-full ${memberColor(m.displayName).dot}`} />{m.displayName}
+            </span>
+          ))
+        )}
+      </div>
+
       {viewMode === 'month' && (
         <>
           <div className="bg-white rounded-xl border border-slate-100 p-4">
@@ -2699,7 +2797,7 @@ function CalendarView({ records, customers, members, departments, currentUser, i
                     <span className={`text-xs ${isToday ? 'font-bold text-teal-600' : 'text-slate-600'}`}>{d}</span>
                     {items.length > 0 && (
                       <div className="mt-1 flex flex-wrap gap-0.5">
-                        {items.slice(0, 3).map((it, idx) => <span key={idx} className="w-1.5 h-1.5 rounded-full bg-indigo-400" />)}
+                        {items.slice(0, 3).map((it, idx) => <span key={idx} className={`w-1.5 h-1.5 rounded-full ${eventColor(it).dot}`} />)}
                       </div>
                     )}
                   </button>
@@ -2717,14 +2815,18 @@ function CalendarView({ records, customers, members, departments, currentUser, i
                 <ul className="space-y-2">
                   {selectedItems.map(r => {
                     const cust = findCustomer(r);
+                    const col = eventColor(r);
                     return (
                       <li key={r.id}>
                         <button onClick={() => onOpenCustomer && onOpenCustomer(r.customerId)}
                           className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 rounded-lg px-3 py-2 text-sm text-left transition">
-                          <div>
-                            <span className="font-semibold text-teal-700 hover:underline">{r.customerName || '不明な顧客'}</span>
-                            <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
-                            {cust?.address && <p className="text-xs text-slate-400 mt-0.5">{cust.address}</p>}
+                          <div className="flex items-start gap-2">
+                            <span className={`w-2.5 h-2.5 rounded-full ${col.dot} mt-1.5 shrink-0`} />
+                            <div>
+                              <span className="font-semibold text-teal-700 hover:underline">{r.customerName || '不明な顧客'}</span>
+                              <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
+                              {cust?.address && <p className="text-xs text-slate-400 mt-0.5">{cust.address}</p>}
+                            </div>
                           </div>
                           <span className="text-xs text-indigo-600 font-bold shrink-0">{r.scheduledTime || '時間未設定'}</span>
                         </button>
