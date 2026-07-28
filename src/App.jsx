@@ -466,6 +466,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
   const [period, setPeriod] = useState(thisMonth);
   const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
   const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
+  const [associationFilter, setAssociationFilter] = useState('');
   const months = useMemo(() => {
     const set = new Set([thisMonth]);
     records.forEach(r => set.add(r.date?.substring(0, 7)));
@@ -484,17 +485,34 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
   }, [customers]);
   const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
 
+  // 顧客ごとの協会の種類（記録から辿れるようにする）
+  const customerAssociationById = useMemo(() => {
+    const map = {};
+    customers.forEach(c => { map[c.id] = c.associationType || ''; });
+    return map;
+  }, [customers]);
+  const associationOptions = useMemo(
+    () => [...new Set(customers.map(c => c.associationType).filter(Boolean))],
+    [customers]
+  );
+
   const scopedRecords = (() => {
-    if (scopeType === 'all') return records;
+    let base = records;
     if (scopeType === 'department') {
       const names = membersInDept(scopeValue);
-      return records.filter(r => names.includes(effectiveAssignee(r)));
+      base = base.filter(r => names.includes(effectiveAssignee(r)));
+    } else if (scopeType === 'personal') {
+      base = base.filter(r => effectiveAssignee(r) === scopeValue);
     }
-    return records.filter(r => effectiveAssignee(r) === scopeValue);
+    if (associationFilter) {
+      base = base.filter(r => customerAssociationById[r.customerId] === associationFilter);
+    }
+    return base;
   })();
   const filtered = period === 'all' ? scopedRecords : scopedRecords.filter(r => r.date?.startsWith(period));
 
-  const scopeLabel = scopeType === 'all' ? '全体' : scopeType === 'department' ? `課: ${scopeValue || '未選択'}` : `個人: ${scopeValue || '未選択'}`;
+  const scopeLabel = (scopeType === 'all' ? '全体' : scopeType === 'department' ? `課: ${scopeValue || '未選択'}` : `個人: ${scopeValue || '未選択'}`)
+    + (associationFilter ? ` ／ 協会: ${associationFilter}` : '');
 
   // 指標の計算（内訳表示のため、対象となった記録も保持しておく）
   const teleTimeSettingRecs = filtered.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag));
@@ -606,6 +624,10 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
+          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべての協会</option>
+            {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
           <select value={period} onChange={e => setPeriod(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
             <option value="all">全期間</option>
             {months.map(m => <option key={m} value={m}>{m}</option>)}
@@ -986,6 +1008,9 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
 
   return (
     <Modal title={customer.enName || customer.gakuenName} onClose={onClose} wide>
+      {customer.gakuenName && (
+        <p className="text-sm text-slate-500 -mt-1 mb-2">法人名: {customer.gakuenName}</p>
+      )}
       {(() => {
         const status = getCustomerStatus(customer.id, records);
         return (customer.associationType || status) && (
@@ -2006,6 +2031,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
   const [granularity, setGranularity] = useState('day');
   const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
   const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
+  const [associationFilter, setAssociationFilter] = useState('');
   const [drilldown, setDrilldown] = useState(null); // { title, records }
 
   // 記録に担当者が無い場合は顧客側の担当者で補う
@@ -2017,13 +2043,29 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
   const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
   const membersInDept = (deptName) => members.filter(m => m.department === deptName).map(m => m.displayName);
 
+  // 顧客ごとの協会の種類
+  const customerAssociationById = useMemo(() => {
+    const map = {};
+    (customers || []).forEach(c => { map[c.id] = c.associationType || ''; });
+    return map;
+  }, [customers]);
+  const associationOptions = useMemo(
+    () => [...new Set((customers || []).map(c => c.associationType).filter(Boolean))],
+    [customers]
+  );
+
   const scopedRecords = (() => {
-    if (scopeType === 'all') return records;
+    let base = records;
     if (scopeType === 'department') {
       const names = membersInDept(scopeValue);
-      return records.filter(r => names.includes(effectiveAssignee(r)));
+      base = base.filter(r => names.includes(effectiveAssignee(r)));
+    } else if (scopeType === 'personal') {
+      base = base.filter(r => effectiveAssignee(r) === scopeValue);
     }
-    return records.filter(r => effectiveAssignee(r) === scopeValue);
+    if (associationFilter) {
+      base = base.filter(r => customerAssociationById[r.customerId] === associationFilter);
+    }
+    return base;
   })();
   const teleRecords = scopedRecords.filter(r => r.type === 'テレアポ');
   // 現在設定されているフラグ ＋ 過去に使われたことがあるが今は消えたフラグも漏らさず集計する
@@ -2118,6 +2160,10 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
+          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべての協会</option>
+            {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
         </div>
       </div>
 
@@ -2538,6 +2584,7 @@ function CalendarView({ records, customers, members, departments, currentUser, i
   const [selectedDate, setSelectedDate] = useState(null);
   const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
   const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
+  const [associationFilter, setAssociationFilter] = useState('');
 
   const customerAssigneeById = useMemo(() => {
     const map = {};
@@ -2547,13 +2594,29 @@ function CalendarView({ records, customers, members, departments, currentUser, i
   const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
   const membersInDept = (deptName) => members.filter(m => m.department === deptName).map(m => m.displayName);
 
+  // 顧客ごとの協会の種類
+  const customerAssociationById = useMemo(() => {
+    const map = {};
+    (customers || []).forEach(c => { map[c.id] = c.associationType || ''; });
+    return map;
+  }, [customers]);
+  const associationOptions = useMemo(
+    () => [...new Set((customers || []).map(c => c.associationType).filter(Boolean))],
+    [customers]
+  );
+
   const scoped = (() => {
-    if (scopeType === 'all') return records;
+    let base = records;
     if (scopeType === 'department') {
       const names = membersInDept(scopeValue);
-      return records.filter(r => names.includes(effectiveAssignee(r)));
+      base = base.filter(r => names.includes(effectiveAssignee(r)));
+    } else if (scopeType === 'personal') {
+      base = base.filter(r => effectiveAssignee(r) === scopeValue);
     }
-    return records.filter(r => effectiveAssignee(r) === scopeValue);
+    if (associationFilter) {
+      base = base.filter(r => customerAssociationById[r.customerId] === associationFilter);
+    }
+    return base;
   })();
   const scheduled = scoped.filter(r => r.scheduledDate);
   const byDate = useMemo(() => {
@@ -2752,6 +2815,10 @@ function CalendarView({ records, customers, members, departments, currentUser, i
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
+          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべての協会</option>
+            {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
         </div>
       </div>
 
