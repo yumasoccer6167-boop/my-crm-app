@@ -157,6 +157,24 @@ def change_own_password():
     return jsonify({'status': 'success'})
 
 
+@app.route('/api/me/name', methods=['PUT'])
+def change_own_name():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'unauthorized'}), 401
+    body = request.get_json(force=True) or {}
+    display_name = (body.get('displayName') or '').strip()
+    if not display_name:
+        return jsonify({'error': '表示名を入力してください'}), 400
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute('UPDATE users SET display_name = %s WHERE id = %s', (display_name, user['id']))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+
 @app.route('/api/me/photo', methods=['PUT'])
 def change_own_photo():
     user = get_current_user()
