@@ -41,7 +41,8 @@ const thisMonth = new Date().toISOString().substring(0, 7);
 const initialGoals = { [thisMonth]: { timeSetting: 50, firstVisit: 20, salesTimeSetting: 15, order: 5, profit: 500000, quantity: 10 } };
 
 const emptyCustomer = {
-  id: null, gakuenName: '', gakuenNameKana: '', enName: '', enNameKana: '', associationType: '', chairman: '', principal: '', address: '',
+  id: null, gakuenName: '', gakuenNameKana: '', enName: '', enNameKana: '', associationType: '',
+  chairman: '', chairmanKana: '', principal: '', principalKana: '', address: '',
   tel: '', mobile: '', email: '', hpLink: '', recruitSiteLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
 };
 
@@ -109,7 +110,8 @@ const CSV_FIELDS = [
   ['gakuenName', '法人名', '学園名'], ['gakuenNameKana', '法人名ふりがな'],
   ['enName', '園名'], ['enNameKana', '園名ふりがな'],
   ['associationType', '協会の種類', '協会関係'],
-  ['chairman', '理事長'], ['principal', '園長'],
+  ['chairman', '理事長'], ['chairmanKana', '理事長ふりがな'],
+  ['principal', '園長'], ['principalKana', '園長ふりがな'],
   ['address', '住所'], ['tel', 'TEL'], ['mobile', '携帯番号'],
   ['email', 'メール', 'メールアドレス'],
   ['hpLink', 'HPリンク'], ['recruitSiteLink', '採用サイトリンク'], ['hpVendor', 'HP業者'],
@@ -813,7 +815,9 @@ function CustomerModal({ customer, associationTypes, members, currentUser, onSav
           </select>
         </div>
         <FormField label="理事長" value={form.chairman} onChange={set('chairman')} />
+        <FormField label="理事長ふりがな" value={form.chairmanKana} onChange={set('chairmanKana')} placeholder="例：やまだ たろう" />
         <FormField label="園長" value={form.principal} onChange={set('principal')} />
+        <FormField label="園長ふりがな" value={form.principalKana} onChange={set('principalKana')} placeholder="例：すずき はなこ" />
         <FormField label="住所" value={form.address} onChange={set('address')} className="md:col-span-2" />
         <FormField label="TEL" value={form.tel} onChange={set('tel')} />
         <FormField label="携帯番号" value={form.mobile} onChange={set('mobile')} />
@@ -894,6 +898,7 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
   const isOrder = flag === '受注' || flag === 'ユーザー';
   const needsSchedule = SCHEDULE_FLAGS.includes(flag);
   const isTele = type === 'テレアポ';
+  const isRecall = flag === '再コール';
 
   const save = () => {
     onSave({
@@ -901,6 +906,7 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
       ...(isOrder ? { productName, monthlyFee, years, quantity, profit } : { productName: undefined, monthlyFee: undefined, years: undefined, quantity: undefined, profit: undefined }),
       ...(needsSchedule && scheduledDate ? { scheduledDate, scheduledTime } : { scheduledDate: undefined, scheduledTime: undefined }),
       ...(isTele && (voiceLink || voiceMemo) ? { voiceLink, voiceMemo } : { voiceLink: undefined, voiceMemo: undefined }),
+      ...(isRecall ? {} : { recallDone: undefined }),
     });
   };
 
@@ -933,8 +939,8 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
 
       {needsSchedule && (
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="予定日" type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
-          <FormField label="予定時間" type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} />
+          <FormField label={isRecall ? '再コール予定日' : '予定日'} type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
+          <FormField label={isRecall ? '再コール予定時間' : '予定時間'} type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} />
         </div>
       )}
 
@@ -1021,8 +1027,8 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
         );
       })()}
       <div className="flex flex-wrap gap-4 text-sm text-slate-600 mb-5">
-        {customer.chairman && <span className="flex items-center gap-1"><Users className="w-4 h-4" />理事長: {customer.chairman}</span>}
-        {customer.principal && <span className="flex items-center gap-1"><Users className="w-4 h-4" />園長: {customer.principal}</span>}
+        {customer.chairman && <span className="flex items-center gap-1"><Users className="w-4 h-4" />理事長: {customer.chairman}{customer.chairmanKana ? `（${customer.chairmanKana}）` : ''}</span>}
+        {customer.principal && <span className="flex items-center gap-1"><Users className="w-4 h-4" />園長: {customer.principal}{customer.principalKana ? `（${customer.principalKana}）` : ''}</span>}
         {customer.tel && <a href={`tel:${customer.tel}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.tel}</a>}
         {customer.mobile && <a href={`tel:${customer.mobile}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.mobile}（携帯）</a>}
         {customer.email && <a href={`mailto:${customer.email}`} className="flex items-center gap-1 text-teal-700"><Mail className="w-4 h-4" />{customer.email}</a>}
@@ -1094,6 +1100,11 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-slate-700">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
                       {r.assignedTo && <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full text-[10px] font-bold">担当: {r.assignedTo}</span>}
+                      {r.flag === '再コール' && (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.recallDone ? 'bg-slate-200 text-slate-500' : 'bg-orange-100 text-orange-700'}`}>
+                          {r.recallDone ? '再コール対応済み' : '再コール未対応'}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-xs text-slate-400">{r.date} {r.time}</span>
@@ -1105,7 +1116,7 @@ function CustomerDetailModal({ customer, records, setRecords, activityTypes, pro
                   </div>
                   {r.memo && <p className="text-slate-500 mt-1">{r.memo}</p>}
                   {r.productName && <p className="text-amber-700 mt-1 text-xs">受注: {r.productName} / 月額{r.monthlyFee || 0} / {r.years || 0}年 / 台数{r.quantity || 0} / 粗利{r.profit || 0}</p>}
-                  {r.scheduledDate && <p className="text-indigo-600 mt-1 text-xs flex items-center gap-1"><CalendarDays className="w-3 h-3" />次回予定: {r.scheduledDate} {r.scheduledTime}</p>}
+                  {r.scheduledDate && <p className="text-indigo-600 mt-1 text-xs flex items-center gap-1"><CalendarDays className="w-3 h-3" />{r.flag === '再コール' ? '再コール予定' : '次回予定'}: {r.scheduledDate} {r.scheduledTime}</p>}
                   {(r.voiceLink || r.voiceMemo) && (
                     <p className="text-pink-600 mt-1 text-xs">
                       {r.voiceLink && <a href={r.voiceLink} target="_blank" rel="noreferrer" className="underline">音声リンクを開く</a>}
@@ -1223,7 +1234,7 @@ function BulkEditModal({ count, members, associationTypes, activityTypes, onAppl
 }
 
 // ---------- 顧客リスト ----------
-function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, members, currentUser, isOwner, canDeleteCustomer, canBulkEdit, token, showAlert, showConfirm, filters, setFilters, pendingViewCustomerId, clearPendingViewCustomer }) {
+function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, members, currentUser, isOwner, canDeleteCustomer, canBulkEdit, token, showAlert, showConfirm, filters, setFilters, pendingViewCustomerId, pendingViewWithForm, clearPendingViewCustomer }) {
   const { search, addressFilter, statusFilter, associationFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitFilter, excludeCompanyOverlap, excludeUser } = filters;
   const setSearch = (v) => setFilters(prev => ({ ...prev, search: v }));
   const setAddressFilter = (v) => setFilters(prev => ({ ...prev, addressFilter: v }));
@@ -1240,21 +1251,22 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 
   const [editing, setEditing] = useState(null); // customer being edited, or {} for new
   const [viewing, setViewing] = useState(null); // customer being viewed
-  // 他のページ（HOME・カレンダー等）から特定の顧客を開いた場合、
+  // 他のページ（HOME・カレンダー・再コール等）から特定の顧客を開いた場合、
   // カードを閉じた後もその顧客だけがリストに残るようにする
   const [focusedCustomerId, setFocusedCustomerId] = useState(null);
+  const [viewingWithForm, setViewingWithForm] = useState(false);
 
-  // HOME画面の「直近の予定」「最近の記録」から遷移してきた場合、該当の顧客を自動で開く
+  // HOME画面の「直近の予定」「最近の記録」や再コールページから遷移してきた場合、該当の顧客を自動で開く
   useEffect(() => {
     if (!pendingViewCustomerId) return;
     const target = customers.find(c => c.id === pendingViewCustomerId);
     if (target) {
       setViewing(target);
+      setViewingWithForm(!!pendingViewWithForm);
       setFocusedCustomerId(target.id);
     }
     clearPendingViewCustomer();
   }, [pendingViewCustomerId, customers]);
-  const [viewingWithForm, setViewingWithForm] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
@@ -1339,7 +1351,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 
   const filteredBase = customers.filter(c => {
     const q = search.toLowerCase();
-    const matchesSearch = !q || [c.gakuenName, c.enName, c.chairman, c.principal].some(v => (v || '').toLowerCase().includes(q));
+    const matchesSearch = !q || [c.gakuenName, c.gakuenNameKana, c.enName, c.enNameKana, c.chairman, c.chairmanKana, c.principal, c.principalKana].some(v => (v || '').toLowerCase().includes(q));
     const matchesAddress = !addressFilter || (c.address || '').toLowerCase().includes(addressFilter.toLowerCase());
     const status = getCustomerStatus(c.id, records);
     const statusLabel = status ? status.label : '記録なし';
@@ -1418,7 +1430,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="園名・理事長・園長で検索"
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="園名・理事長・園長・ふりがなで検索"
               className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500" />
           </div>
           <input value={addressFilter} onChange={e => setAddressFilter(e.target.value)} placeholder="住所で絞り込み"
@@ -1603,8 +1615,8 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                     )}
                   </div>
                   <div className="mt-2 space-y-1 text-xs text-slate-500">
-                    {c.chairman && <p className="flex items-center gap-1.5"><Users className="w-3 h-3" />理事長: {c.chairman}</p>}
-                    {c.principal && <p className="flex items-center gap-1.5"><Users className="w-3 h-3" />園長: {c.principal}</p>}
+                    {c.chairman && <p className="flex items-center gap-1.5"><Users className="w-3 h-3" />理事長: {c.chairman}{c.chairmanKana ? `（${c.chairmanKana}）` : ''}</p>}
+                    {c.principal && <p className="flex items-center gap-1.5"><Users className="w-3 h-3" />園長: {c.principal}{c.principalKana ? `（${c.principalKana}）` : ''}</p>}
                     {c.tel && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.tel}</p>}
                     {c.mobile && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.mobile}（携帯）</p>}
                     {c.email && <p className="flex items-center gap-1.5"><Mail className="w-3 h-3" />{c.email}</p>}
@@ -1746,7 +1758,8 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 }
 
 // ---------- 記録登録フォーム（顧客詳細モーダルの中で使う） ----------
-const SCHEDULE_FLAGS = ['初回時間設定（代表）', '初回時間設定（担当）', '飛び込み初回時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
+// 「再コール」も予定日時を設定できるようにする（再コールページ・カレンダーに反映されます）
+const SCHEDULE_FLAGS = ['再コール', '初回時間設定（代表）', '初回時間設定（担当）', '飛び込み初回時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
 const SALES_TYPES = ['営業（代表）', '営業（担当）'];
 const isInitialTimeSettingFlag = (flag) => flag === '初回時間設定（代表）' || flag === '初回時間設定（担当）';
 
@@ -1772,6 +1785,7 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
   const isOrder = flag === '受注' || flag === 'ユーザー';
   const needsSchedule = SCHEDULE_FLAGS.includes(flag);
   const isTele = type === 'テレアポ';
+  const isRecall = flag === '再コール';
 
   const reset = () => {
     setFlag(''); setMemo(''); setMonthlyFee(''); setYears(''); setQuantity(''); setProfit('');
@@ -1786,6 +1800,7 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
       ...(isOrder ? { productName, monthlyFee, years, quantity, profit } : {}),
       ...(needsSchedule && scheduledDate ? { scheduledDate, scheduledTime } : {}),
       ...(isTele && (voiceLink || voiceMemo) ? { voiceLink, voiceMemo } : {}),
+      ...(isRecall ? { recallDone: false } : {}),
     };
     setRecords(prev => [...prev, newRecord]);
     showAlert('記録を保存しました。');
@@ -1844,12 +1859,17 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
       </div>
 
       {needsSchedule && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-          <p className="text-xs font-bold text-indigo-700 mb-2">次回予定（カレンダーに反映されます）</p>
+        <div className={`${isRecall ? 'bg-orange-50 border-orange-200' : 'bg-indigo-50 border-indigo-200'} border rounded-xl p-4`}>
+          <p className={`text-xs font-bold mb-2 ${isRecall ? 'text-orange-700' : 'text-indigo-700'}`}>
+            {isRecall ? '再コール予定日時（再コールページ・カレンダーに反映されます）' : '次回予定（カレンダーに反映されます）'}
+          </p>
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="予定日" type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
-            <FormField label="予定時間" type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} />
+            <FormField label={isRecall ? '再コール予定日' : '予定日'} type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
+            <FormField label={isRecall ? '再コール予定時間' : '予定時間'} type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} />
           </div>
+          {isRecall && !scheduledDate && (
+            <p className="text-[11px] text-orange-600 mt-2">※ 予定日を入れると再コールページの一覧に日時付きで表示され、時間を過ぎるとメニューに赤いバッジが出ます。</p>
+          )}
         </div>
       )}
 
@@ -2577,6 +2597,195 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
   );
 }
 
+// ---------- 再コール管理 ----------
+// 「今」を YYYY-MM-DD HH:MM 形式の文字列にする（日付と時間の比較を単純な文字列比較で行うため）
+function nowStampKey() {
+  const pad = (n) => String(n).padStart(2, '0');
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// 再コール記録の予定日時キー（未設定は一番後ろに来るようにする）
+function recallStampKey(r) {
+  return `${r.scheduledDate || '9999-12-31'} ${r.scheduledTime || '23:59'}`;
+}
+
+// 予定時刻を過ぎた未対応の再コール件数（左メニューの赤バッジで使う）
+function countOverdueRecalls(records) {
+  const nowKey = nowStampKey();
+  return (records || []).filter(r =>
+    r.flag === '再コール' && !r.recallDone && r.scheduledDate && recallStampKey(r) < nowKey
+  ).length;
+}
+
+function RecallView({ records, setRecords, customers, members, currentUser, isOwner, onOpenCustomer, showAlert }) {
+  const [tab, setTab] = useState('pending'); // 'pending' | 'done'
+  const [assigneeFilter, setAssigneeFilter] = useState(isOwner ? '' : (currentUser?.displayName || ''));
+  const [associationFilter, setAssociationFilter] = useState('');
+
+  const nowKey = nowStampKey();
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const isOverdue = (r) => !!r.scheduledDate && recallStampKey(r) < nowKey;
+  const isToday = (r) => r.scheduledDate === todayStr;
+
+  const customerById = useMemo(() => {
+    const map = {};
+    (customers || []).forEach(c => { map[c.id] = c; });
+    return map;
+  }, [customers]);
+  const effectiveAssignee = (r) => r.assignedTo || customerById[r.customerId]?.assignedTo || '';
+
+  const associationOptions = useMemo(
+    () => [...new Set((customers || []).map(c => c.associationType).filter(Boolean))],
+    [customers]
+  );
+
+  const allRecalls = (records || []).filter(r => r.flag === '再コール');
+  const scoped = allRecalls.filter(r => {
+    const matchesAssignee = !assigneeFilter || effectiveAssignee(r) === assigneeFilter;
+    const matchesAssociation = !associationFilter || customerById[r.customerId]?.associationType === associationFilter;
+    return matchesAssignee && matchesAssociation;
+  });
+
+  const pending = scoped.filter(r => !r.recallDone).slice()
+    .sort((a, b) => recallStampKey(a).localeCompare(recallStampKey(b)));
+  const done = scoped.filter(r => r.recallDone).slice()
+    .sort((a, b) => recallStampKey(b).localeCompare(recallStampKey(a)));
+  const list = tab === 'pending' ? pending : done;
+
+  const overdueCount = pending.filter(isOverdue).length;
+  const todayCount = pending.filter(r => isToday(r) && !isOverdue(r)).length;
+  const noDateCount = pending.filter(r => !r.scheduledDate).length;
+
+  const setDone = (id, val) => {
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, recallDone: val } : r));
+    showAlert(val ? '再コールを対応済みにしました。' : '再コールを未対応に戻しました。');
+  };
+
+  return (
+    <div className="space-y-4 max-w-4xl">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          <button onClick={() => setTab('pending')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold ${tab === 'pending' ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>
+            未対応（{pending.length}件）
+          </button>
+          <button onClick={() => setTab('done')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold ${tab === 'done' ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>
+            対応済み（{done.length}件）
+          </button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {isOwner && (
+            <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+              <option value="">すべての担当者</option>
+              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+            </select>
+          )}
+          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべての協会</option>
+            {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {tab === 'pending' && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className={`rounded-xl p-4 border ${overdueCount > 0 ? 'bg-red-50 border-red-300' : 'bg-white border-slate-100'}`}>
+            <p className={`text-2xl font-extrabold ${overdueCount > 0 ? 'text-red-600' : 'text-slate-800'}`}>{overdueCount}</p>
+            <p className="text-[11px] text-slate-500 font-bold flex items-center gap-1">
+              {overdueCount > 0 && <AlertTriangle className="w-3 h-3 text-red-500" />}時間超過
+            </p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-slate-100">
+            <p className="text-2xl font-extrabold text-indigo-600">{todayCount}</p>
+            <p className="text-[11px] text-slate-500 font-bold">本日この後</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-slate-100">
+            <p className="text-2xl font-extrabold text-slate-400">{noDateCount}</p>
+            <p className="text-[11px] text-slate-500 font-bold">日時未設定</p>
+          </div>
+        </div>
+      )}
+
+      {list.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-10">
+          {tab === 'pending'
+            ? '未対応の再コールはありません。テレアポの記録で結果フラグ「再コール」を選び、予定日時を設定するとここに一覧表示されます。'
+            : '対応済みの再コールはありません。'}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {list.map(r => {
+            const cust = customerById[r.customerId];
+            const overdue = tab === 'pending' && isOverdue(r);
+            const today = tab === 'pending' && isToday(r) && !overdue;
+            return (
+              <li key={r.id}
+                className={`rounded-xl border p-4 ${overdue ? 'bg-red-50 border-red-300' : today ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white border-slate-100'}`}>
+                <div className="flex flex-wrap justify-between items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-slate-400">
+                      {cust?.gakuenName || ''}{cust?.associationType ? ` ・ ${cust.associationType}` : ''}
+                    </p>
+                    <p className="font-bold text-slate-800">{r.customerName || cust?.enName || '不明な顧客'}</p>
+                    <p className={`text-sm font-bold mt-1 flex flex-wrap items-center gap-1.5 ${overdue ? 'text-red-600' : today ? 'text-indigo-700' : 'text-slate-600'}`}>
+                      <CalendarDays className="w-4 h-4 shrink-0" />
+                      {r.scheduledDate ? `${r.scheduledDate} ${r.scheduledTime || '（時間未設定）'}` : '予定日時が未設定です'}
+                      {overdue && <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-[10px]">時間超過</span>}
+                      {today && <span className="px-2 py-0.5 bg-indigo-600 text-white rounded-full text-[10px]">本日</span>}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      担当: {effectiveAssignee(r) || '未設定'} ／ 記録日: {r.date} {r.time || ''}
+                    </p>
+                    {r.memo && <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{r.memo}</p>}
+                    <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                      {cust?.tel && (
+                        <a href={`tel:${cust.tel}`} className="inline-flex items-center gap-1 text-xs text-teal-700 font-bold">
+                          <Phone className="w-3.5 h-3.5" />{cust.tel}
+                        </a>
+                      )}
+                      {cust?.mobile && (
+                        <a href={`tel:${cust.mobile}`} className="inline-flex items-center gap-1 text-xs text-teal-700 font-bold">
+                          <Phone className="w-3.5 h-3.5" />{cust.mobile}（携帯）
+                        </a>
+                      )}
+                      {cust?.chairman && <span className="text-[11px] text-slate-400">理事長: {cust.chairman}{cust.chairmanKana ? `（${cust.chairmanKana}）` : ''}</span>}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5 shrink-0 w-full sm:w-auto">
+                    <button onClick={() => onOpenCustomer(r.customerId)}
+                      className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50">
+                      顧客カードを開く
+                    </button>
+                    <button onClick={() => onOpenCustomer(r.customerId, true)}
+                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center justify-center gap-1">
+                      <PenTool className="w-3.5 h-3.5" />記録を追加
+                    </button>
+                    {tab === 'pending' ? (
+                      <button onClick={() => setDone(r.id, true)}
+                        className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700">
+                        対応済みにする
+                      </button>
+                    ) : (
+                      <button onClick={() => setDone(r.id, false)}
+                        className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-300">
+                        未対応に戻す
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ---------- カレンダー（訪問予定・再コール予定） ----------
 function CalendarView({ records, customers, members, departments, currentUser, isOwner, onOpenCustomer }) {
   const [viewMode, setViewMode] = useState('month'); // 'month' | 'week' | 'day'
@@ -2677,6 +2886,7 @@ function CalendarView({ records, customers, members, departments, currentUser, i
 
   // 種別ごとの色
   const typeColor = (r) => {
+    if (r.flag === '再コール') return { bg: 'bg-orange-500', hover: 'hover:bg-orange-600', dot: 'bg-orange-500', label: '再コール' };
     const t = r.type || '';
     if (t === '初回訪問' || r.flag === '初回時間設定（代表）' || r.flag === '初回時間設定（担当）' || r.flag === '飛び込み初回時間設定') {
       return { bg: 'bg-violet-500', hover: 'hover:bg-violet-600', dot: 'bg-violet-500', label: '初回訪問' };
@@ -2830,7 +3040,7 @@ function CalendarView({ records, customers, members, departments, currentUser, i
 
       <div className="flex flex-wrap items-center gap-3 px-1">
         {colorMode === 'type' ? (
-          [['初回訪問', 'bg-violet-500'], ['営業', 'bg-blue-500'], ['テレアポ', 'bg-pink-500'], ['受注', 'bg-amber-500'], ['その他', 'bg-slate-500']].map(([l, c]) => (
+          [['初回訪問', 'bg-violet-500'], ['営業', 'bg-blue-500'], ['テレアポ', 'bg-pink-500'], ['再コール', 'bg-orange-500'], ['受注', 'bg-amber-500'], ['その他', 'bg-slate-500']].map(([l, c]) => (
             <span key={l} className="flex items-center gap-1.5 text-xs text-slate-500">
               <span className={`w-2.5 h-2.5 rounded-full ${c}`} />{l}
             </span>
@@ -2928,6 +3138,12 @@ function answerLocally(question, customers, records) {
   }
 
   const today = new Date().toISOString().substring(0, 10);
+  if (q.includes('再コール')) {
+    const overdue = countOverdueRecalls(records);
+    const pending = records.filter(r => r.flag === '再コール' && !r.recallDone).length;
+    return `再コールの状況:\n・未対応: ${pending}件\n・うち時間超過: ${overdue}件\n左メニューの「再コール」から一覧を確認できます。`;
+  }
+
   if (q.includes('今日')) {
     const todays = records.filter(r => r.date === today);
     if (todays.length === 0) return '本日の活動記録はまだありません。';
@@ -2949,7 +3165,7 @@ function answerLocally(question, customers, records) {
     return `受注件数: ${orders.length}件\n直近の受注:\n` + orders.slice(-5).reverse().map(r => `・${r.customerName || '不明'}（${r.date}）`).join('\n');
   }
 
-  return 'ローカル集計アシスタントです。「〇〇園の状況は？」「今日の活動を要約して」「今月の実績は？」「受注状況は？」のように聞いてみてください。\n※本格的なAI（文章生成など）を使うには、APIキーを安全に扱うための簡単なバックエンドを別途追加する必要があります。ご希望であれば実装をお手伝いします。';
+  return 'ローカル集計アシスタントです。「〇〇園の状況は？」「今日の活動を要約して」「今月の実績は？」「受注状況は？」「再コールは？」のように聞いてみてください。\n※本格的なAI（文章生成など）を使うには、APIキーを安全に扱うための簡単なバックエンドを別途追加する必要があります。ご希望であれば実装をお手伝いします。';
 }
 
 function AIAssistantView({ customers, records }) {
@@ -4125,6 +4341,7 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
 
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
         <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Filter className="w-4 h-4" />活動種別・結果フラグ管理</h3>
+        <p className="text-xs text-slate-400 mb-3">結果フラグに「再コール」がある活動種別では、記録の登録時に再コール予定日時を設定でき、再コールページに一覧表示されます。</p>
         <div className="flex gap-2 mb-4">
           <input value={newType} onChange={e => setNewType(e.target.value)} placeholder="新しい活動種別" autoComplete="off"
             className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
@@ -4161,12 +4378,17 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
 }
 
 // ---------- ナビ ----------
-function NavItem({ icon, label, isActive, onClick }) {
+function NavItem({ icon, label, isActive, onClick, badge }) {
   return (
     <button onClick={onClick} className={`w-full flex items-center gap-3 px-5 py-3 text-left text-sm font-medium transition-colors ${
       isActive ? 'bg-slate-700 text-white border-l-4 border-teal-400' : 'text-slate-300 hover:bg-slate-700/60 border-l-4 border-transparent'
     }`}>
       {icon}{label}
+      {badge > 0 && (
+        <span className="ml-auto min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-[11px] font-extrabold rounded-full flex items-center justify-center animate-pulse">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -4184,8 +4406,11 @@ export default function App() {
     activityTypeFilter: '', flagFilter: '', assigneeFilter: '', viewMode: 'card', firstVisitFilter: '', excludeCompanyOverlap: false, excludeUser: false,
   });
   const [pendingViewCustomerId, setPendingViewCustomerId] = useState(null);
-  const openCustomerFromHome = (customerId) => {
+  const [pendingViewWithForm, setPendingViewWithForm] = useState(false);
+  // 他ページから顧客カードを開く（withForm=true なら記録フォームを開いた状態で表示）
+  const openCustomerFromHome = (customerId, withForm = false) => {
     setPendingViewCustomerId(customerId);
+    setPendingViewWithForm(withForm);
     setActiveTab('customers');
   };
   const [accountOpen, setAccountOpen] = useState(false);
@@ -4239,10 +4464,26 @@ export default function App() {
     if (activeTab === 'settings' && !canViewSettings) setActiveTab('home');
   }, [activeTab, canViewSettings]);
 
+  // 予定時刻を過ぎた未対応の再コール件数（メニューの赤バッジ用）
+  // オーナー以外は自分の担当分だけを数える
+  const [recallTick, setRecallTick] = useState(0);
+  useEffect(() => {
+    // 1分ごとに再計算して、時間を過ぎた瞬間にバッジが出るようにする
+    const timer = setInterval(() => setRecallTick(t => t + 1), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const recallOverdueCount = useMemo(() => {
+    const assigneeOf = (r) => r.assignedTo || (customers.find(c => c.id === r.customerId)?.assignedTo || '');
+    const target = isOwner ? records : records.filter(r => assigneeOf(r) === (user?.displayName || ''));
+    return countOverdueRecalls(target);
+  }, [records, customers, isOwner, user, recallTick]);
+
   const menuItems = [
     { id: 'home', icon: <Home className="w-4 h-4" />, label: 'HOME' },
     { id: 'customers', icon: <Users className="w-4 h-4" />, label: '顧客リスト' },
     { id: 'calendar', icon: <CalendarDays className="w-4 h-4" />, label: 'カレンダー' },
+    { id: 'recall', icon: <Phone className="w-4 h-4" />, label: '再コール', badge: recallOverdueCount },
     { id: 'teleappt_stats', icon: <BarChart className="w-4 h-4" />, label: 'テレアポ集計' },
     { id: 'daily_report', icon: <FileText className="w-4 h-4" />, label: '日報' },
     { id: 'email', icon: <Mail className="w-4 h-4" />, label: 'メール制作' },
@@ -4253,7 +4494,7 @@ export default function App() {
   ];
 
   const titles = {
-    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', teleappt_stats: 'テレアポ集計', daily_report: '日報',
+    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', recall: '再コール管理', teleappt_stats: 'テレアポ集計', daily_report: '日報',
     email: 'メール制作', case_studies: 'ユーザー管理（導入事例）', knowledge: '営業ノウハウ', ai: 'AIアシスタント', settings: '設定・管理',
   };
 
@@ -4283,7 +4524,14 @@ export default function App() {
     <div className="flex h-[100dvh] bg-slate-50 text-slate-800 font-sans overflow-hidden">
       {/* モバイルヘッダー */}
       <header className="md:hidden fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-slate-800 text-white z-30">
-        <button onClick={() => setMenuOpen(true)} className="p-1"><LayoutMenuIcon /></button>
+        <button onClick={() => setMenuOpen(true)} className="p-1 relative">
+          <LayoutMenuIcon />
+          {recallOverdueCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center">
+              {recallOverdueCount}
+            </span>
+          )}
+        </button>
         <h1 className="font-bold text-sm">CRMシステム</h1>
         <button onClick={() => setAccountOpen(true)} className="p-0.5"><Avatar photo={user.photo} name={user.displayName} size="w-7 h-7" /></button>
       </header>
@@ -4291,7 +4539,7 @@ export default function App() {
       {menuOpen && (
         <div className="md:hidden fixed inset-0 z-40 flex">
           <div className="fixed inset-0 bg-black/50" onClick={() => setMenuOpen(false)} />
-          <div className="w-64 bg-slate-800 h-full relative z-10 flex flex-col pt-4">
+          <div className="w-64 bg-slate-800 h-full relative z-10 flex flex-col pt-4 overflow-y-auto">
             <button onClick={() => setMenuOpen(false)} className="absolute top-3 right-3 text-white"><X className="w-5 h-5" /></button>
             <div className="px-5 py-3 text-white font-bold border-b border-slate-700 mb-2">CRMシステム</div>
             {menuItems.map(m => <NavItem key={m.id} {...m} isActive={activeTab === m.id} onClick={() => { setActiveTab(m.id); setMenuOpen(false); }} />)}
@@ -4302,7 +4550,7 @@ export default function App() {
       {/* デスクトップサイドバー */}
       <aside className="hidden md:flex w-60 bg-slate-800 flex-col shrink-0">
         <div className="px-5 py-6 text-white font-bold text-lg border-b border-slate-700">CRMシステム</div>
-        <nav className="flex-1 py-3">
+        <nav className="flex-1 py-3 overflow-y-auto">
           {menuItems.map(m => <NavItem key={m.id} {...m} isActive={activeTab === m.id} onClick={() => setActiveTab(m.id)} />)}
         </nav>
         <button onClick={() => setAccountOpen(true)} className="mx-3 mb-2 px-3 py-2.5 bg-slate-700/60 hover:bg-slate-700 rounded-lg text-left flex items-center gap-2.5">
@@ -4333,7 +4581,16 @@ export default function App() {
             canDeleteCustomer={canDeleteCustomer} canBulkEdit={canBulkEdit}
             showAlert={showAlert} showConfirm={showConfirm}
             filters={customerFilters} setFilters={setCustomerFilters}
-            pendingViewCustomerId={pendingViewCustomerId} clearPendingViewCustomer={() => setPendingViewCustomerId(null)}
+            pendingViewCustomerId={pendingViewCustomerId}
+            pendingViewWithForm={pendingViewWithForm}
+            clearPendingViewCustomer={() => { setPendingViewCustomerId(null); setPendingViewWithForm(false); }}
+          />
+        )}
+        {activeTab === 'recall' && (
+          <RecallView
+            records={records} setRecords={setRecords} customers={customers}
+            members={members} currentUser={user} isOwner={isOwner}
+            onOpenCustomer={openCustomerFromHome} showAlert={showAlert}
           />
         )}
         {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} customers={customers} activityTypes={activityTypes} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} onOpenCustomer={openCustomerFromHome} />}
