@@ -530,7 +530,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
   // 指標の計算（内訳表示のため、対象となった記録も保持しておく）
   const teleTimeSettingRecs = filtered.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag));
   const firstVisitRecs = filtered.filter(r => r.type === '初回訪問');
-  const salesRecs = filtered.filter(r => SALES_TYPES.includes(r.type)); // 営業件数（営業（代表）・営業（担当））
+  const salesRecs = filtered.filter(r => SALES_TYPES.includes(r.type) && r.flag !== '返事待ちNG'); // 営業件数（営業（代表）・営業（担当）／返事待ちNGは除く）
   const salesTimeSettingRecs = filtered.filter(r => r.type === '初回訪問' && r.flag === '営業時間設定');
   const orderRecords = filtered.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
 
@@ -1011,8 +1011,28 @@ function CompanyLinkSection({ customer, allCustomers, setCustomers, onOpenLinked
   const [query, setQuery] = useState('');
   // 連携直後も最新の状態が表示されるよう、常にリスト側から現在の顧客を引き直す
   const current = (allCustomers || []).find(c => c.id === customer.id) || customer;
-  const linkedIds = current.linkedCustomerIds || [];
+  // 自分が指しているID ＋ 自分を指しているIDの和集合（過去に片側だけ連携されたデータも拾う）
+  const linkedIdSet = new Set(current.linkedCustomerIds || []);
+  (allCustomers || []).forEach(c => { if ((c.linkedCustomerIds || []).includes(customer.id)) linkedIdSet.add(c.id); });
+  const linkedIds = [...linkedIdSet];
   const linked = (allCustomers || []).filter(c => linkedIds.includes(c.id));
+
+  // 片側だけの連携が見つかったら、両方向に揃うよう一度だけ補完する
+  useEffect(() => {
+    const needFix = linkedIds.some(id => {
+      const other = (allCustomers || []).find(c => c.id === id);
+      const meMissing = !(current.linkedCustomerIds || []).includes(id);
+      const otherMissing = other && !(other.linkedCustomerIds || []).includes(customer.id);
+      return meMissing || otherMissing;
+    });
+    if (!needFix) return;
+    setCustomers(prev => prev.map(c => {
+      if (c.id === customer.id) return { ...c, linkedCustomerIds: [...new Set([...(c.linkedCustomerIds || []), ...linkedIds])] };
+      if (linkedIds.includes(c.id)) return { ...c, linkedCustomerIds: [...new Set([...(c.linkedCustomerIds || []), customer.id])] };
+      return c;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer.id, allCustomers]);
   const q = query.trim().toLowerCase();
   const results = q
     ? (allCustomers || []).filter(c =>
@@ -1094,6 +1114,14 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
   const [showReport, setShowReport] = useState(false);
   const [reportSeedRecord, setReportSeedRecord] = useState(null);
   const [editingRecordId, setEditingRecordId] = useState(null);
+  const [showLinks, setShowLinks] = useState(false);
+  // この顧客に連携済みの件数（ボタン表示用）。相手側からしか連携されていない場合も件数に含める
+  const linkedCount = (() => {
+    const cur = (allCustomers || []).find(c => c.id === customer.id) || customer;
+    const ids = new Set(cur.linkedCustomerIds || []);
+    (allCustomers || []).forEach(c => { if ((c.linkedCustomerIds || []).includes(customer.id)) ids.add(c.id); });
+    return ids.size;
+  })();
 
   const updateRecord = (updated) => {
     setRecords(prev => prev.map(r => r.id === updated.id ? updated : r));
@@ -1164,9 +1192,14 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
         <button onClick={() => { setShowReport(v => !v); if (showReport) setReportSeedRecord(null); }} className="text-sm font-semibold text-purple-700 flex items-center gap-1">
           <FileText className="w-4 h-4" />{showReport ? '報告文フォームを閉じる' : '報告文を作成'}
         </button>
+        <button onClick={() => setShowLinks(v => !v)} className="text-sm font-semibold text-orange-700 flex items-center gap-1">
+          <Link2 className="w-4 h-4" />{showLinks ? '法人被りを閉じる' : `法人被りを見る${linkedCount > 0 ? `（${linkedCount}）` : ''}`}
+        </button>
       </div>
 
-      <CompanyLinkSection customer={customer} allCustomers={allCustomers} setCustomers={setCustomers} onOpenLinked={onOpenLinked} showAlert={showAlert} />
+      {showLinks && (
+        <CompanyLinkSection customer={customer} allCustomers={allCustomers} setCustomers={setCustomers} onOpenLinked={onOpenLinked} showAlert={showAlert} />
+      )}
 
       {showReport && (
         <div className="mb-6">
@@ -1212,6 +1245,16 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.recallDone ? 'bg-slate-200 text-slate-500' : 'bg-orange-100 text-orange-700'}`}>
                           {r.recallDone ? '再コール対応済み' : '再コール未対応'}
                         </span>
+                      )}
+                      {r.flag === '再コール' && (
+                        <button
+                          onClick={() => {
+                            setRecords(prev => prev.map(x => x.id === r.id ? { ...x, recallDone: !x.recallDone } : x));
+                            showAlert(r.recallDone ? '再コールを未対応に戻しました。' : '再コールを対応済みにしました。');
+                          }}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${r.recallDone ? 'border-slate-200 text-slate-500 hover:bg-slate-100' : 'border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100'}`}>
+                          {r.recallDone ? '未対応に戻す' : '対応済みにする'}
+                        </button>
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
