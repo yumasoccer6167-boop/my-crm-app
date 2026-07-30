@@ -530,11 +530,13 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
   // 指標の計算（内訳表示のため、対象となった記録も保持しておく）
   const teleTimeSettingRecs = filtered.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag));
   const firstVisitRecs = filtered.filter(r => r.type === '初回訪問');
+  const salesRecs = filtered.filter(r => SALES_TYPES.includes(r.type)); // 営業件数（営業（代表）・営業（担当））
   const salesTimeSettingRecs = filtered.filter(r => r.type === '初回訪問' && r.flag === '営業時間設定');
   const orderRecords = filtered.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
 
   const teleTimeSetting = teleTimeSettingRecs.length; // 初回時間設定件数
   const firstVisitCount = firstVisitRecs.length; // 初回訪問件数
+  const salesCount = salesRecs.length; // 営業件数
   const salesTimeSetting = salesTimeSettingRecs.length; // 営業時間設定件数
   const salesTimeSettingRate = firstVisitCount > 0 ? Math.round((salesTimeSetting / firstVisitCount) * 100) : 0; // 営業時間設定昇華率
   const orderCount = orderRecords.length; // 受注件数
@@ -547,7 +549,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
   const [summaryView, setSummaryView] = useState('card'); // 'card' | 'chart'
   const openDrilldown = (title, recs) => setDrilldown({ title, records: recs });
 
-  const goal = goals[period] || { timeSetting: 0, firstVisit: 0, salesTimeSetting: 0, order: 0, profit: 0, quantity: 0 };
+  const goal = goals[period] || { timeSetting: 0, firstVisit: 0, sales: 0, salesTimeSetting: 0, order: 0, profit: 0, quantity: 0 };
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(goal);
 
@@ -561,6 +563,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
     const rows = [
       ['初回時間設定件数', `${teleTimeSetting}件`, `${goal.timeSetting || 0}件`, goal.timeSetting > 0 ? `${Math.round(teleTimeSetting / goal.timeSetting * 100)}%` : '-'],
       ['初回訪問件数', `${firstVisitCount}件`, `${goal.firstVisit || 0}件`, goal.firstVisit > 0 ? `${Math.round(firstVisitCount / goal.firstVisit * 100)}%` : '-'],
+      ['営業件数', `${salesCount}件`, `${goal.sales || 0}件`, goal.sales > 0 ? `${Math.round(salesCount / goal.sales * 100)}%` : '-'],
       ['営業時間設定件数', `${salesTimeSetting}件`, `${goal.salesTimeSetting || 0}件`, goal.salesTimeSetting > 0 ? `${Math.round(salesTimeSetting / goal.salesTimeSetting * 100)}%` : '-'],
       ['営業時間設定昇華率', `${salesTimeSettingRate}%`, '-', '-'],
       ['受注件数', `${orderCount}件`, `${goal.order || 0}件`, goal.order > 0 ? `${Math.round(orderCount / goal.order * 100)}%` : '-'],
@@ -668,6 +671,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <ProgressCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} onClick={() => openDrilldown('初回時間設定件数', teleTimeSettingRecs)} />
           <ProgressCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} onClick={() => openDrilldown('初回訪問件数', firstVisitRecs)} />
+          <ProgressCard label="営業件数" actual={salesCount} goal={goal.sales} onClick={() => openDrilldown('営業件数', salesRecs)} />
           <ProgressCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} onClick={() => openDrilldown('営業時間設定件数', salesTimeSettingRecs)} />
           <RateCard label="営業時間設定昇華率" rate={salesTimeSettingRate} onClick={() => openDrilldown('営業時間設定昇華率の内訳（営業時間設定）', salesTimeSettingRecs)} />
           <ProgressCard label="受注件数" actual={orderCount} goal={goal.order} onClick={() => openDrilldown('受注件数', orderRecords)} />
@@ -679,6 +683,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <DonutCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} onClick={() => openDrilldown('初回時間設定件数', teleTimeSettingRecs)} />
           <DonutCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} onClick={() => openDrilldown('初回訪問件数', firstVisitRecs)} />
+          <DonutCard label="営業件数" actual={salesCount} goal={goal.sales} onClick={() => openDrilldown('営業件数', salesRecs)} />
           <DonutCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} onClick={() => openDrilldown('営業時間設定件数', salesTimeSettingRecs)} />
           <DonutCard label="営業時間設定昇華率" rate={salesTimeSettingRate} onClick={() => openDrilldown('営業時間設定昇華率の内訳（営業時間設定）', salesTimeSettingRecs)} />
           <DonutCard label="受注件数" actual={orderCount} goal={goal.order} onClick={() => openDrilldown('受注件数', orderRecords)} />
@@ -693,6 +698,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
           <div className="grid grid-cols-2 gap-4">
             <FormField label="初回時間設定 目標" type="number" value={draft.timeSetting} onChange={e => setDraft({ ...draft, timeSetting: Number(e.target.value) })} />
             <FormField label="初回訪問 目標" type="number" value={draft.firstVisit} onChange={e => setDraft({ ...draft, firstVisit: Number(e.target.value) })} />
+            <FormField label="営業 目標" type="number" value={draft.sales} onChange={e => setDraft({ ...draft, sales: Number(e.target.value) })} />
             <FormField label="営業時間設定 目標" type="number" value={draft.salesTimeSetting} onChange={e => setDraft({ ...draft, salesTimeSetting: Number(e.target.value) })} />
             <FormField label="受注 目標" type="number" value={draft.order} onChange={e => setDraft({ ...draft, order: Number(e.target.value) })} />
             <FormField label="営業粗利 目標（P）" type="number" value={draft.profit} onChange={e => setDraft({ ...draft, profit: Number(e.target.value) })} />
