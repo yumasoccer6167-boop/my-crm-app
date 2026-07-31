@@ -601,7 +601,8 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
   // カレンダー：直近の予定（3件）
   const todayStr = new Date().toISOString().substring(0, 10);
   const upcoming = scopedRecords
-    .filter(r => r.scheduledDate && r.scheduledDate >= todayStr)
+    // 直近の予定は初回訪問・営業の予定のみ表示（テレアポ／再コールは対象外）
+    .filter(r => r.scheduledDate && r.scheduledDate >= todayStr && (r.type === '初回訪問' || isSalesType(r.type)))
     .slice()
     .sort((a, b) => (a.scheduledDate + (a.scheduledTime || '')).localeCompare(b.scheduledDate + (b.scheduledTime || '')))
     .slice(0, 3);
