@@ -530,7 +530,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
   // 指標の計算（内訳表示のため、対象となった記録も保持しておく）
   const teleTimeSettingRecs = filtered.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag));
   const firstVisitRecs = filtered.filter(r => r.type === '初回訪問');
-  const salesRecs = filtered.filter(r => SALES_TYPES.includes(r.type) && r.flag !== '返事待ちNG'); // 営業件数（営業（代表）・営業（担当）／返事待ちNGは除く）
+  const salesRecs = filtered.filter(r => isSalesType(r.type) && r.flag !== '返事待ちNG'); // 営業件数（営業（代表）・営業（担当）・営業／返事待ちNGは除く）
   const salesTimeSettingRecs = filtered.filter(r => r.type === '初回訪問' && r.flag === '営業時間設定');
   const orderRecords = filtered.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
 
@@ -1011,25 +1011,43 @@ function CompanyLinkSection({ customer, allCustomers, setCustomers, onOpenLinked
   const [query, setQuery] = useState('');
   // 連携直後も最新の状態が表示されるよう、常にリスト側から現在の顧客を引き直す
   const current = (allCustomers || []).find(c => c.id === customer.id) || customer;
-  // 自分が指しているID ＋ 自分を指しているIDの和集合（過去に片側だけ連携されたデータも拾う）
-  const linkedIdSet = new Set(current.linkedCustomerIds || []);
-  (allCustomers || []).forEach(c => { if ((c.linkedCustomerIds || []).includes(customer.id)) linkedIdSet.add(c.id); });
-  const linkedIds = [...linkedIdSet];
+  // 連携は「グループ」として扱う。A-B, A-C とつないだら B からも C が見えるよう、
+  // つながり（どちら向きでも）を推移的にたどって、同じグループの全メンバーを集める。
+  const byId = {};
+  (allCustomers || []).forEach(c => { byId[c.id] = c; });
+  const neighborsOf = (c) => {
+    const set = new Set(c && c.linkedCustomerIds ? c.linkedCustomerIds : []);
+    (allCustomers || []).forEach(o => { if ((o.linkedCustomerIds || []).includes(c.id)) set.add(o.id); });
+    return [...set];
+  };
+  const groupIds = (() => {
+    const visited = new Set([customer.id]);
+    const stack = [customer.id];
+    while (stack.length) {
+      const cur = byId[stack.pop()];
+      if (!cur) continue;
+      neighborsOf(cur).forEach(nid => { if (!visited.has(nid)) { visited.add(nid); stack.push(nid); } });
+    }
+    visited.delete(customer.id);
+    return [...visited];
+  })();
+  const linkedIds = groupIds;
   const linked = (allCustomers || []).filter(c => linkedIds.includes(c.id));
 
-  // 片側だけの連携が見つかったら、両方向に揃うよう一度だけ補完する
+  // グループ内の全員が相互に連携済みになるよう、一度だけ揃える（片側連携・推移リンクも解消）
   useEffect(() => {
-    const needFix = linkedIds.some(id => {
-      const other = (allCustomers || []).find(c => c.id === id);
-      const meMissing = !(current.linkedCustomerIds || []).includes(id);
-      const otherMissing = other && !(other.linkedCustomerIds || []).includes(customer.id);
-      return meMissing || otherMissing;
+    const wholeGroup = [customer.id, ...linkedIds];
+    const needFix = wholeGroup.some(id => {
+      const c = byId[id];
+      if (!c) return false;
+      const cur = new Set(c.linkedCustomerIds || []);
+      return wholeGroup.some(other => other !== id && !cur.has(other));
     });
     if (!needFix) return;
     setCustomers(prev => prev.map(c => {
-      if (c.id === customer.id) return { ...c, linkedCustomerIds: [...new Set([...(c.linkedCustomerIds || []), ...linkedIds])] };
-      if (linkedIds.includes(c.id)) return { ...c, linkedCustomerIds: [...new Set([...(c.linkedCustomerIds || []), customer.id])] };
-      return c;
+      if (!wholeGroup.includes(c.id)) return c;
+      const others = wholeGroup.filter(id => id !== c.id);
+      return { ...c, linkedCustomerIds: [...new Set([...(c.linkedCustomerIds || []), ...others])] };
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer.id, allCustomers]);
@@ -1042,10 +1060,22 @@ function CompanyLinkSection({ customer, allCustomers, setCustomers, onOpenLinked
     : [];
 
   const link = (target) => {
+    // 自分のグループ全員と、相手のグループ全員を統合し、全員を相互に連携させる
+    const targetGroup = (() => {
+      const visited = new Set([target.id]);
+      const stack = [target.id];
+      while (stack.length) {
+        const cur = byId[stack.pop()];
+        if (!cur) continue;
+        neighborsOf(cur).forEach(nid => { if (!visited.has(nid)) { visited.add(nid); stack.push(nid); } });
+      }
+      return [...visited];
+    })();
+    const members = [...new Set([customer.id, ...linkedIds, ...targetGroup])];
     setCustomers(prev => prev.map(c => {
-      if (c.id === customer.id) return { ...c, linkedCustomerIds: [...new Set([...(c.linkedCustomerIds || []), target.id])] };
-      if (c.id === target.id) return { ...c, linkedCustomerIds: [...new Set([...(c.linkedCustomerIds || []), customer.id])] };
-      return c;
+      if (!members.includes(c.id)) return c;
+      const others = members.filter(id => id !== c.id);
+      return { ...c, linkedCustomerIds: [...new Set([...(c.linkedCustomerIds || []), ...others])] };
     }));
     setQuery('');
     showAlert(`「${target.enName || target.gakuenName}」と連携しました。`);
@@ -1117,10 +1147,21 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
   const [showLinks, setShowLinks] = useState(false);
   // この顧客に連携済みの件数（ボタン表示用）。相手側からしか連携されていない場合も件数に含める
   const linkedCount = (() => {
-    const cur = (allCustomers || []).find(c => c.id === customer.id) || customer;
-    const ids = new Set(cur.linkedCustomerIds || []);
-    (allCustomers || []).forEach(c => { if ((c.linkedCustomerIds || []).includes(customer.id)) ids.add(c.id); });
-    return ids.size;
+    const byId = {};
+    (allCustomers || []).forEach(c => { byId[c.id] = c; });
+    const neighborsOf = (c) => {
+      const set = new Set(c && c.linkedCustomerIds ? c.linkedCustomerIds : []);
+      (allCustomers || []).forEach(o => { if ((o.linkedCustomerIds || []).includes(c.id)) set.add(o.id); });
+      return [...set];
+    };
+    const visited = new Set([customer.id]);
+    const stack = [customer.id];
+    while (stack.length) {
+      const cur = byId[stack.pop()];
+      if (!cur) continue;
+      neighborsOf(cur).forEach(nid => { if (!visited.has(nid)) { visited.add(nid); stack.push(nid); } });
+    }
+    return visited.size - 1;
   })();
 
   const updateRecord = (updated) => {
@@ -1923,6 +1964,8 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 // 「再コール」も予定日時を設定できるようにする（再コールページ・カレンダーに反映されます）
 const SCHEDULE_FLAGS = ['再コール', '初回時間設定（代表）', '初回時間設定（担当）', '時間設定（代表）', '時間設定（担当）', '飛び込み初回時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
 const SALES_TYPES = ['営業（代表）', '営業（担当）'];
+// 営業件数の集計対象。上記に加え、単独の活動種別「営業」も対象に含める（本番データ対応）
+const isSalesType = (type) => SALES_TYPES.includes(type) || type === '営業';
 const isInitialTimeSettingFlag = (flag) => ['初回時間設定（代表）', '初回時間設定（担当）', '時間設定（代表）', '時間設定（担当）'].includes(flag);
 const isRepTimeSettingFlag = (flag) => flag === '初回時間設定（代表）' || flag === '時間設定（代表）';
 const isStaffTimeSettingFlag = (flag) => flag === '初回時間設定（担当）' || flag === '時間設定（担当）';
