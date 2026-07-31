@@ -1440,6 +1440,16 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
   const setFirstVisitFilter = (v) => setFilters(prev => ({ ...prev, firstVisitFilter: v }));
   const setExcludeCompanyOverlap = (v) => setFilters(prev => ({ ...prev, excludeCompanyOverlap: v }));
   const setExcludeUser = (v) => setFilters(prev => ({ ...prev, excludeUser: v }));
+  // ログイン中アカウントの担当で初期絞り込み。オーナーはあとから「すべて」等に変更可能。
+  const assigneeInitedRef = useRef(false);
+  useEffect(() => {
+    if (assigneeInitedRef.current) return;
+    if (!currentUser?.displayName) return;
+    assigneeInitedRef.current = true;
+    // 初回のみ、担当フィルタが未設定なら自分の担当をセットする
+    if (!assigneeFilter) setAssigneeFilter(currentUser.displayName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.displayName]);
   const effectiveAssigneeFilter = isOwner ? assigneeFilter : (currentUser?.displayName || '');
 
   const [editing, setEditing] = useState(null); // customer being edited, or {} for new
@@ -3028,7 +3038,7 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
   const [tab, setTab] = useState('pending'); // 'pending' | 'done'
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [assigneeFilter, setAssigneeFilter] = useState(isOwner ? '' : (currentUser?.displayName || ''));
+  const [assigneeFilter, setAssigneeFilter] = useState(currentUser?.displayName || '');
   const [associationFilter, setAssociationFilter] = useState('');
 
   const nowKey = nowStampKey();
