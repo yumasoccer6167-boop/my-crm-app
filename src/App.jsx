@@ -3851,299 +3851,190 @@ function MembersManagement({ token, currentUser, departments, showAlert, showCon
   );
 }
 
-// ---------- ユーザー管理（導入事例集） ----------
-function emptyDeal() {
-  return { id: null, product: '', description: '', background: '', salesP: '', quantity: '', salesRep: '', apptRep: '', orderDate: '', videoLink: '' };
+// ---------- ユーザー管理（受注顧客一覧・表形式） ----------
+// 顧客リストで受注（受注／ユーザー／過去受注記録あり）になった顧客を自動で表に並べる。
+const ORDER_FLAGS = ['受注', 'ユーザー', '過去受注記録あり'];
+
+// 住所から地区（◯区／◯市）をざっくり抽出する
+function extractDistrict(address) {
+  if (!address) return '';
+  const kuMatch = address.match(/([一-龥ぁ-んァ-ヶ]{1,8}区)/);
+  if (kuMatch) return kuMatch[1];
+  const shiMatch = address.match(/([一-龥ぁ-んァ-ヶ]{1,8}市)(?![一-龥]*区)/);
+  if (shiMatch) return shiMatch[1];
+  return '';
 }
 
-function DealModal({ deal, products, members, onSave, onClose }) {
-  const [form, setForm] = useState(deal);
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+function CaseCommentModal({ customer, comments, onAdd, onDelete, currentUser, onClose }) {
+  const [text, setText] = useState('');
+  const list = comments || [];
   return (
-    <Modal title={deal.id ? '事例を編集' : '新しい事例を追加'} onClose={onClose}>
-      <div className="space-y-3">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">商材</label>
-          <select value={form.product} onChange={set('product')} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-            <option value="">選択してください</option>
-            {products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-          </select>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="営業P" type="number" value={form.salesP} onChange={set('salesP')} />
-          <FormField label="台数" type="number" value={form.quantity} onChange={set('quantity')} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-slate-500">営業担当</label>
-            <select value={form.salesRep} onChange={set('salesRep')} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-              <option value="">未設定</option>
-              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-slate-500">アポ担当</label>
-            <select value={form.apptRep} onChange={set('apptRep')} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-              <option value="">未設定</option>
-              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-            </select>
-          </div>
-        </div>
-        <FormField label="受注日" type="date" value={form.orderDate} onChange={set('orderDate')} />
-        <FormField label="動画リンク" value={form.videoLink} onChange={set('videoLink')} />
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">受注背景</label>
-          <textarea value={form.background} onChange={e => setForm({ ...form, background: e.target.value })} rows={3} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">事例としての説明（紹介する時に使える紹介文）</label>
-          <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={4} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-        </div>
-      </div>
-      <button onClick={() => onSave({ ...form, id: form.id || Date.now() })} className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
-    </Modal>
-  );
-}
-
-function CompanyModal({ company, onSave, onClose }) {
-  const [form, setForm] = useState(company);
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-  return (
-    <Modal title={form.id ? '法人情報を編集' : '新しい法人を登録'} onClose={onClose}>
-      <div className="space-y-3">
-        <FormField label="法人名" value={form.companyName} onChange={set('companyName')} />
-        <FormField label="所在地（都道府県・市区町村など）" value={form.location} onChange={set('location')} placeholder="例：群馬県前橋市" />
-        <FormField label="HPリンク" value={form.hpLink} onChange={set('hpLink')} />
-        <FormField label="GBPリンク" value={form.gbpLink} onChange={set('gbpLink')} />
-      </div>
-      <button onClick={() => onSave({ ...form, id: form.id || Date.now() })} className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
-    </Modal>
-  );
-}
-
-function CaseStudyCard({ company, products, members, currentUser, setCaseStudies, showConfirm, canEdit }) {
-  const [expanded, setExpanded] = useState(false);
-  const [editingCompany, setEditingCompany] = useState(false);
-  const [editingDeal, setEditingDeal] = useState(null);
-  const [commentText, setCommentText] = useState('');
-
-  const isFavorited = (company.favoritedBy || []).includes(currentUser?.displayName);
-
-  const toggleFavorite = () => {
-    setCaseStudies(prev => prev.map(c => {
-      if (c.id !== company.id) return c;
-      const fav = c.favoritedBy || [];
-      const next = fav.includes(currentUser?.displayName) ? fav.filter(n => n !== currentUser.displayName) : [...fav, currentUser.displayName];
-      return { ...c, favoritedBy: next };
-    }));
-  };
-
-  const saveCompany = (data) => {
-    setCaseStudies(prev => prev.map(c => c.id === company.id ? { ...c, ...data } : c));
-    setEditingCompany(false);
-  };
-
-  const removeCompany = () => {
-    showConfirm(`「${company.companyName}」を削除しますか？登録された事例・コメントもすべて削除されます。`, () => {
-      setCaseStudies(prev => prev.filter(c => c.id !== company.id));
-    });
-  };
-
-  const saveDeal = (deal) => {
-    setCaseStudies(prev => prev.map(c => {
-      if (c.id !== company.id) return c;
-      const deals = c.deals || [];
-      const exists = deals.some(d => d.id === deal.id);
-      return { ...c, deals: exists ? deals.map(d => d.id === deal.id ? deal : d) : [...deals, deal] };
-    }));
-    setEditingDeal(null);
-  };
-
-  const removeDeal = (dealId) => {
-    showConfirm('この事例を削除しますか？', () => {
-      setCaseStudies(prev => prev.map(c => c.id === company.id ? { ...c, deals: (c.deals || []).filter(d => d.id !== dealId) } : c));
-    });
-  };
-
-  const addComment = () => {
-    if (!commentText.trim()) return;
-    setCaseStudies(prev => prev.map(c => c.id === company.id ? {
-      ...c,
-      comments: [...(c.comments || []), { id: Date.now(), author: currentUser?.displayName || '', text: commentText.trim(), createdAt: new Date().toISOString().substring(0, 16).replace('T', ' ') }],
-    } : c));
-    setCommentText('');
-  };
-
-  const removeComment = (commentId) => {
-    setCaseStudies(prev => prev.map(c => c.id === company.id ? { ...c, comments: (c.comments || []).filter(cm => cm.id !== commentId) } : c));
-  };
-
-  const deals = company.deals || [];
-  const comments = company.comments || [];
-
-  return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-      <div className="p-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="font-bold text-slate-800">{company.companyName}</p>
-            {company.location && <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" />{company.location}</p>}
-          </div>
-          <div className="flex items-center gap-1">
-            <button onClick={toggleFavorite} className={`p-1.5 rounded-lg ${isFavorited ? 'text-rose-500 bg-rose-50' : 'text-slate-300 hover:text-rose-400 hover:bg-rose-50'}`} title="お気に入り">
-              <Heart className={`w-4 h-4 ${isFavorited ? 'fill-rose-500' : ''}`} />
-            </button>
-            {canEdit && (
-              <>
-                <button onClick={() => setEditingCompany(true)} className="p-1.5 text-slate-300 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
-                <button onClick={removeCompany} className="p-1.5 text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 mt-2">
-          {company.hpLink && <a href={company.hpLink} target="_blank" rel="noreferrer" title="HP" className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"><Globe className="w-3.5 h-3.5" /></a>}
-          {company.gbpLink && <a href={company.gbpLink} target="_blank" rel="noreferrer" title="GBP" className="p-1.5 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100"><Star className="w-3.5 h-3.5" /></a>}
-          <span className="text-xs text-slate-400">事例{deals.length}件 ・ コメント{comments.length}件</span>
-        </div>
-
-        <button onClick={() => setExpanded(v => !v)} className="mt-3 w-full flex justify-between items-center text-xs font-bold text-teal-700 border-t border-slate-100 pt-3">
-          詳細を{expanded ? '閉じる' : '見る'}
-          <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="bg-slate-50 border-t border-slate-100 p-4 space-y-4">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-xs font-bold text-slate-500">導入事例</p>
-              {canEdit && (
-                <button onClick={() => setEditingDeal(emptyDeal())} className="flex items-center gap-1 text-xs text-teal-600 font-bold"><Plus className="w-3.5 h-3.5" />事例を追加</button>
+    <Modal title={`コメント：${customer.enName || customer.gakuenName || ''}`} onClose={onClose}>
+      <div className="space-y-3 max-h-72 overflow-y-auto mb-3">
+        {list.length === 0 ? (
+          <p className="text-xs text-slate-400">まだコメントはありません。</p>
+        ) : list.map(cm => (
+          <div key={cm.id} className="bg-slate-50 rounded-lg p-3">
+            <div className="flex justify-between items-start gap-2">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap flex-1">{cm.text}</p>
+              {(currentUser?.displayName === cm.author) && (
+                <button onClick={() => onDelete(cm.id)} className="text-slate-300 hover:text-red-500 shrink-0"><Trash2 className="w-4 h-4" /></button>
               )}
             </div>
-            {deals.length === 0 ? (
-              <p className="text-xs text-slate-400">まだ事例が登録されていません。</p>
-            ) : (
-              <ul className="space-y-2">
-                {deals.map(d => (
-                  <li key={d.id} className="bg-white rounded-lg p-3 border border-slate-100">
-                    <div className="flex justify-between items-start">
-                      <p className="text-sm font-bold text-slate-700">{d.product || '（商材未設定）'} <span className="text-xs font-normal text-slate-400">{d.orderDate}</span></p>
-                      {canEdit && (
-                        <div className="flex gap-1">
-                          <button onClick={() => setEditingDeal(d)} className="p-1 text-slate-300 hover:text-teal-600"><Edit className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => removeDeal(d.id)} className="p-1 text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1">営業P: {d.salesP || 0} ・ 台数: {d.quantity || 0} ・ 営業担当: {d.salesRep || '-'} ・ アポ担当: {d.apptRep || '-'}</p>
-                    {d.background && <p className="text-xs text-slate-500 mt-1">受注背景: {d.background}</p>}
-                    {d.description && <p className="text-xs text-slate-700 mt-1 bg-teal-50 rounded p-2">{d.description}</p>}
-                    {d.videoLink && <a href={d.videoLink} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 underline flex items-center gap-1 mt-1"><Video className="w-3 h-3" />動画を見る</a>}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <p className="text-[11px] text-slate-400 mt-1">{cm.author} ・ {cm.at}</p>
           </div>
-
-          <div>
-            <p className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5" />コメント（活用方法の共有）</p>
-            {comments.length === 0 ? (
-              <p className="text-xs text-slate-400 mb-2">まだコメントはありません。</p>
-            ) : (
-              <ul className="space-y-1.5 mb-2">
-                {comments.map(cm => (
-                  <li key={cm.id} className="bg-white rounded-lg p-2.5 border border-slate-100 text-xs">
-                    <div className="flex justify-between items-start">
-                      <span className="font-bold text-slate-600">{cm.author}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-400">{cm.createdAt}</span>
-                        {cm.author === currentUser?.displayName && (
-                          <button onClick={() => removeComment(cm.id)} className="text-slate-300 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-slate-600 mt-1">{cm.text}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex gap-2">
-              <input value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="この事例をどう活用したか共有..."
-                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs" />
-              <button onClick={addComment} className="px-3 py-2 bg-slate-700 text-white rounded-lg text-xs font-bold">投稿</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editingCompany && <CompanyModal company={company} onSave={saveCompany} onClose={() => setEditingCompany(false)} />}
-      {editingDeal && <DealModal deal={editingDeal} products={products} members={members} onSave={saveDeal} onClose={() => setEditingDeal(null)} />}
-    </div>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2">
+        <textarea value={text} onChange={e => setText(e.target.value)} rows={3} placeholder="コメントを入力" className="px-3 py-2 border border-slate-200 rounded-lg text-sm resize-y" />
+        <button onClick={() => { if (text.trim()) { onAdd(text.trim()); setText(''); } }} className="py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">コメントを追加</button>
+      </div>
+    </Modal>
   );
 }
 
-function CaseStudiesView({ caseStudies, setCaseStudies, products, members, currentUser, showConfirm, canEdit }) {
+function CaseStudiesView({ customers, records, caseComments, setCaseComments, members, currentUser, isOwner, onOpenCustomer }) {
   const [search, setSearch] = useState('');
-  const [locationFilter, setLocationFilter] = useState('');
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [addingCompany, setAddingCompany] = useState(false);
+  const [districtFilter, setDistrictFilter] = useState('');
+  const [commentFor, setCommentFor] = useState(null); // customer object
 
-  const locationOptions = [...new Set(caseStudies.map(c => c.location).filter(Boolean))];
+  // ログイン中アカウントの担当で初期絞り込み（オーナーは切替可）
+  const [assigneeFilter, setAssigneeFilter] = useState(currentUser?.displayName || '');
 
-  const filtered = caseStudies.filter(c => {
-    const q = search.toLowerCase();
-    const matchesSearch = !q || c.companyName.toLowerCase().includes(q);
-    const matchesLocation = !locationFilter || c.location === locationFilter;
-    const matchesFavorite = !favoritesOnly || (c.favoritedBy || []).includes(currentUser?.displayName);
-    return matchesSearch && matchesLocation && matchesFavorite;
+  // 顧客ごとに、受注記録（最新）をひとつ代表として取り出す
+  const rows = (() => {
+    const byCustomer = {};
+    (records || []).forEach(r => {
+      if (!ORDER_FLAGS.includes(r.flag)) return;
+      if (r.customerId == null) return;
+      const prev = byCustomer[r.customerId];
+      if (!prev || (r.date || '') > (prev.date || '')) byCustomer[r.customerId] = r;
+    });
+    const out = [];
+    (customers || []).forEach(c => {
+      const orderRec = byCustomer[c.id];
+      if (!orderRec) return;
+      out.push({ customer: c, order: orderRec });
+    });
+    // 受注日の新しい順
+    out.sort((a, b) => (b.order.date || '').localeCompare(a.order.date || ''));
+    return out;
+  })();
+
+  const districtOptions = [...new Set(rows.map(r => extractDistrict(r.customer.address)).filter(Boolean))];
+
+  const filtered = rows.filter(({ customer, order }) => {
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q || [customer.gakuenName, customer.enName, customer.enNameKana, customer.chairman, customer.principal, order.productName].some(v => (v || '').toLowerCase().includes(q));
+    const matchesDistrict = !districtFilter || extractDistrict(customer.address) === districtFilter;
+    const matchesAssignee = !assigneeFilter || customer.assignedTo === assigneeFilter;
+    return matchesSearch && matchesDistrict && matchesAssignee;
   });
 
-  const addCompany = (data) => {
-    setCaseStudies(prev => [...prev, { ...data, id: Date.now(), deals: [], comments: [], favoritedBy: [] }]);
-    setAddingCompany(false);
+  const addComment = (customerId, text) => {
+    const entry = { id: Date.now(), text, author: currentUser?.displayName || '', at: new Date().toISOString().substring(0, 16).replace('T', ' ') };
+    setCaseComments(prev => ({ ...(prev || {}), [customerId]: [...((prev || {})[customerId] || []), entry] }));
   };
+  const deleteComment = (customerId, commentId) => {
+    setCaseComments(prev => ({ ...(prev || {}), [customerId]: ((prev || {})[customerId] || []).filter(cm => cm.id !== commentId) }));
+  };
+
+  const th = "px-3 py-2 text-left text-[11px] font-bold text-slate-500 border border-slate-200 bg-slate-50 whitespace-nowrap";
+  const td = "px-3 py-2 text-xs text-slate-700 border border-slate-200 align-top";
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="法人名で検索"
-              className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white" />
-          </div>
-          <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
-            <option value="">すべての場所</option>
-            {locationOptions.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-          <label className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
-            <input type="checkbox" checked={favoritesOnly} onChange={e => setFavoritesOnly(e.target.checked)} className="accent-rose-500" />
-            <Heart className="w-3.5 h-3.5 text-rose-500" />
-            お気に入りのみ
-          </label>
+      <div>
+        <h2 className="text-lg font-bold text-slate-700">インスパイアのお客さん　{filtered.length}法人</h2>
+        <p className="text-xs text-slate-400 mt-0.5">顧客リストで受注（受注・ユーザー・過去受注記録あり）になった先が自動で表示されます。</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="法人名・園名・商材で検索" className="pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm w-64" />
         </div>
-        {canEdit && (
-          <button onClick={() => setAddingCompany(true)} className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">
-            <Plus className="w-4 h-4" />法人を登録
-          </button>
+        <select value={districtFilter} onChange={e => setDistrictFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <option value="">すべての地区</option>
+          {districtOptions.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        {isOwner && (
+          <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">すべての担当者</option>
+            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+          </select>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map(c => (
-          <CaseStudyCard key={c.id} company={c} products={products} members={members} currentUser={currentUser} setCaseStudies={setCaseStudies} showConfirm={showConfirm} canEdit={canEdit} />
-        ))}
-        {filtered.length === 0 && <p className="text-sm text-slate-400 col-span-full text-center py-10">該当する法人がありません。</p>}
-      </div>
+      {filtered.length === 0 ? (
+        <p className="text-sm text-slate-400">該当する受注顧客がいません。</p>
+      ) : (
+        <div className="overflow-x-auto bg-white rounded-xl border border-slate-100 shadow-sm">
+          <table className="border-collapse min-w-max">
+            <thead>
+              <tr>
+                <th className={th}>法人名</th>
+                <th className={th}>園名</th>
+                <th className={th}>園名ふりがな</th>
+                <th className={th}>HPリンク</th>
+                <th className={th}>理事長名</th>
+                <th className={th}>園長名</th>
+                <th className={th}>営業担当者</th>
+                <th className={th}>商材</th>
+                <th className={th}>詳細情報（受注背景）</th>
+                <th className={th}>受注日</th>
+                <th className={th}>地区</th>
+                <th className={th}>住所</th>
+                <th className={th}>操作・コメント</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(({ customer: c, order }) => {
+                const comments = (caseComments || {})[c.id] || [];
+                return (
+                  <tr key={c.id} className="hover:bg-slate-50">
+                    <td className={td + ' font-semibold'}>{c.gakuenName}</td>
+                    <td className={td}>{c.enName}</td>
+                    <td className={td}>{c.enNameKana}</td>
+                    <td className={td}>{c.hpLink ? <a href={c.hpLink} target="_blank" rel="noreferrer" className="text-indigo-600 underline break-all">{c.hpLink}</a> : ''}</td>
+                    <td className={td}>{c.chairman}</td>
+                    <td className={td}>{c.principal}</td>
+                    <td className={td + ' whitespace-nowrap'}>{c.assignedTo}</td>
+                    <td className={td + ' whitespace-nowrap'}>{order.productName || ''}</td>
+                    <td className={td} style={{ minWidth: '260px', maxWidth: '360px' }}><div className="whitespace-pre-wrap">{order.description || order.background || order.note || ''}</div></td>
+                    <td className={td + ' whitespace-nowrap'}>{order.date || ''}</td>
+                    <td className={td + ' whitespace-nowrap'}>{extractDistrict(c.address)}</td>
+                    <td className={td} style={{ minWidth: '180px' }}>{c.address}</td>
+                    <td className={td + ' whitespace-nowrap'}>
+                      <div className="flex flex-col gap-1">
+                        <button onClick={() => onOpenCustomer(c.id)} className="px-2.5 py-1.5 bg-teal-600 text-white rounded-lg text-[11px] font-bold hover:bg-teal-700">カードを開く</button>
+                        <button onClick={() => setCommentFor(c)} className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-[11px] font-bold hover:bg-slate-50 flex items-center gap-1 justify-center">
+                          <MessageCircle className="w-3 h-3" />コメント{comments.length > 0 ? `（${comments.length}）` : ''}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {addingCompany && canEdit && (
-        <CompanyModal company={{ id: null, companyName: '', location: '', hpLink: '', gbpLink: '' }} onSave={addCompany} onClose={() => setAddingCompany(false)} />
+      {commentFor && (
+        <CaseCommentModal
+          customer={commentFor}
+          comments={(caseComments || {})[commentFor.id] || []}
+          onAdd={(text) => addComment(commentFor.id, text)}
+          onDelete={(cid) => deleteComment(commentFor.id, cid)}
+          currentUser={currentUser}
+          onClose={() => setCommentFor(null)}
+        />
       )}
     </div>
   );
 }
+
 
 // ---------- 営業ノウハウページ ----------
 function KnowledgeBaseView({ articles, setArticles, knowledgeTags, members, currentUser, showConfirm, showAlert, canEdit }) {
@@ -5169,7 +5060,7 @@ export default function App() {
     customers: [], records: [], products: initialProducts, activityTypes: initialActivityTypes,
     goals: initialGoals, emailTemplates: initialEmailTemplates, reportTemplates: initialReportTemplates,
     dailyReportTemplates: initialDailyReportTemplates, associationTypes: initialAssociationTypes, dailyReportLogs: [],
-    caseStudies: initialCaseStudies, knowledgeArticles: initialKnowledgeArticles,
+    caseStudies: initialCaseStudies, caseComments: {}, knowledgeArticles: initialKnowledgeArticles,
     knowledgeTags: initialKnowledgeTags, departments: initialDepartments,
     rolePermissions: initialRolePermissions,
     industryTypes: initialIndustryTypes,
@@ -5177,7 +5068,7 @@ export default function App() {
     personalSettings: {},
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, caseStudies, knowledgeArticles, rolePermissions, knowledgeTags, departments, industryTypes, teleGoals, personalSettings } = data;
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, caseStudies, caseComments, knowledgeArticles, rolePermissions, knowledgeTags, departments, industryTypes, teleGoals, personalSettings } = data;
   const canViewSettings = isOwner || hasPermission(user?.role, 'viewSettings', rolePermissions);
   const canDeleteCustomer = isOwner || hasPermission(user?.role, 'deleteCustomer', rolePermissions);
   const canBulkEdit = isOwner || hasPermission(user?.role, 'bulkEdit', rolePermissions);
@@ -5194,6 +5085,7 @@ export default function App() {
   const setAssociationTypes = makeSetter('associationTypes');
   const setDailyReportLogs = makeSetter('dailyReportLogs');
   const setCaseStudies = makeSetter('caseStudies');
+  const setCaseComments = makeSetter('caseComments');
   const setKnowledgeArticles = makeSetter('knowledgeArticles');
   const setRolePermissions = makeSetter('rolePermissions');
   const setKnowledgeTags = makeSetter('knowledgeTags');
@@ -5393,7 +5285,7 @@ export default function App() {
           <EmailBuilderView customers={customers} emailTemplates={emailTemplates} setEmailTemplates={setEmailTemplates} extraTemplates={personalEmailTemplatesLabeled} showAlert={showAlert} showConfirm={showConfirm} />
         )}
         {activeTab === 'case_studies' && (
-          <CaseStudiesView caseStudies={caseStudies} setCaseStudies={setCaseStudies} products={products} members={members} currentUser={user} showConfirm={showConfirm} canEdit={canEditCaseStudies} />
+          <CaseStudiesView customers={customers} records={records} caseComments={caseComments || {}} setCaseComments={setCaseComments} members={members} currentUser={user} isOwner={isOwner} onOpenCustomer={openCustomerFromHome} />
         )}
         {activeTab === 'knowledge' && (
           <KnowledgeBaseView articles={knowledgeArticles} setArticles={setKnowledgeArticles} knowledgeTags={knowledgeTags || []} members={members} currentUser={user} showConfirm={showConfirm} showAlert={showAlert} canEdit={canEditKnowledge} />
