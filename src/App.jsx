@@ -3893,9 +3893,58 @@ function CaseCommentModal({ customer, comments, onAdd, onDelete, currentUser, on
   );
 }
 
-function CaseStudiesView({ customers, records, caseComments, setCaseComments, members, currentUser, isOwner, onOpenCustomer }) {
+// クリックでその場編集できるセル。type: 'text' | 'textarea' | 'select'
+function EditableCell({ value, onSave, className, type = 'text', options, style, placeholder, canEdit = true, render }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? '');
+  useEffect(() => { setDraft(value ?? ''); }, [value]);
+
+  if (!canEdit) {
+    return <td className={className} style={style}>{render ? render(value) : (value || '')}</td>;
+  }
+
+  const commit = () => { setEditing(false); if ((draft ?? '') !== (value ?? '')) onSave(draft); };
+
+  if (editing) {
+    if (type === 'select') {
+      return (
+        <td className={className} style={style}>
+          <select autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
+            className="w-full px-1.5 py-1 border border-teal-300 rounded text-xs bg-white">
+            <option value=""></option>
+            {(options || []).map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </td>
+      );
+    }
+    if (type === 'textarea') {
+      return (
+        <td className={className} style={style}>
+          <textarea autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} rows={4}
+            className="w-full px-1.5 py-1 border border-teal-300 rounded text-xs resize-y" />
+        </td>
+      );
+    }
+    return (
+      <td className={className} style={style}>
+        <input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
+          onKeyDown={e => { if (e.key === 'Enter' && type !== 'textarea') { e.preventDefault(); commit(); } }}
+          className="w-full px-1.5 py-1 border border-teal-300 rounded text-xs" />
+      </td>
+    );
+  }
+
+  return (
+    <td className={className + ' cursor-text hover:bg-teal-50/60'} style={style} onClick={() => setEditing(true)} title="クリックで編集">
+      {render ? render(value) : (value || <span className="text-slate-300">{placeholder || '—'}</span>)}
+    </td>
+  );
+}
+
+function CaseStudiesView({ customers, setCustomers, records, setRecords, caseComments, setCaseComments, associationTypes, members, currentUser, isOwner, canEdit, onOpenCustomer }) {
   const [search, setSearch] = useState('');
   const [districtFilter, setDistrictFilter] = useState('');
+  const [associationFilter, setAssociationFilter] = useState('');
   const [commentFor, setCommentFor] = useState(null); // customer object
 
   // ログイン中アカウントの担当で初期絞り込み（オーナーは切替可）
@@ -3922,14 +3971,25 @@ function CaseStudiesView({ customers, records, caseComments, setCaseComments, me
   })();
 
   const districtOptions = [...new Set(rows.map(r => extractDistrict(r.customer.address)).filter(Boolean))];
+  const associationOptions = [...new Set([...(associationTypes || []).map(a => a.name), ...rows.map(r => r.customer.associationType).filter(Boolean)])];
 
   const filtered = rows.filter(({ customer, order }) => {
     const q = search.trim().toLowerCase();
     const matchesSearch = !q || [customer.gakuenName, customer.enName, customer.enNameKana, customer.chairman, customer.principal, order.productName].some(v => (v || '').toLowerCase().includes(q));
     const matchesDistrict = !districtFilter || extractDistrict(customer.address) === districtFilter;
+    const matchesAssociation = !associationFilter || customer.associationType === associationFilter;
     const matchesAssignee = !assigneeFilter || customer.assignedTo === assigneeFilter;
-    return matchesSearch && matchesDistrict && matchesAssignee;
+    return matchesSearch && matchesDistrict && matchesAssociation && matchesAssignee;
   });
+
+  // 顧客カードのフィールドを更新
+  const updateCustomer = (customerId, field, value) => {
+    setCustomers(prev => prev.map(c => c.id === customerId ? { ...c, [field]: value } : c));
+  };
+  // 受注記録のフィールドを更新（この顧客の代表受注レコードを対象）
+  const updateOrder = (orderId, field, value) => {
+    setRecords(prev => prev.map(r => r.id === orderId ? { ...r, [field]: value } : r));
+  };
 
   const addComment = (customerId, text) => {
     const entry = { id: Date.now(), text, author: currentUser?.displayName || '', at: new Date().toISOString().substring(0, 16).replace('T', ' ') };
@@ -3957,6 +4017,10 @@ function CaseStudiesView({ customers, records, caseComments, setCaseComments, me
         <select value={districtFilter} onChange={e => setDistrictFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
           <option value="">すべての地区</option>
           {districtOptions.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <option value="">すべての協会</option>
+          {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
         {isOwner && (
           <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
@@ -3993,18 +4057,23 @@ function CaseStudiesView({ customers, records, caseComments, setCaseComments, me
                 const comments = (caseComments || {})[c.id] || [];
                 return (
                   <tr key={c.id} className="hover:bg-slate-50">
-                    <td className={td + ' font-semibold'}>{c.gakuenName}</td>
-                    <td className={td}>{c.enName}</td>
-                    <td className={td}>{c.enNameKana}</td>
-                    <td className={td}>{c.hpLink ? <a href={c.hpLink} target="_blank" rel="noreferrer" className="text-indigo-600 underline break-all">{c.hpLink}</a> : ''}</td>
-                    <td className={td}>{c.chairman}</td>
-                    <td className={td}>{c.principal}</td>
-                    <td className={td + ' whitespace-nowrap'}>{c.assignedTo}</td>
-                    <td className={td + ' whitespace-nowrap'}>{order.productName || ''}</td>
-                    <td className={td} style={{ minWidth: '260px', maxWidth: '360px' }}><div className="whitespace-pre-wrap">{order.description || order.background || order.note || ''}</div></td>
-                    <td className={td + ' whitespace-nowrap'}>{order.date || ''}</td>
+                    <EditableCell className={td + ' font-semibold'} value={c.gakuenName} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'gakuenName', v)} />
+                    <EditableCell className={td} value={c.enName} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'enName', v)} />
+                    <EditableCell className={td} value={c.enNameKana} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'enNameKana', v)} />
+                    <EditableCell className={td} value={c.hpLink} canEdit={canEdit} placeholder="—"
+                      render={v => v ? <a href={v} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-indigo-600 underline break-all">{v}</a> : <span className="text-slate-300">—</span>}
+                      onSave={v => updateCustomer(c.id, 'hpLink', v)} />
+                    <EditableCell className={td} value={c.chairman} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'chairman', v)} />
+                    <EditableCell className={td} value={c.principal} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'principal', v)} />
+                    <EditableCell className={td + ' whitespace-nowrap'} value={c.assignedTo} canEdit={canEdit} type="select" options={members.map(m => m.displayName)} onSave={v => updateCustomer(c.id, 'assignedTo', v)} />
+                    <EditableCell className={td + ' whitespace-nowrap'} value={order.productName} canEdit={canEdit} onSave={v => updateOrder(order.id, 'productName', v)} />
+                    <EditableCell className={td} style={{ minWidth: '260px', maxWidth: '360px' }} type="textarea"
+                      value={order.description || order.background || order.note || ''} canEdit={canEdit}
+                      render={v => <div className="whitespace-pre-wrap">{v || <span className="text-slate-300">—</span>}</div>}
+                      onSave={v => updateOrder(order.id, 'description', v)} />
+                    <EditableCell className={td + ' whitespace-nowrap'} value={order.date} canEdit={canEdit} onSave={v => updateOrder(order.id, 'date', v)} />
                     <td className={td + ' whitespace-nowrap'}>{extractDistrict(c.address)}</td>
-                    <td className={td} style={{ minWidth: '180px' }}>{c.address}</td>
+                    <EditableCell className={td} style={{ minWidth: '180px' }} value={c.address} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'address', v)} />
                     <td className={td + ' whitespace-nowrap'}>
                       <div className="flex flex-col gap-1">
                         <button onClick={() => onOpenCustomer(c.id)} className="px-2.5 py-1.5 bg-teal-600 text-white rounded-lg text-[11px] font-bold hover:bg-teal-700">カードを開く</button>
@@ -5285,7 +5354,7 @@ export default function App() {
           <EmailBuilderView customers={customers} emailTemplates={emailTemplates} setEmailTemplates={setEmailTemplates} extraTemplates={personalEmailTemplatesLabeled} showAlert={showAlert} showConfirm={showConfirm} />
         )}
         {activeTab === 'case_studies' && (
-          <CaseStudiesView customers={customers} records={records} caseComments={caseComments || {}} setCaseComments={setCaseComments} members={members} currentUser={user} isOwner={isOwner} onOpenCustomer={openCustomerFromHome} />
+          <CaseStudiesView customers={customers} setCustomers={setCustomers} records={records} setRecords={setRecords} caseComments={caseComments || {}} setCaseComments={setCaseComments} associationTypes={associationTypes} members={members} currentUser={user} isOwner={isOwner} canEdit={canEditCaseStudies} onOpenCustomer={openCustomerFromHome} />
         )}
         {activeTab === 'knowledge' && (
           <KnowledgeBaseView articles={knowledgeArticles} setArticles={setKnowledgeArticles} knowledgeTags={knowledgeTags || []} members={members} currentUser={user} showConfirm={showConfirm} showAlert={showAlert} canEdit={canEditKnowledge} />
