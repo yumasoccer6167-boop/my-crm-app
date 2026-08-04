@@ -782,7 +782,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
           <p className="text-sm text-slate-400">まだ記録がありません。「顧客リスト」から顧客を選んで記録を追加してください。</p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {filtered.slice().reverse().slice(0, 8).map(r => (
+            {filtered.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.id - a.id)).slice(0, 8).map(r => (
               <li key={r.id} className="py-2.5">
                 <button onClick={() => onOpenCustomer(r.customerId)} className="w-full flex justify-between items-center text-sm hover:bg-slate-50 rounded-lg px-1.5 -mx-1.5 py-0.5 transition text-left">
                   <div>
@@ -919,6 +919,7 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
   const [profit, setProfit] = useState(record.profit || '');
   const [scheduledDate, setScheduledDate] = useState(record.scheduledDate || '');
   const [scheduledTime, setScheduledTime] = useState(record.scheduledTime || '');
+  const [recallRank, setRecallRank] = useState(record.recallRank || 'A');
   const [voiceLink, setVoiceLink] = useState(record.voiceLink || '');
   const [voiceMemo, setVoiceMemo] = useState(record.voiceMemo || '');
 
@@ -934,7 +935,7 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
       ...(isOrder ? { productName, monthlyFee, years, quantity, profit } : { productName: undefined, monthlyFee: undefined, years: undefined, quantity: undefined, profit: undefined }),
       ...(needsSchedule && scheduledDate ? { scheduledDate, scheduledTime } : { scheduledDate: undefined, scheduledTime: undefined }),
       ...(isTele && (voiceLink || voiceMemo) ? { voiceLink, voiceMemo } : { voiceLink: undefined, voiceMemo: undefined }),
-      ...(isRecall ? {} : { recallDone: undefined }),
+      ...(isRecall ? { recallRank } : { recallDone: undefined, recallRank: undefined }),
     });
   };
 
@@ -968,7 +969,25 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
       {needsSchedule && (
         <div className="grid grid-cols-2 gap-3">
           <FormField label={isRecall ? '再コール予定日' : '予定日'} type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
-          <FormField label={isRecall ? '再コール予定時間' : '予定時間'} type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} />
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-slate-500">{isRecall ? '再コール予定時間' : '予定時間'}</label>
+            {isTimeSlotFlag(flag) ? (
+              <select value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+                <option value="">時間帯を選択</option>
+                {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            ) : (
+              <input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
+            )}
+          </div>
+          {isRecall && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold text-slate-500">ランク</label>
+              <select value={recallRank} onChange={e => setRecallRank(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+                {RECALL_RANKS.map(r => <option key={r} value={r}>{r}ランク</option>)}
+              </select>
+            </div>
+          )}
         </div>
       )}
 
@@ -1975,6 +1994,15 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 // 「再コール」も予定日時を設定できるようにする（再コールページ・カレンダーに反映されます）
 const SCHEDULE_FLAGS = ['再コール', '初回時間設定（代表）', '初回時間設定（担当）', '時間設定（代表）', '時間設定（担当）', '飛び込み初回時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
 const SALES_TYPES = ['営業（代表）', '営業（担当）'];
+// 30分刻みの時間帯（08:00〜20:00）
+const TIME_SLOTS = (() => {
+  const out = [];
+  for (let h = 8; h <= 20; h++) { out.push(`${String(h).padStart(2, '0')}:00`); if (h < 20) out.push(`${String(h).padStart(2, '0')}:30`); }
+  return out;
+})();
+const RECALL_RANKS = ['A', 'B', 'C'];
+// 「再コール」または「時間設定」系フラグは、予定時間を30分刻みで選ばせる
+const isTimeSlotFlag = (flag) => flag === '再コール' || (typeof flag === 'string' && flag.includes('時間設定'));
 // 営業件数の集計対象。上記に加え、単独の活動種別「営業」も対象に含める（本番データ対応）
 const isSalesType = (type) => SALES_TYPES.includes(type) || type === '営業';
 const isInitialTimeSettingFlag = (flag) => ['初回時間設定（代表）', '初回時間設定（担当）', '時間設定（代表）', '時間設定（担当）'].includes(flag);
@@ -2084,7 +2112,25 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
           </p>
           <div className="grid grid-cols-2 gap-3">
             <FormField label={isRecall ? '再コール予定日' : '予定日'} type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
-            <FormField label={isRecall ? '再コール予定時間' : '予定時間'} type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-500">{isRecall ? '再コール予定時間' : '予定時間'}</label>
+              {isTimeSlotFlag(flag) ? (
+                <select value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+                  <option value="">時間帯を選択</option>
+                  {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              ) : (
+                <input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm" />
+              )}
+            </div>
+            {isRecall && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-500">ランク</label>
+                <select value={recallRank} onChange={e => setRecallRank(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+                  {RECALL_RANKS.map(r => <option key={r} value={r}>{r}ランク</option>)}
+                </select>
+              </div>
+            )}
           </div>
           {isRecall && !scheduledDate && (
             <p className="text-[11px] text-orange-600 mt-2">※ 予定日を入れると再コールページの一覧に日時付きで表示され、時間を過ぎるとメニューに赤いバッジが出ます。</p>
@@ -3041,6 +3087,7 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
   const [dateTo, setDateTo] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState(currentUser?.displayName || '');
   const [associationFilter, setAssociationFilter] = useState('');
+  const [rankFilter, setRankFilter] = useState('');
 
   const nowKey = nowStampKey();
   const todayStr = new Date().toISOString().substring(0, 10);
@@ -3066,18 +3113,22 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
     const matchesDate = (!dateFrom && !dateTo)
       ? true
       : (!!r.scheduledDate && (!dateFrom || r.scheduledDate >= dateFrom) && (!dateTo || r.scheduledDate <= dateTo));
-    return matchesAssignee && matchesAssociation && matchesDate;
+    const matchesRank = !rankFilter || (r.recallRank || 'A') === rankFilter;
+    return matchesAssignee && matchesAssociation && matchesDate && matchesRank;
   });
 
+  const rankOrder = (r) => ({ A: 0, B: 1, C: 2 }[r.recallRank || 'A'] ?? 3);
   const pending = scoped.filter(r => !r.recallDone).slice()
-    .sort((a, b) => recallStampKey(a).localeCompare(recallStampKey(b)));
+    .sort((a, b) => recallStampKey(a).localeCompare(recallStampKey(b)) || rankOrder(a) - rankOrder(b));
   const done = scoped.filter(r => r.recallDone).slice()
-    .sort((a, b) => recallStampKey(b).localeCompare(recallStampKey(a)));
+    .sort((a, b) => recallStampKey(b).localeCompare(recallStampKey(a)) || rankOrder(a) - rankOrder(b));
   const list = tab === 'pending' ? pending : done;
 
-  const overdueCount = pending.filter(isOverdue).length;
-  const todayCount = pending.filter(r => isToday(r) && !isOverdue(r)).length;
-  const noDateCount = pending.filter(r => !r.scheduledDate).length;
+  // 上部の警告サマリーは、担当フィルタに関わらず常にログイン中アカウント本人の再コールのみを対象にする
+  const myPending = allRecalls.filter(r => !r.recallDone && effectiveAssignee(r) === (currentUser?.displayName || ''));
+  const overdueCount = myPending.filter(isOverdue).length;
+  const todayCount = myPending.filter(r => isToday(r) && !isOverdue(r)).length;
+  const noDateCount = myPending.filter(r => !r.scheduledDate).length;
 
   const setDone = (id, val) => {
     setRecords(prev => prev.map(r => r.id === id ? { ...r, recallDone: val } : r));
@@ -3109,6 +3160,11 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
             className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
             <option value="">すべての協会</option>
             {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select value={rankFilter} onChange={e => setRankFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <option value="">全ランク</option>
+            {RECALL_RANKS.map(r => <option key={r} value={r}>{r}ランク</option>)}
           </select>
           <div className="flex items-center gap-1.5">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-2 py-2 border border-slate-200 rounded-lg text-sm bg-white" title="予定日（この日以降）" />
@@ -3160,7 +3216,10 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
                     <p className="text-xs text-slate-400">
                       {cust?.gakuenName || ''}{cust?.associationType ? ` ・ ${cust.associationType}` : ''}
                     </p>
-                    <p className="font-bold text-slate-800">{r.customerName || cust?.enName || '不明な顧客'}</p>
+                    <p className="font-bold text-slate-800 flex items-center gap-2">
+                      {r.customerName || cust?.enName || '不明な顧客'}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${{'A':'bg-rose-100 text-rose-700','B':'bg-amber-100 text-amber-700','C':'bg-slate-100 text-slate-500'}[r.recallRank || 'A']}`}>{r.recallRank || 'A'}ランク</span>
+                    </p>
                     <p className={`text-sm font-bold mt-1 flex flex-wrap items-center gap-1.5 ${overdue ? 'text-red-600' : today ? 'text-indigo-700' : 'text-slate-600'}`}>
                       <CalendarDays className="w-4 h-4 shrink-0" />
                       {r.scheduledDate ? `${r.scheduledDate} ${r.scheduledTime || '（時間未設定）'}` : '予定日時が未設定です'}
@@ -3218,7 +3277,7 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
 
 // ---------- カレンダー（訪問予定・再コール予定） ----------
 function CalendarView({ records, customers, members, departments, currentUser, isOwner, onOpenCustomer }) {
-  const [viewMode, setViewMode] = useState('month'); // 'month' | 'week' | 'day'
+  const [viewMode, setViewMode] = useState('week'); // 'month' | 'week' | 'day'（初期は週間表示）
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
