@@ -2024,6 +2024,7 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
   const [profit, setProfit] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  const [recallRank, setRecallRank] = useState('A');
   const [voiceLink, setVoiceLink] = useState('');
   const [voiceMemo, setVoiceMemo] = useState('');
   const [assignedTo, setAssignedTo] = useState(currentUser?.displayName || '');
@@ -2036,7 +2037,7 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
 
   const reset = () => {
     setFlag(''); setMemo(''); setMonthlyFee(''); setYears(''); setQuantity(''); setProfit('');
-    setScheduledDate(''); setScheduledTime(''); setVoiceLink(''); setVoiceMemo('');
+    setScheduledDate(''); setScheduledTime(''); setRecallRank('A'); setVoiceLink(''); setVoiceMemo('');
     setAssignedTo(currentUser?.displayName || '');
   };
 
@@ -2047,7 +2048,7 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
       ...(isOrder ? { productName, monthlyFee, years, quantity, profit } : {}),
       ...(needsSchedule && scheduledDate ? { scheduledDate, scheduledTime } : {}),
       ...(isTele && (voiceLink || voiceMemo) ? { voiceLink, voiceMemo } : {}),
-      ...(isRecall ? { recallDone: false } : {}),
+      ...(isRecall ? { recallDone: false, recallRank } : {}),
     };
     setRecords(prev => [...prev, newRecord]);
     showAlert('記録を保存しました。');
