@@ -46,7 +46,7 @@ const initialGoals = { [thisMonth]: { timeSetting: 50, firstVisit: 20, salesTime
 const emptyCustomer = {
   id: null, gakuenName: '', gakuenNameKana: '', enName: '', enNameKana: '', associationType: '', industry: '', linkedCustomerIds: [],
   chairman: '', chairmanKana: '', principal: '', principalKana: '', address: '',
-  tel: '', mobile: '', email: '', hpLink: '', recruitSiteLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
+  tel: '', mobile: '', headquartersTel: '', email: '', hpLink: '', recruitSiteLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
 };
 
 const initialEmailTemplates = [
@@ -116,7 +116,7 @@ const CSV_FIELDS = [
   ['industry', '業種'],
   ['chairman', '理事長'], ['chairmanKana', '理事長ふりがな'],
   ['principal', '園長'], ['principalKana', '園長ふりがな'],
-  ['address', '住所'], ['tel', 'TEL'], ['mobile', '携帯番号'],
+  ['address', '住所'], ['tel', 'TEL'], ['mobile', '携帯番号'], ['headquartersTel', '法人本部番号'],
   ['email', 'メール', 'メールアドレス'],
   ['hpLink', 'HPリンク'], ['recruitSiteLink', '採用サイトリンク'], ['hpVendor', 'HP業者'],
   ['instagram', 'InstagramURL', 'Instagram'],
@@ -849,6 +849,7 @@ function CustomerModal({ customer, associationTypes, industryTypes, members, cur
         <FormField label="住所" value={form.address} onChange={set('address')} className="md:col-span-2" />
         <FormField label="TEL" value={form.tel} onChange={set('tel')} />
         <FormField label="携帯番号" value={form.mobile} onChange={set('mobile')} />
+        <FormField label="法人本部番号" value={form.headquartersTel} onChange={set('headquartersTel')} />
         <FormField label="メールアドレス" value={form.email} onChange={set('email')} />
         <FormField label="HPリンク" value={form.hpLink} onChange={set('hpLink')} />
         <FormField label="採用サイトリンク" value={form.recruitSiteLink} onChange={set('recruitSiteLink')} />
@@ -1226,6 +1227,7 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
         {customer.principal && <span className="flex items-center gap-1"><Users className="w-4 h-4" />園長: {customer.principal}{customer.principalKana ? `（${customer.principalKana}）` : ''}</span>}
         {customer.tel && <a href={`tel:${customer.tel}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.tel}</a>}
         {customer.mobile && <a href={`tel:${customer.mobile}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.mobile}（携帯）</a>}
+        {customer.headquartersTel && <a href={`tel:${customer.headquartersTel}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.headquartersTel}（本部）</a>}
         {customer.email && <a href={`mailto:${customer.email}`} className="flex items-center gap-1 text-teal-700"><Mail className="w-4 h-4" />{customer.email}</a>}
         {customer.address && <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{customer.address}</span>}
         {customer.hpLink && <a href={customer.hpLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-600"><Globe className="w-4 h-4" />HP</a>}
@@ -1848,6 +1850,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                     {c.principal && <p className="flex items-center gap-1.5"><Users className="w-3 h-3" />園長: {c.principal}{c.principalKana ? `（${c.principalKana}）` : ''}</p>}
                     {c.tel && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.tel}</p>}
                     {c.mobile && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.mobile}（携帯）</p>}
+                    {c.headquartersTel && <p className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{c.headquartersTel}（本部）</p>}
                     {c.email && <p className="flex items-center gap-1.5"><Mail className="w-3 h-3" />{c.email}</p>}
                     {c.address && <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3" />{c.address}</p>}
                     {(c.reviewScore || c.reviewCount) && (
