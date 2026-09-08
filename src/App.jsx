@@ -1503,7 +1503,7 @@ function BulkEditModal({ count, members, associationTypes, activityTypes, onAppl
 }
 
 // ---------- 顧客リスト ----------
-function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, industryTypes, members, currentUser, isOwner, canDeleteCustomer, canBulkEdit, token, showAlert, showConfirm, filters, setFilters, pendingViewCustomerId, pendingViewWithForm, clearPendingViewCustomer }) {
+function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, industryTypes, members, currentUser, isOwner, canDeleteCustomer, canBulkEdit, token, showAlert, showConfirm, filters, setFilters, showRejectedMark, setShowRejectedMark, pendingViewCustomerId, pendingViewWithForm, clearPendingViewCustomer }) {
   const { search, addressFilter, statusFilter, associationFilter, industryFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitFilter, excludeCompanyOverlap, excludeUser, rejectedOnly } = filters;
   const setSearch = (v) => setFilters(prev => ({ ...prev, search: v }));
   const setAddressFilter = (v) => setFilters(prev => ({ ...prev, addressFilter: v }));
@@ -1766,6 +1766,11 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
             <XCircle className="w-3.5 h-3.5 text-red-500" />
             拒否済みのみ
           </label>
+          <label className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
+            <input type="checkbox" checked={showRejectedMark} onChange={e => setShowRejectedMark(e.target.checked)} className="accent-red-600" />
+            <XCircle className="w-3.5 h-3.5 text-red-400" />
+            拒否マークを表示
+          </label>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-slate-400">{filtered.length}件</span>
@@ -1893,7 +1898,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                               <AlertTriangle className="w-3 h-3" />
                             </span>
                           )}
-                          {isRejected && (
+                          {showRejectedMark && isRejected && (
                             <span title="代表・担当接触済みで拒否" className="inline-flex items-center gap-0.5 px-1.5 h-4 bg-red-100 text-red-600 rounded-full shrink-0 text-[10px] font-bold">
                               <XCircle className="w-3 h-3" />拒否
                             </span>
@@ -2001,7 +2006,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                     <td className="px-3 py-2.5">
                       <p className="font-bold text-slate-800 flex items-center gap-1.5">
                         {c.enName || '（園名未登録）'}
-                        {custRecords.some(r => REJECTED_FLAGS.includes(r.flag)) && (
+                        {showRejectedMark && custRecords.some(r => REJECTED_FLAGS.includes(r.flag)) && (
                           <span title="代表・担当接触済みで拒否" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-[10px] font-bold shrink-0">
                             <XCircle className="w-3 h-3" />拒否
                           </span>
@@ -5470,6 +5475,8 @@ export default function App() {
             canDeleteCustomer={canDeleteCustomer} canBulkEdit={canBulkEdit}
             showAlert={showAlert} showConfirm={showConfirm}
             filters={customerFilters} setFilters={setCustomerFilters}
+            showRejectedMark={myPersonal.showRejectedMark !== false}
+            setShowRejectedMark={(v) => updatePersonal({ showRejectedMark: v })}
             pendingViewCustomerId={pendingViewCustomerId}
             pendingViewWithForm={pendingViewWithForm}
             clearPendingViewCustomer={() => { setPendingViewCustomerId(null); setPendingViewWithForm(false); }}
