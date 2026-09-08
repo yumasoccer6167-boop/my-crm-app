@@ -13,7 +13,6 @@ app = Flask(__name__, static_folder='dist', static_url_path='/')
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 # 【重要】本番環境では必ずRenderの環境変数 SECRET_KEY を設定してください。
-# 設定しない場合、サーバー再起動のたびにログインし直しが必要になります。
 SECRET_KEY = os.environ.get('SECRET_KEY', 'please-change-this-secret-key')
 serializer = URLSafeTimedSerializer(SECRET_KEY)
 TOKEN_MAX_AGE = 60 * 60 * 24 * 30  # 30日間有効
@@ -22,9 +21,18 @@ TOKEN_MAX_AGE = 60 * 60 * 24 * 30  # 30日間有効
 GOOGLE_CALENDAR_ID = os.environ.get('GOOGLE_CALENDAR_ID')
 GOOGLE_CALENDAR_CREDENTIALS_JSON = os.environ.get('GOOGLE_CALENDAR_CREDENTIALS_JSON')
 
+# IDを持つ配列データ（レコード単位でマージするキー）。
+# これらは「丸ごと上書き」ではなく、IDごとに追加・更新・削除を反映する。
+ID_LIST_KEYS = [
+    'customers', 'records', 'products', 'activityTypes', 'associationTypes',
+    'dailyReportLogs', 'caseStudies', 'knowledgeArticles', 'knowledgeTags',
+    'departments', 'industryTypes',
+]
+# 保持するバックアップ世代数
+BACKUP_KEEP = 50
+
 
 def get_calendar_service():
-    """設定が揃っていればGoogleカレンダーAPIのサービスを返す。未設定ならNone。"""
     if not GOOGLE_CALENDAR_ID or not GOOGLE_CALENDAR_CREDENTIALS_JSON:
         return None
     try:
@@ -56,6 +64,16 @@ def init_db():
     if cur.fetchone() is None:
         cur.execute('INSERT INTO app_state (id, data) VALUES (1, %s)', (json.dumps({}),))
 
+    # 自動バックアップ（保存のたびに直前のデータを退避する履歴テーブル）
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS app_state_backups (
+            id SERIAL PRIMARY KEY,
+            data JSONB NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            note TEXT
+        )
+    ''')
+
     cur.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -66,13 +84,10 @@ def init_db():
             created_at TIMESTAMP NOT NULL DEFAULT NOW()
         )
     ''')
-    # 既存のデータベースにも新しい列を追加する（マイグレーション）
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT")
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS photo TEXT")
     cur.execute('SELECT COUNT(*) FROM users')
     if cur.fetchone()[0] == 0:
-        # 初回起動時に、最初のオーナーアカウントを自動作成します。
-        # ログイン後、必ずパスワードを変更してください。
         cur.execute(
             'INSERT INTO users (username, password_hash, display_name, role) VALUES (%s, %s, %s, %s)',
             ('owner', generate_password_hash('owner1234'), 'オーナー', 'owner')
@@ -109,6 +124,51 @@ def require_owner():
     if user['role'] != 'owner':
         return None, (jsonify({'error': 'forbidden'}), 403)
     return user, None
+
+
+def merge_id_list(base_list, incoming_list, deleted_ids):
+    """IDを持つ配列を、IDごとにマージする。
+    - incoming にあるIDは、その内容で追加・更新（送ってきた端末の変更を採用）
+    - incoming に無いIDは、base（サーバー最新）の内容を残す（他人の変更を消さない）
+    - deleted_ids にあるIDは結果から取り除く（削除を反映）
+    """
+    base_list = base_list if isinstance(base_list, list) else []
+    incoming_list = incoming_list if isinstance(incoming_list, list) else []
+    deleted = set(deleted_ids or [])
+
+    merged = {}
+    order = []
+    for item in base_list:
+        if not isinstance(item, dict) or 'id' not in item:
+            continue
+        merged[item['id']] = item
+        order.append(item['id'])
+    for item in incoming_list:
+        if not isinstance(item, dict) or 'id' not in item:
+            continue
+        if item['id'] not in merged:
+            order.append(item['id'])
+        merged[item['id']] = item
+    result = []
+    for _id in order:
+        if _id in deleted:
+            continue
+        result.append(merged[_id])
+    return result
+
+
+def merge_payload(base, incoming, deleted_map):
+    base = base if isinstance(base, dict) else {}
+    incoming = incoming if isinstance(incoming, dict) else {}
+    deleted_map = deleted_map or {}
+
+    result = dict(base)
+    for key, value in incoming.items():
+        if key in ID_LIST_KEYS:
+            result[key] = merge_id_list(base.get(key), value, deleted_map.get(key))
+        else:
+            result[key] = value
+    return result
 
 
 # ---------- 認証 ----------
@@ -182,7 +242,6 @@ def change_own_photo():
         return jsonify({'error': 'unauthorized'}), 401
     body = request.get_json(force=True) or {}
     photo = body.get('photo', '')
-    # 画像はBase64のData URLとして保存する。大きすぎる画像は容量を圧迫するため制限する
     if photo and len(photo) > 900000:
         return jsonify({'error': '画像のサイズが大きすぎます。もっと小さい画像を選んでください。'}), 400
     conn = get_conn()
@@ -194,7 +253,7 @@ def change_own_photo():
     return jsonify({'status': 'success'})
 
 
-# ---------- メンバー一覧（担当者選択用・ログインしていれば誰でも取得可） ----------
+# ---------- メンバー一覧 ----------
 @app.route('/api/members', methods=['GET'])
 def list_members():
     user = get_current_user()
@@ -399,19 +458,109 @@ def save_data():
     if not user:
         return jsonify({'error': 'unauthorized'}), 401
     try:
-        payload = request.get_json(force=True)
+        body = request.get_json(force=True) or {}
+        # 新フロント: { data: {...}, deleted: { customers:[id...], ... } }
+        # 旧フロント: データを直接送る形（後方互換）
+        if isinstance(body, dict) and 'data' in body:
+            incoming = body.get('data') or {}
+            deleted_map = body.get('deleted') or {}
+        else:
+            incoming = body
+            deleted_map = {}
+
         conn = get_conn()
         cur = conn.cursor()
+
+        cur.execute('SELECT data FROM app_state WHERE id = 1')
+        row = cur.fetchone()
+        current = row[0] if row and row[0] else {}
+
+        # 直前のデータをバックアップ（履歴）に退避
+        try:
+            cur.execute(
+                'INSERT INTO app_state_backups (data, note) VALUES (%s, %s)',
+                (json.dumps(current), 'save by ' + str(user.get('displayName', '')))
+            )
+            cur.execute(
+                'DELETE FROM app_state_backups WHERE id NOT IN '
+                '(SELECT id FROM app_state_backups ORDER BY id DESC LIMIT %s)',
+                (BACKUP_KEEP,)
+            )
+        except Exception as be:
+            print('backup error:', be)
+
+        merged = merge_payload(current, incoming, deleted_map)
         cur.execute(
             'UPDATE app_state SET data = %s, updated_at = NOW() WHERE id = 1',
-            (json.dumps(payload),)
+            (json.dumps(merged),)
         )
         conn.commit()
         cur.close()
         conn.close()
-        return jsonify({'status': 'success'})
+        return jsonify({'status': 'success', 'data': merged})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ---------- バックアップ履歴（オーナーのみ） ----------
+@app.route('/api/backups', methods=['GET'])
+def list_backups():
+    user, err = require_owner()
+    if err:
+        return err
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT id, created_at, note FROM app_state_backups ORDER BY id DESC LIMIT 50')
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([
+        {'id': r[0], 'createdAt': r[1].isoformat(), 'note': r[2]}
+        for r in rows
+    ])
+
+
+@app.route('/api/backups/<int:backup_id>', methods=['GET'])
+def get_backup(backup_id):
+    user, err = require_owner()
+    if err:
+        return err
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT data FROM app_state_backups WHERE id = %s', (backup_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        return jsonify({'error': 'not_found'}), 404
+    return jsonify(row[0])
+
+
+@app.route('/api/backups/<int:backup_id>/restore', methods=['POST'])
+def restore_backup(backup_id):
+    user, err = require_owner()
+    if err:
+        return err
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT data FROM app_state_backups WHERE id = %s', (backup_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        return jsonify({'error': 'not_found'}), 404
+    target = row[0]
+    cur.execute('SELECT data FROM app_state WHERE id = 1')
+    cur_row = cur.fetchone()
+    if cur_row and cur_row[0]:
+        cur.execute(
+            'INSERT INTO app_state_backups (data, note) VALUES (%s, %s)',
+            (json.dumps(cur_row[0]), 'before restore #' + str(backup_id))
+        )
+    cur.execute('UPDATE app_state SET data = %s, updated_at = NOW() WHERE id = 1', (json.dumps(target),))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'status': 'success', 'data': target})
 
 
 @app.route('/', defaults={'path': ''})

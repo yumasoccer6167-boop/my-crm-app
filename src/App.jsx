@@ -5,7 +5,7 @@ import {
   ChevronDown, Star, Camera, Upload, Download, Copy, BarChart,
   Bot, Sparkles, Send, FileText, ClipboardList, CalendarDays,
   ChevronLeft, ChevronRight, CheckSquare, Square, Mic, LayoutGrid, List,
-  Heart, Video, MessageCircle, BookOpen, Briefcase, AlertTriangle, PieChart, User, Link2, Target
+  Heart, Video, MessageCircle, BookOpen, Briefcase, AlertTriangle, PieChart, User, Link2, Target, XCircle
 } from 'lucide-react';
 
 // ---------- 初期データ ----------
@@ -243,12 +243,22 @@ function useAuth() {
   return { token, user, authLoading, login, logout, updateUser };
 }
 
+// IDを持つ配列データ（サーバー側と対応。削除検知の対象）
+const ID_LIST_KEYS = [
+  'customers', 'records', 'products', 'activityTypes', 'associationTypes',
+  'dailyReportLogs', 'caseStudies', 'knowledgeArticles', 'knowledgeTags',
+  'departments', 'industryTypes',
+];
+
 // ---------- サーバー同期フック（/api/data 経由でデータベースと同期） ----------
 function useSyncedData(initial, token, onUnauthorized) {
   const [data, setData] = useState(initial);
   const [loaded, setLoaded] = useState(false);
   const [syncError, setSyncError] = useState(false);
   const firstRender = useRef(true);
+  const prevDataRef = useRef(initial);   // 直前のデータ（削除検知用）
+  const deletedRef = useRef({});         // 未送信の削除ID { key: Set(id) }
+  const applyingServer = useRef(false);  // サーバー応答の反映中フラグ
 
   // 起動時にサーバーから読み込む
   useEffect(() => {
@@ -259,26 +269,71 @@ function useSyncedData(initial, token, onUnauthorized) {
         return res.json();
       })
       .then(json => {
-        setData(prev => ({ ...prev, ...json }));
+        applyingServer.current = true;
+        setData(prev => {
+          const next = { ...prev, ...json };
+          prevDataRef.current = next;
+          return next;
+        });
         setLoaded(true);
       })
       .catch(() => { setLoaded(true); setSyncError(true); });
   }, [token]);
 
+  // 直前データと今のデータを比べ、消えたIDを「削除」として記録する
+  const trackDeletions = (prev, next) => {
+    ID_LIST_KEYS.forEach(key => {
+      const before = Array.isArray(prev[key]) ? prev[key] : [];
+      const after = Array.isArray(next[key]) ? next[key] : [];
+      if (before.length === 0) return;
+      const afterIds = new Set(after.filter(x => x && x.id != null).map(x => x.id));
+      before.forEach(item => {
+        if (item && item.id != null && !afterIds.has(item.id)) {
+          if (!deletedRef.current[key]) deletedRef.current[key] = new Set();
+          deletedRef.current[key].add(item.id);
+        }
+      });
+    });
+  };
+
   // データが変わるたびに（少し待ってから）サーバーへ保存する
   useEffect(() => {
     if (!loaded || !token) return;
-    if (firstRender.current) { firstRender.current = false; return; }
+    if (firstRender.current) { firstRender.current = false; prevDataRef.current = data; return; }
+    // サーバー応答の反映で起きた変化は、削除検知・保存の対象にしない
+    if (applyingServer.current) { applyingServer.current = false; prevDataRef.current = data; return; }
+
+    trackDeletions(prevDataRef.current, data);
+    prevDataRef.current = data;
+
     const timer = setTimeout(() => {
+      const deleted = {};
+      Object.keys(deletedRef.current).forEach(k => {
+        const arr = [...deletedRef.current[k]];
+        if (arr.length) deleted[k] = arr;
+      });
       fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ data, deleted }),
       })
         .then(res => {
           if (res.status === 401) { onUnauthorized && onUnauthorized(); throw new Error('unauthorized'); }
           if (!res.ok) throw new Error();
+          return res.json();
+        })
+        .then(resp => {
           setSyncError(false);
+          deletedRef.current = {};
+          // サーバーがマージ済みの最新データを返したら、それで自分の状態を最新化
+          if (resp && resp.data) {
+            applyingServer.current = true;
+            setData(prev => {
+              const merged = { ...prev, ...resp.data };
+              prevDataRef.current = merged;
+              return merged;
+            });
+          }
         })
         .catch(() => setSyncError(true));
     }, 800);
@@ -1449,7 +1504,7 @@ function BulkEditModal({ count, members, associationTypes, activityTypes, onAppl
 
 // ---------- 顧客リスト ----------
 function CustomersView({ customers, setCustomers, records, setRecords, activityTypes, products, reportTemplates, associationTypes, industryTypes, members, currentUser, isOwner, canDeleteCustomer, canBulkEdit, token, showAlert, showConfirm, filters, setFilters, pendingViewCustomerId, pendingViewWithForm, clearPendingViewCustomer }) {
-  const { search, addressFilter, statusFilter, associationFilter, industryFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitFilter, excludeCompanyOverlap, excludeUser } = filters;
+  const { search, addressFilter, statusFilter, associationFilter, industryFilter, activityTypeFilter, flagFilter, assigneeFilter, viewMode, firstVisitFilter, excludeCompanyOverlap, excludeUser, rejectedOnly } = filters;
   const setSearch = (v) => setFilters(prev => ({ ...prev, search: v }));
   const setAddressFilter = (v) => setFilters(prev => ({ ...prev, addressFilter: v }));
   const setStatusFilter = (v) => setFilters(prev => ({ ...prev, statusFilter: v }));
@@ -1461,6 +1516,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
   const setViewMode = (v) => setFilters(prev => ({ ...prev, viewMode: v }));
   const setFirstVisitFilter = (v) => setFilters(prev => ({ ...prev, firstVisitFilter: v }));
   const setExcludeCompanyOverlap = (v) => setFilters(prev => ({ ...prev, excludeCompanyOverlap: v }));
+  const setRejectedOnly = (v) => setFilters(prev => ({ ...prev, rejectedOnly: v }));
   const setExcludeUser = (v) => setFilters(prev => ({ ...prev, excludeUser: v }));
   // ログイン中アカウントの担当で初期絞り込み。オーナーはあとから「すべて」等に変更可能。
   const assigneeInitedRef = useRef(false);
@@ -1594,7 +1650,9 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
     const matchesOverlap = !excludeCompanyOverlap || !hasCompanyOverlap;
     const isUser = statusLabel === 'ユーザー';
     const matchesUserExclusion = !excludeUser || !isUser;
-    return matchesSearch && matchesAddress && matchesStatus && matchesAssociation && matchesIndustry && matchesActivityType && matchesFlag && matchesAssignee && matchesFirstVisit && matchesOverlap && matchesUserExclusion;
+    const isRejected = custRecords.some(r => REJECTED_FLAGS.includes(r.flag));
+    const matchesRejected = !rejectedOnly || isRejected;
+    return matchesSearch && matchesAddress && matchesStatus && matchesAssociation && matchesIndustry && matchesActivityType && matchesFlag && matchesAssignee && matchesFirstVisit && matchesOverlap && matchesUserExclusion && matchesRejected;
   });
 
   // 他ページから特定の顧客を開いた場合は、その顧客だけを表示する
@@ -1703,6 +1761,11 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
             <Star className="w-3.5 h-3.5 text-amber-500" />
             ユーザーを除く
           </label>
+          <label className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
+            <input type="checkbox" checked={rejectedOnly} onChange={e => setRejectedOnly(e.target.checked)} className="accent-red-600" />
+            <XCircle className="w-3.5 h-3.5 text-red-500" />
+            拒否済みのみ
+          </label>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-slate-400">{filtered.length}件</span>
@@ -1804,6 +1867,8 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
             const status = getCustomerStatus(c.id, records);
             const hasFirstVisit = custRecords.some(r => r.type === '初回訪問');
             const hasCompanyOverlap = custRecords.some(r => r.type === '法人被り' || r.flag === '法人被り');
+            // 代表または担当と接触したうえで拒否された案件かどうか
+            const isRejected = custRecords.some(r => REJECTED_FLAGS.includes(r.flag));
             const isSelected = selectedIds.includes(c.id);
             return (
               <div key={c.id} onClick={() => selectMode ? toggleSelect(c.id) : setViewing(c)}
@@ -1826,6 +1891,11 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                           {hasCompanyOverlap && (
                             <span title="法人被り" className="inline-flex items-center justify-center w-4 h-4 bg-orange-100 text-orange-600 rounded-full shrink-0">
                               <AlertTriangle className="w-3 h-3" />
+                            </span>
+                          )}
+                          {isRejected && (
+                            <span title="代表・担当接触済みで拒否" className="inline-flex items-center gap-0.5 px-1.5 h-4 bg-red-100 text-red-600 rounded-full shrink-0 text-[10px] font-bold">
+                              <XCircle className="w-3 h-3" />拒否
                             </span>
                           )}
                         </div>
@@ -1929,7 +1999,14 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                       <td className="px-3 py-2.5">{isSelected ? <CheckSquare className="w-4 h-4 text-teal-600" /> : <Square className="w-4 h-4 text-slate-300" />}</td>
                     )}
                     <td className="px-3 py-2.5">
-                      <p className="font-bold text-slate-800">{c.enName || '（園名未登録）'}</p>
+                      <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                        {c.enName || '（園名未登録）'}
+                        {custRecords.some(r => REJECTED_FLAGS.includes(r.flag)) && (
+                          <span title="代表・担当接触済みで拒否" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-[10px] font-bold shrink-0">
+                            <XCircle className="w-3 h-3" />拒否
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-slate-400">{c.gakuenName}</p>
                     </td>
                     <td className="px-3 py-2.5 text-slate-600">{c.associationType || '-'}</td>
@@ -1996,6 +2073,8 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 // ---------- 記録登録フォーム（顧客詳細モーダルの中で使う） ----------
 // 「再コール」も予定日時を設定できるようにする（再コールページ・カレンダーに反映されます）
 const SCHEDULE_FLAGS = ['再コール', '初回時間設定（代表）', '初回時間設定（担当）', '時間設定（代表）', '時間設定（担当）', '飛び込み初回時間設定', '営業時間設定', '返事待ち', '返事待ちNG'];
+// 代表または担当と接触したうえで拒否された案件を示すフラグ
+const REJECTED_FLAGS = ['代表接触拒否', 'NG', '返事待ちNG', '営業提案NG'];
 const SALES_TYPES = ['営業（代表）', '営業（担当）'];
 // 30分刻みの時間帯（08:00〜20:00）
 const TIME_SLOTS = (() => {
@@ -5173,7 +5252,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [customerFilters, setCustomerFilters] = useState({
     search: '', addressFilter: '', statusFilter: '', associationFilter: '', industryFilter: '',
-    activityTypeFilter: '', flagFilter: '', assigneeFilter: '', viewMode: 'card', firstVisitFilter: '', excludeCompanyOverlap: false, excludeUser: false,
+    activityTypeFilter: '', flagFilter: '', assigneeFilter: '', viewMode: 'card', firstVisitFilter: '', excludeCompanyOverlap: false, excludeUser: false, rejectedOnly: false,
   });
   const [pendingViewCustomerId, setPendingViewCustomerId] = useState(null);
   const [pendingViewWithForm, setPendingViewWithForm] = useState(false);
