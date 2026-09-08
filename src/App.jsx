@@ -44,7 +44,7 @@ const thisMonth = new Date().toISOString().substring(0, 7);
 const initialGoals = { [thisMonth]: { timeSetting: 50, firstVisit: 20, salesTimeSetting: 15, order: 5, profit: 500000, quantity: 10 } };
 
 const emptyCustomer = {
-  id: null, gakuenName: '', gakuenNameKana: '', enName: '', enNameKana: '', associationType: '', industry: '', linkedCustomerIds: [],
+  id: null, gakuenName: '', gakuenNameKana: '', enName: '', enNameKana: '', associationType: '', industry: '', linkedCustomerIds: [], rejected: false,
   chairman: '', chairmanKana: '', principal: '', principalKana: '', address: '',
   tel: '', mobile: '', headquartersTel: '', email: '', hpLink: '', recruitSiteLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
 };
@@ -1269,11 +1269,22 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
       )}
       {(() => {
         const status = getCustomerStatus(customer.id, records);
-        return (customer.associationType || customer.industry || status) && (
+        return (
           <div className="flex flex-wrap items-center gap-2 mb-3">
             {customer.associationType && <span className="px-2.5 py-1 bg-slate-100 rounded-full text-xs text-slate-600">{customer.associationType}</span>}
             {customer.industry && <span className="px-2.5 py-1 bg-emerald-50 rounded-full text-xs text-emerald-700">{customer.industry}</span>}
             {status && <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${status.badge}`}>現在の状況: {status.label}</span>}
+            {/* 拒否のオン/オフスイッチ（手動で切り替え） */}
+            <button
+              onClick={() => setCustomers(prev => prev.map(c => c.id === customer.id ? { ...c, rejected: !c.rejected } : c))}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition ${customer.rejected ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400'}`}
+              title="拒否のオン/オフを切り替え">
+              <XCircle className="w-3.5 h-3.5" />
+              拒否
+              <span className={`inline-flex items-center w-8 h-4 rounded-full transition ${customer.rejected ? 'bg-red-500' : 'bg-slate-300'}`}>
+                <span className={`w-3 h-3 bg-white rounded-full transition-transform ${customer.rejected ? 'translate-x-4' : 'translate-x-1'}`} />
+              </span>
+            </button>
           </div>
         );
       })()}
@@ -1650,8 +1661,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
     const matchesOverlap = !excludeCompanyOverlap || !hasCompanyOverlap;
     const isUser = statusLabel === 'ユーザー';
     const matchesUserExclusion = !excludeUser || !isUser;
-    const isRejected = custRecords.some(r => REJECTED_FLAGS.includes(r.flag));
-    const matchesRejected = !rejectedOnly || isRejected;
+    const matchesRejected = !rejectedOnly || c.rejected === true;
     return matchesSearch && matchesAddress && matchesStatus && matchesAssociation && matchesIndustry && matchesActivityType && matchesFlag && matchesAssignee && matchesFirstVisit && matchesOverlap && matchesUserExclusion && matchesRejected;
   });
 
@@ -1873,7 +1883,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
             const hasFirstVisit = custRecords.some(r => r.type === '初回訪問');
             const hasCompanyOverlap = custRecords.some(r => r.type === '法人被り' || r.flag === '法人被り');
             // 代表または担当と接触したうえで拒否された案件かどうか
-            const isRejected = custRecords.some(r => REJECTED_FLAGS.includes(r.flag));
+            const isRejected = c.rejected === true;
             const isSelected = selectedIds.includes(c.id);
             return (
               <div key={c.id} onClick={() => selectMode ? toggleSelect(c.id) : setViewing(c)}
@@ -2006,7 +2016,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                     <td className="px-3 py-2.5">
                       <p className="font-bold text-slate-800 flex items-center gap-1.5">
                         {c.enName || '（園名未登録）'}
-                        {showRejectedMark && custRecords.some(r => REJECTED_FLAGS.includes(r.flag)) && (
+                        {showRejectedMark && c.rejected === true && (
                           <span title="代表・担当接触済みで拒否" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-[10px] font-bold shrink-0">
                             <XCircle className="w-3 h-3" />拒否
                           </span>
