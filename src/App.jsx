@@ -49,6 +49,14 @@ const emptyCustomer = {
   tel: '', mobile: '', headquartersTel: '', email: '', hpLink: '', recruitSiteLink: '', hpVendor: '', instagram: '', gbpLink: '', reviewScore: '', reviewCount: '', assignedTo: '',
 };
 
+// 「協会の種類」は複数加盟できるよう、、（全角読点）区切りの1本の文字列として保持する
+function parseAssociationTypes(value) {
+  return String(value || '').split(/[、,]/).map(s => s.trim()).filter(Boolean);
+}
+function joinAssociationTypes(list) {
+  return [...new Set((list || []).map(s => s.trim()).filter(Boolean))].join('、');
+}
+
 const initialEmailTemplates = [
   { id: 1, name: '初回訪問後の御礼', subject: '【御礼】お打ち合わせについて（{{法人名}} {{園名}} 様）',
     body: '{{法人名}}\n{{園名}}\n{{理事長}} 様\n\nいつも大変お世話になっております。\n\n本日はお忙しい中、お時間をいただき誠にありがとうございました。\n次回のご提案を準備してまいります。\n\n引き続き何卒よろしくお願い申し上げます。' },
@@ -560,7 +568,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
     return map;
   }, [customers]);
   const associationOptions = useMemo(
-    () => [...new Set(customers.map(c => c.associationType).filter(Boolean))],
+    () => [...new Set(customers.flatMap(c => parseAssociationTypes(c.associationType)))],
     [customers]
   );
 
@@ -573,7 +581,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
       base = base.filter(r => effectiveAssignee(r) === scopeValue);
     }
     if (associationFilter) {
-      base = base.filter(r => customerAssociationById[r.customerId] === associationFilter);
+      base = base.filter(r => parseAssociationTypes(customerAssociationById[r.customerId]).includes(associationFilter));
     }
     return base;
   })();
@@ -861,9 +869,18 @@ function CustomerModal({ customer, associationTypes, industryTypes, members, cur
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   // すでに設定済みの値が管理リストに無い場合（過去のデータ等）も選べるように残しておく
-  const associationOptions = form.associationType && !associationTypes.some(a => a.name === form.associationType)
-    ? [...associationTypes, { id: 'legacy', name: form.associationType }]
-    : associationTypes;
+  const selectedAssociations = parseAssociationTypes(form.associationType);
+  const legacyAssociations = selectedAssociations.filter(name => !associationTypes.some(a => a.name === name));
+  const associationOptions = [
+    ...associationTypes,
+    ...legacyAssociations.map(name => ({ id: `legacy-${name}`, name })),
+  ];
+  const toggleAssociation = (name) => {
+    const next = selectedAssociations.includes(name)
+      ? selectedAssociations.filter(n => n !== name)
+      : [...selectedAssociations, name];
+    setForm({ ...form, associationType: joinAssociationTypes(next) });
+  };
   const industryOptions = form.industry && !(industryTypes || []).some(t => t.name === form.industry)
     ? [...(industryTypes || []), { id: 'legacy', name: form.industry }]
     : (industryTypes || []);
@@ -875,13 +892,26 @@ function CustomerModal({ customer, associationTypes, industryTypes, members, cur
         <FormField label="法人名ふりがな" value={form.gakuenNameKana} onChange={set('gakuenNameKana')} />
         <FormField label="園名" value={form.enName} onChange={set('enName')} />
         <FormField label="園名ふりがな" value={form.enNameKana} onChange={set('enNameKana')} />
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">協会の種類</label>
-          <select value={form.associationType} onChange={set('associationType')} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-            <option value="">未設定</option>
-            {associationOptions.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
-          </select>
-          <p className="text-[11px] text-slate-400">選択肢の追加・編集は「設定・管理」からオーナーが行えます。</p>
+        <div className="flex flex-col gap-1 md:col-span-2">
+          <label className="text-xs font-semibold text-slate-500">加盟協会（複数選択可）</label>
+          <div className="flex flex-wrap gap-2 p-2 border border-slate-200 rounded-lg bg-white min-h-[42px]">
+            {associationOptions.length === 0 && <span className="text-xs text-slate-400 px-1">選択肢がありません</span>}
+            {associationOptions.map(a => (
+              <label
+                key={a.id}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs cursor-pointer border transition ${selectedAssociations.includes(a.name) ? 'bg-teal-50 border-teal-400 text-teal-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+              >
+                <input
+                  type="checkbox"
+                  className="hidden"
+                  checked={selectedAssociations.includes(a.name)}
+                  onChange={() => toggleAssociation(a.name)}
+                />
+                {a.name}
+              </label>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-400">選択肢の追加・編集は「設定・管理」からオーナーが行えます。複数の協会に加盟している場合は、すべて選択してください。</p>
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">業種</label>
@@ -1271,7 +1301,9 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
         const status = getCustomerStatus(customer.id, records);
         return (
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            {customer.associationType && <span className="px-2.5 py-1 bg-slate-100 rounded-full text-xs text-slate-600">{customer.associationType}</span>}
+            {parseAssociationTypes(customer.associationType).map(name => (
+              <span key={name} className="px-2.5 py-1 bg-slate-100 rounded-full text-xs text-slate-600">{name}</span>
+            ))}
             {customer.industry && <span className="px-2.5 py-1 bg-emerald-50 rounded-full text-xs text-emerald-700">{customer.industry}</span>}
             {status && <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${status.badge}`}>現在の状況: {status.label}</span>}
             {/* 拒否のオン/オフスイッチ（手動で切り替え） */}
@@ -1565,7 +1597,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
   const fileInputRef = useRef(null);
 
   const STATUS_OPTIONS = ['ユーザー', '営業実行済み', '初回訪問済み・営業時間設定', '初回訪問済み', 'テレアポ中', '法人被り', '記録あり', '記録なし'];
-  const associationOptions = [...new Set(customers.map(c => c.associationType).filter(Boolean))];
+  const associationOptions = [...new Set(customers.flatMap(c => parseAssociationTypes(c.associationType)))];
   const industryOptionsList = [...new Set([...(industryTypes || []).map(t => t.name), ...customers.map(c => c.industry).filter(Boolean)])];
   const flagOptions = activityTypeFilter
     ? (activityTypes.find(a => a.name === activityTypeFilter)?.flags || [])
@@ -1649,7 +1681,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
     const status = getCustomerStatus(c.id, records);
     const statusLabel = status ? status.label : '記録なし';
     const matchesStatus = !statusFilter || statusLabel === statusFilter;
-    const matchesAssociation = !associationFilter || c.associationType === associationFilter;
+    const matchesAssociation = !associationFilter || parseAssociationTypes(c.associationType).includes(associationFilter);
     const matchesIndustry = !industryFilter || c.industry === industryFilter;
     const custRecords = records.filter(r => r.customerId === c.id);
     const matchesActivityType = !activityTypeFilter || custRecords.some(r => r.type === activityTypeFilter);
@@ -2479,7 +2511,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
     return map;
   }, [customers]);
   const associationOptions = useMemo(
-    () => [...new Set((customers || []).map(c => c.associationType).filter(Boolean))],
+    () => [...new Set((customers || []).flatMap(c => parseAssociationTypes(c.associationType)))],
     [customers]
   );
 
@@ -2492,7 +2524,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
       base = base.filter(r => effectiveAssignee(r) === scopeValue);
     }
     if (associationFilter) {
-      base = base.filter(r => customerAssociationById[r.customerId] === associationFilter);
+      base = base.filter(r => parseAssociationTypes(customerAssociationById[r.customerId]).includes(associationFilter));
     }
     return base;
   })();
@@ -3200,14 +3232,14 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
   const effectiveAssignee = (r) => r.assignedTo || customerById[r.customerId]?.assignedTo || '';
 
   const associationOptions = useMemo(
-    () => [...new Set((customers || []).map(c => c.associationType).filter(Boolean))],
+    () => [...new Set((customers || []).flatMap(c => parseAssociationTypes(c.associationType)))],
     [customers]
   );
 
   const allRecalls = (records || []).filter(r => r.flag === '再コール');
   const scoped = allRecalls.filter(r => {
     const matchesAssignee = !assigneeFilter || effectiveAssignee(r) === assigneeFilter;
-    const matchesAssociation = !associationFilter || customerById[r.customerId]?.associationType === associationFilter;
+    const matchesAssociation = !associationFilter || parseAssociationTypes(customerById[r.customerId]?.associationType).includes(associationFilter);
     const matchesDate = (!dateFrom && !dateTo)
       ? true
       : (!!r.scheduledDate && (!dateFrom || r.scheduledDate >= dateFrom) && (!dateTo || r.scheduledDate <= dateTo));
@@ -3397,7 +3429,7 @@ function CalendarView({ records, customers, members, departments, currentUser, i
     return map;
   }, [customers]);
   const associationOptions = useMemo(
-    () => [...new Set((customers || []).map(c => c.associationType).filter(Boolean))],
+    () => [...new Set((customers || []).flatMap(c => parseAssociationTypes(c.associationType)))],
     [customers]
   );
 
@@ -3410,7 +3442,7 @@ function CalendarView({ records, customers, members, departments, currentUser, i
       base = base.filter(r => effectiveAssignee(r) === scopeValue);
     }
     if (associationFilter) {
-      base = base.filter(r => customerAssociationById[r.customerId] === associationFilter);
+      base = base.filter(r => parseAssociationTypes(customerAssociationById[r.customerId]).includes(associationFilter));
     }
     return base;
   })();
@@ -4128,13 +4160,13 @@ function CaseStudiesView({ customers, setCustomers, records, setRecords, caseCom
   })();
 
   const districtOptions = [...new Set(rows.map(r => extractDistrict(r.customer.address)).filter(Boolean))];
-  const associationOptions = [...new Set([...(associationTypes || []).map(a => a.name), ...rows.map(r => r.customer.associationType).filter(Boolean)])];
+  const associationOptions = [...new Set([...(associationTypes || []).map(a => a.name), ...rows.flatMap(r => parseAssociationTypes(r.customer.associationType))])];
 
   const filtered = rows.filter(({ customer, order }) => {
     const q = search.trim().toLowerCase();
     const matchesSearch = !q || [customer.gakuenName, customer.enName, customer.enNameKana, customer.chairman, customer.principal, order.productName].some(v => (v || '').toLowerCase().includes(q));
     const matchesDistrict = !districtFilter || extractDistrict(customer.address) === districtFilter;
-    const matchesAssociation = !associationFilter || customer.associationType === associationFilter;
+    const matchesAssociation = !associationFilter || parseAssociationTypes(customer.associationType).includes(associationFilter);
     const matchesAssignee = !assigneeFilter || customer.assignedTo === assigneeFilter;
     return matchesSearch && matchesDistrict && matchesAssociation && matchesAssignee;
   });
