@@ -531,7 +531,7 @@ function LoginView({ onLogin }) {
 }
 
 // ---------- HOME ----------
-function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, members, departments, onNavigate, onOpenCustomer }) {
+function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, members, departments, associationTypes, onNavigate, onOpenCustomer }) {
   const [period, setPeriod] = useState(thisMonth);
   const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
   const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
@@ -568,8 +568,8 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
     return map;
   }, [customers]);
   const associationOptions = useMemo(
-    () => [...new Set(customers.flatMap(c => parseAssociationTypes(c.associationType)))],
-    [customers]
+    () => [...new Set([...(associationTypes || []).map(a => a.name), ...customers.flatMap(c => parseAssociationTypes(c.associationType))])],
+    [customers, associationTypes]
   );
 
   const scopedRecords = (() => {
@@ -1597,7 +1597,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
   const fileInputRef = useRef(null);
 
   const STATUS_OPTIONS = ['ユーザー', '営業実行済み', '初回訪問済み・営業時間設定', '初回訪問済み', 'テレアポ中', '法人被り', '記録あり', '記録なし'];
-  const associationOptions = [...new Set(customers.flatMap(c => parseAssociationTypes(c.associationType)))];
+  const associationOptions = [...new Set([...(associationTypes || []).map(a => a.name), ...customers.flatMap(c => parseAssociationTypes(c.associationType))])];
   const industryOptionsList = [...new Set([...(industryTypes || []).map(t => t.name), ...customers.map(c => c.industry).filter(Boolean)])];
   const flagOptions = activityTypeFilter
     ? (activityTypes.find(a => a.name === activityTypeFilter)?.flags || [])
@@ -2443,7 +2443,7 @@ function getWeekKey(dateStr) {
   return `${d.getFullYear()}年 第${week}週`;
 }
 
-function TeleApptStatsView({ records, customers, activityTypes, members, departments, currentUser, isOwner, teleGoals, setTeleGoals, onOpenCustomer }) {
+function TeleApptStatsView({ records, customers, activityTypes, members, departments, currentUser, isOwner, teleGoals, setTeleGoals, associationTypes, onOpenCustomer }) {
   const [granularity, setGranularity] = useState('day');
   const [goalView, setGoalView] = useState('card'); // 目標達成率の表示: 'card'（カード） | 'chart'（円グラフ）
   const [goalModal, setGoalModal] = useState(null); // { baseDate, call, timeSetting }
@@ -2511,8 +2511,8 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
     return map;
   }, [customers]);
   const associationOptions = useMemo(
-    () => [...new Set((customers || []).flatMap(c => parseAssociationTypes(c.associationType)))],
-    [customers]
+    () => [...new Set([...(associationTypes || []).map(a => a.name), ...(customers || []).flatMap(c => parseAssociationTypes(c.associationType))])],
+    [customers, associationTypes]
   );
 
   const scopedRecords = (() => {
@@ -3211,7 +3211,7 @@ function countOverdueRecalls(records) {
   ).length;
 }
 
-function RecallView({ records, setRecords, customers, members, currentUser, isOwner, onOpenCustomer, showAlert }) {
+function RecallView({ records, setRecords, customers, members, currentUser, isOwner, associationTypes, onOpenCustomer, showAlert }) {
   const [tab, setTab] = useState('pending'); // 'pending' | 'done'
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -3232,8 +3232,8 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
   const effectiveAssignee = (r) => r.assignedTo || customerById[r.customerId]?.assignedTo || '';
 
   const associationOptions = useMemo(
-    () => [...new Set((customers || []).flatMap(c => parseAssociationTypes(c.associationType)))],
-    [customers]
+    () => [...new Set([...(associationTypes || []).map(a => a.name), ...(customers || []).flatMap(c => parseAssociationTypes(c.associationType))])],
+    [customers, associationTypes]
   );
 
   const allRecalls = (records || []).filter(r => r.flag === '再コール');
@@ -3406,7 +3406,7 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
 }
 
 // ---------- カレンダー（訪問予定・再コール予定） ----------
-function CalendarView({ records, customers, members, departments, currentUser, isOwner, onOpenCustomer }) {
+function CalendarView({ records, customers, members, departments, currentUser, isOwner, associationTypes, onOpenCustomer }) {
   const [viewMode, setViewMode] = useState('week'); // 'month' | 'week' | 'day'（初期は週間表示）
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -3429,8 +3429,8 @@ function CalendarView({ records, customers, members, departments, currentUser, i
     return map;
   }, [customers]);
   const associationOptions = useMemo(
-    () => [...new Set((customers || []).flatMap(c => parseAssociationTypes(c.associationType)))],
-    [customers]
+    () => [...new Set([...(associationTypes || []).map(a => a.name), ...(customers || []).flatMap(c => parseAssociationTypes(c.associationType))])],
+    [customers, associationTypes]
   );
 
   const scoped = (() => {
@@ -5504,7 +5504,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
         <h2 className="hidden md:block text-xl font-bold text-slate-800 mb-6">{titles[activeTab]}</h2>
         {activeTab === 'home' && (
-          <HomeView records={records} customers={customers} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
+          <HomeView records={records} customers={customers} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} associationTypes={associationTypes} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
         )}
         {activeTab === 'customers' && (
           <CustomersView
@@ -5528,11 +5528,12 @@ export default function App() {
           <RecallView
             records={records} setRecords={setRecords} customers={customers}
             members={members} currentUser={user} isOwner={isOwner}
+            associationTypes={associationTypes}
             onOpenCustomer={openCustomerFromHome} showAlert={showAlert}
           />
         )}
-        {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} customers={customers} activityTypes={effectiveActivityTypes} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} teleGoals={teleGoals || {}} setTeleGoals={setTeleGoals} onOpenCustomer={openCustomerFromHome} />}
-        {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} onOpenCustomer={openCustomerFromHome} />}
+        {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} customers={customers} activityTypes={effectiveActivityTypes} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} teleGoals={teleGoals || {}} setTeleGoals={setTeleGoals} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />}
+        {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />}
         {activeTab === 'daily_report' && (
           <DailyReportView
             records={records} customers={customers} currentUser={user}
