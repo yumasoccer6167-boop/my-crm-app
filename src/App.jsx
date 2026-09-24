@@ -4130,11 +4130,33 @@ function EditableCell({ value, onSave, className, type = 'text', options, style,
   );
 }
 
-function CaseStudiesView({ customers, setCustomers, records, setRecords, caseComments, setCaseComments, associationTypes, members, currentUser, isOwner, canEdit, onOpenCustomer }) {
+function CaseFilterField({ label, children }) {
+  return (
+    <div className="flex flex-col gap-1 min-w-[160px]">
+      <span className="text-[11px] font-semibold text-slate-400">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function CaseActions({ customer, comments, onOpenCustomer, onComment, className }) {
+  return (
+    <div className={className}>
+      <button onClick={() => onOpenCustomer(customer.id)} className="px-2.5 py-1.5 bg-teal-600 text-white rounded-lg text-[11px] font-bold hover:bg-teal-700">カードを開く</button>
+      <button onClick={() => onComment(customer)} className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-[11px] font-bold hover:bg-slate-50 flex items-center gap-1 justify-center">
+        <MessageCircle className="w-3 h-3" />コメント{comments.length > 0 ? `（${comments.length}）` : ''}
+      </button>
+    </div>
+  );
+}
+
+function CaseStudiesView({ customers, setCustomers, records, setRecords, caseComments, setCaseComments, industryTypes, products, members, currentUser, isOwner, canEdit, onOpenCustomer }) {
   const [search, setSearch] = useState('');
   const [districtFilter, setDistrictFilter] = useState('');
-  const [associationFilter, setAssociationFilter] = useState('');
+  const [industryFilter, setIndustryFilter] = useState('');
+  const [productFilter, setProductFilter] = useState('');
   const [commentFor, setCommentFor] = useState(null); // customer object
+  const [viewMode, setViewMode] = useState('card'); // 'card' | 'list'
 
   // ログイン中アカウントの担当で初期絞り込み（オーナーは切替可）
   const [assigneeFilter, setAssigneeFilter] = useState(currentUser?.displayName || '');
@@ -4160,16 +4182,24 @@ function CaseStudiesView({ customers, setCustomers, records, setRecords, caseCom
   })();
 
   const districtOptions = [...new Set(rows.map(r => extractDistrict(r.customer.address)).filter(Boolean))];
-  const associationOptions = [...new Set([...(associationTypes || []).map(a => a.name), ...rows.flatMap(r => parseAssociationTypes(r.customer.associationType))])];
+  const industryOptions = [...new Set([...(industryTypes || []).map(t => t.name), ...rows.map(r => r.customer.industry).filter(Boolean)])];
+  const productOptions = [...new Set([...(products || []).map(p => p.name), ...rows.map(r => r.order.productName).filter(Boolean)])];
 
   const filtered = rows.filter(({ customer, order }) => {
     const q = search.trim().toLowerCase();
     const matchesSearch = !q || [customer.gakuenName, customer.enName, customer.enNameKana, customer.chairman, customer.principal, order.productName].some(v => (v || '').toLowerCase().includes(q));
     const matchesDistrict = !districtFilter || extractDistrict(customer.address) === districtFilter;
-    const matchesAssociation = !associationFilter || parseAssociationTypes(customer.associationType).includes(associationFilter);
+    const matchesIndustry = !industryFilter || customer.industry === industryFilter;
+    const matchesProduct = !productFilter || order.productName === productFilter;
     const matchesAssignee = !assigneeFilter || customer.assignedTo === assigneeFilter;
-    return matchesSearch && matchesDistrict && matchesAssociation && matchesAssignee;
+    return matchesSearch && matchesDistrict && matchesIndustry && matchesProduct && matchesAssignee;
   });
+
+  const hasActiveFilters = !!(search || districtFilter || industryFilter || productFilter || (isOwner && assigneeFilter));
+  const resetFilters = () => {
+    setSearch(''); setDistrictFilter(''); setIndustryFilter(''); setProductFilter('');
+    if (isOwner) setAssigneeFilter('');
+  };
 
   // 顧客カードのフィールドを更新
   const updateCustomer = (customerId, field, value) => {
@@ -4190,54 +4220,101 @@ function CaseStudiesView({ customers, setCustomers, records, setRecords, caseCom
 
   const th = "px-3 py-2 text-left text-[11px] font-bold text-slate-500 border border-slate-200 bg-slate-50 whitespace-nowrap";
   const td = "px-3 py-2 text-xs text-slate-700 border border-slate-200 align-top";
+  const filterSelectClass = "px-3 py-2 rounded-lg text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500";
 
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-slate-700">インスパイアのお客さん　{filtered.length}法人</h2>
+        <h2 className="text-lg font-bold text-slate-700">インスパイアのお客さん</h2>
         <p className="text-xs text-slate-400 mt-0.5">顧客リストで受注（受注・ユーザー・過去受注記録あり）になった先が自動で表示されます。</p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="法人名・園名・商材で検索" className="pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm w-64" />
+      <div className="bg-slate-800 rounded-2xl p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <CaseFilterField label="法人名・園名">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="キーワードで検索"
+                className="pl-9 pr-3 py-2 rounded-lg text-sm bg-white w-56 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+            </div>
+          </CaseFilterField>
+          <CaseFilterField label="市区町村">
+            <select value={districtFilter} onChange={e => setDistrictFilter(e.target.value)} className={filterSelectClass}>
+              <option value="">すべて</option>
+              {districtOptions.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </CaseFilterField>
+          <CaseFilterField label="業種">
+            <select value={industryFilter} onChange={e => setIndustryFilter(e.target.value)} className={filterSelectClass}>
+              <option value="">すべて</option>
+              {industryOptions.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </CaseFilterField>
+          <CaseFilterField label="契約商材">
+            <select value={productFilter} onChange={e => setProductFilter(e.target.value)} className={filterSelectClass}>
+              <option value="">すべて</option>
+              {productOptions.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </CaseFilterField>
+          {isOwner && (
+            <CaseFilterField label="営業担当">
+              <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className={filterSelectClass}>
+                <option value="">すべて</option>
+                {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
+              </select>
+            </CaseFilterField>
+          )}
+          <div className="flex items-center gap-3 ml-auto">
+            {hasActiveFilters && (
+              <button onClick={resetFilters} className="text-xs text-teal-300 hover:text-teal-200 font-semibold">
+                フィルタをリセット
+              </button>
+            )}
+            <span className="text-xs text-slate-300 whitespace-nowrap">{filtered.length}件表示</span>
+            <div className="flex border border-slate-600 rounded-lg overflow-hidden shrink-0">
+              <button onClick={() => setViewMode('card')} className={`p-2 ${viewMode === 'card' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`} title="カード表示">
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button onClick={() => setViewMode('list')} className={`p-2 ${viewMode === 'list' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`} title="リスト表示">
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
-        <select value={districtFilter} onChange={e => setDistrictFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
-          <option value="">すべての地区</option>
-          {districtOptions.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-        <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
-          <option value="">すべての協会</option>
-          {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-        {isOwner && (
-          <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
-            <option value="">すべての担当者</option>
-            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-          </select>
-        )}
       </div>
 
       {filtered.length === 0 ? (
         <p className="text-sm text-slate-400">該当する受注顧客がいません。</p>
+      ) : viewMode === 'card' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map(({ customer: c, order }) => {
+            const comments = (caseComments || {})[c.id] || [];
+            return (
+              <div key={c.id} className="bg-white rounded-xl shadow-sm border border-slate-100 hover:border-teal-200 hover:shadow-md transition p-4 flex flex-col gap-2">
+                <div>
+                  <p className="text-xs text-slate-400">{c.gakuenName}</p>
+                  <p className="font-bold text-slate-800">{c.enName || '（園名未登録）'}</p>
+                </div>
+                <div className="text-xs text-slate-500 space-y-1">
+                  <p className="flex items-center gap-1.5"><Package className="w-3 h-3 shrink-0" />契約商材: {order.productName || '—'}</p>
+                  <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3 shrink-0" />{extractDistrict(c.address) || '—'}</p>
+                  <p className="flex items-center gap-1.5"><Users className="w-3 h-3 shrink-0" />営業担当: {c.assignedTo || '—'}</p>
+                </div>
+                <CaseActions customer={c} comments={comments} onOpenCustomer={onOpenCustomer} onComment={setCommentFor} className="mt-2 flex items-center gap-2" />
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <div className="overflow-x-auto bg-white rounded-xl border border-slate-100 shadow-sm">
-          <table className="border-collapse min-w-max">
+          <table className="border-collapse min-w-max w-full">
             <thead>
               <tr>
                 <th className={th}>法人名</th>
                 <th className={th}>園名</th>
-                <th className={th}>園名ふりがな</th>
-                <th className={th}>HPリンク</th>
-                <th className={th}>理事長名</th>
-                <th className={th}>園長名</th>
-                <th className={th}>営業担当者</th>
-                <th className={th}>商材</th>
-                <th className={th}>詳細情報（受注背景）</th>
-                <th className={th}>受注日</th>
-                <th className={th}>地区</th>
-                <th className={th}>住所</th>
+                <th className={th}>契約商材</th>
+                <th className={th}>市区町村</th>
+                <th className={th}>営業担当</th>
                 <th className={th}>操作・コメント</th>
               </tr>
             </thead>
@@ -4248,28 +4325,11 @@ function CaseStudiesView({ customers, setCustomers, records, setRecords, caseCom
                   <tr key={c.id} className="hover:bg-slate-50">
                     <EditableCell className={td + ' font-semibold'} value={c.gakuenName} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'gakuenName', v)} />
                     <EditableCell className={td} value={c.enName} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'enName', v)} />
-                    <EditableCell className={td} value={c.enNameKana} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'enNameKana', v)} />
-                    <EditableCell className={td} value={c.hpLink} canEdit={canEdit} placeholder="—"
-                      render={v => v ? <a href={v} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-indigo-600 underline break-all">{v}</a> : <span className="text-slate-300">—</span>}
-                      onSave={v => updateCustomer(c.id, 'hpLink', v)} />
-                    <EditableCell className={td} value={c.chairman} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'chairman', v)} />
-                    <EditableCell className={td} value={c.principal} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'principal', v)} />
-                    <EditableCell className={td + ' whitespace-nowrap'} value={c.assignedTo} canEdit={canEdit} type="select" options={members.map(m => m.displayName)} onSave={v => updateCustomer(c.id, 'assignedTo', v)} />
                     <EditableCell className={td + ' whitespace-nowrap'} value={order.productName} canEdit={canEdit} onSave={v => updateOrder(order.id, 'productName', v)} />
-                    <EditableCell className={td} style={{ minWidth: '260px', maxWidth: '360px' }} type="textarea"
-                      value={order.description || order.background || order.note || ''} canEdit={canEdit}
-                      render={v => <div className="whitespace-pre-wrap">{v || <span className="text-slate-300">—</span>}</div>}
-                      onSave={v => updateOrder(order.id, 'description', v)} />
-                    <EditableCell className={td + ' whitespace-nowrap'} value={order.date} canEdit={canEdit} onSave={v => updateOrder(order.id, 'date', v)} />
                     <td className={td + ' whitespace-nowrap'}>{extractDistrict(c.address)}</td>
-                    <EditableCell className={td} style={{ minWidth: '180px' }} value={c.address} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'address', v)} />
+                    <EditableCell className={td + ' whitespace-nowrap'} value={c.assignedTo} canEdit={canEdit} type="select" options={members.map(m => m.displayName)} onSave={v => updateCustomer(c.id, 'assignedTo', v)} />
                     <td className={td + ' whitespace-nowrap'}>
-                      <div className="flex flex-col gap-1">
-                        <button onClick={() => onOpenCustomer(c.id)} className="px-2.5 py-1.5 bg-teal-600 text-white rounded-lg text-[11px] font-bold hover:bg-teal-700">カードを開く</button>
-                        <button onClick={() => setCommentFor(c)} className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-[11px] font-bold hover:bg-slate-50 flex items-center gap-1 justify-center">
-                          <MessageCircle className="w-3 h-3" />コメント{comments.length > 0 ? `（${comments.length}）` : ''}
-                        </button>
-                      </div>
+                      <CaseActions customer={c} comments={comments} onOpenCustomer={onOpenCustomer} onComment={setCommentFor} className="flex items-center gap-1.5" />
                     </td>
                   </tr>
                 );
@@ -5546,7 +5606,7 @@ export default function App() {
           <EmailBuilderView customers={customers} emailTemplates={emailTemplates} setEmailTemplates={setEmailTemplates} extraTemplates={personalEmailTemplatesLabeled} showAlert={showAlert} showConfirm={showConfirm} />
         )}
         {activeTab === 'case_studies' && (
-          <CaseStudiesView customers={customers} setCustomers={setCustomers} records={records} setRecords={setRecords} caseComments={caseComments || {}} setCaseComments={setCaseComments} associationTypes={associationTypes} members={members} currentUser={user} isOwner={isOwner} canEdit={canEditCaseStudies} onOpenCustomer={openCustomerFromHome} />
+          <CaseStudiesView customers={customers} setCustomers={setCustomers} records={records} setRecords={setRecords} caseComments={caseComments || {}} setCaseComments={setCaseComments} industryTypes={industryTypes || []} products={products} members={members} currentUser={user} isOwner={isOwner} canEdit={canEditCaseStudies} onOpenCustomer={openCustomerFromHome} />
         )}
         {activeTab === 'knowledge' && (
           <KnowledgeBaseView articles={knowledgeArticles} setArticles={setKnowledgeArticles} knowledgeTags={knowledgeTags || []} members={members} currentUser={user} showConfirm={showConfirm} showAlert={showAlert} canEdit={canEditKnowledge} />
