@@ -159,16 +159,21 @@ def list_companies():
 
 @bp.get('/companies/facets')
 def company_facets():
-    """絞り込み候補（業種・市区町村）"""
+    """絞り込み候補（業種・都道府県・市区町村）。prefecture を指定すると市区町村をその県に絞る"""
     vis_sql, vis_params = company_visibility(current_user())
+    prefecture = (request.args.get('prefecture') or '')[:10] or None
     d = db()
     industries = d.all(
         f'''SELECT c.industry AS value, COUNT(*) AS n FROM telema_companies c WHERE c.is_active = 1 AND c.industry IS NOT NULL AND {vis_sql}
             GROUP BY c.industry ORDER BY n DESC LIMIT 100''', vis_params)
+    prefectures = d.all(
+        f'''SELECT c.prefecture AS value, COUNT(*) AS n FROM telema_companies c WHERE c.is_active = 1 AND c.prefecture IS NOT NULL AND {vis_sql}
+            GROUP BY c.prefecture''', vis_params)
     cities = d.all(
         f'''SELECT c.city AS value, COUNT(*) AS n FROM telema_companies c WHERE c.is_active = 1 AND c.city IS NOT NULL AND {vis_sql}
-            GROUP BY c.city ORDER BY n DESC LIMIT 200''', vis_params)
-    return jsonify({'industries': industries, 'cities': cities})
+              AND (%s::text IS NULL OR c.prefecture = %s)
+            GROUP BY c.city ORDER BY n DESC LIMIT 200''', [*vis_params, prefecture, prefecture])
+    return jsonify({'industries': industries, 'prefectures': prefectures, 'cities': cities})
 
 
 # ---------- 編集 ----------
