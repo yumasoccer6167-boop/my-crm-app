@@ -18,6 +18,7 @@ import type {
   GraphEdge,
   GraphNode,
   ListSource,
+  PrefectureStat,
   RelationItem,
   UserRow,
 } from "../types";
@@ -33,6 +34,7 @@ type Api = {
   users: { $get: Call<UserRow[]> };
   "list-sources": { $get: Call<ListSource[]> };
   dashboard: { $get: Call<DashboardData> };
+  "prefecture-stats": { $get: Call<PrefectureStat[]> };
   companies: {
     $get: Call<CompanyListData>;
     $post: Call<Company>;
