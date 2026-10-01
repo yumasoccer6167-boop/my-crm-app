@@ -100,7 +100,7 @@ def test_架電履歴は無効化でき件数が再計算される(client):
 def test_ダッシュボードに今日の架電予定と件数が出る(client):
     d = client.api('/dashboard')[1]
     assert d['counts']['total'] == 1
-    assert d['counts']['mine'] == 0
+    assert d['my_counts'] == {'total': 0, 'not_started': 0, 'in_progress': 0, 'appointment': 0, 'won': 0, 'lost': 0}
     assert 'recent' not in d
     assert d['counts']['in_progress'] == 1
     assert d['calls_today']['calls_today'] == 1
@@ -128,6 +128,19 @@ def test_担当ごと月ごとにコール数と時間設定成立数を数え�
     assert sum(x['calls'] for x in mine) >= 2
     assert '時間設定成立' in r['appointment_labels']
     assert client.api('/dashboard/calls-monthly?months=0')[0] == 400
+
+
+def test_マイページの件数は自分の担当だけ今日の架電は自分の分だけ(client):
+    me = client.api('/me')[1]
+    before = client.api('/dashboard')[1]
+    cid = client.api('/companies', {'company_name': '担当テスト保育園', 'assigned_user_id': me['id']})[1]['id']
+    client.api('/companies', {'company_name': '未割当テスト保育園'})
+    client.api(f'/companies/{cid}/calls', {'raw_note': '自分の架電', 'result_status_id': client.status_id('再コール')})
+    d = client.api('/dashboard')[1]
+    assert d['my_counts']['total'] == before['my_counts']['total'] + 1
+    assert d['my_counts']['in_progress'] == before['my_counts']['in_progress'] + 1
+    assert d['counts']['total'] == before['counts']['total'] + 2
+    assert d['calls_today']['calls_today'] == before['calls_today']['calls_today'] + 1
 
 def test_絞り込み候補(client):
     f = client.api('/companies/facets')[1]

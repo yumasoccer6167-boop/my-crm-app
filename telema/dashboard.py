@@ -28,7 +28,6 @@ def get_dashboard():
     counts = d.first(
         f'''SELECT
               COUNT(*) AS total,
-              COUNT(*) FILTER (WHERE c.assigned_user_id = %s) AS mine,
               COUNT(*) FILTER (WHERE c.status_id IS NULL OR s.category = 'not_started') AS not_started,
               COUNT(*) FILTER (WHERE s.category = 'in_progress') AS in_progress,
               COUNT(*) FILTER (WHERE s.category = 'appointment') AS appointment,
@@ -39,7 +38,20 @@ def get_dashboard():
               COUNT(*) FILTER (WHERE c.next_call_at < %s) AS overdue,
               COUNT(*) FILTER (WHERE c.updated_at >= %s) AS updated_today
             FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id WHERE {scope}''',
-        [user['id'], today_end, today_start, today_start, *vis_params],
+        [today_end, today_start, today_start, *vis_params],
+    )
+    # マイページの件数は自分が担当している施設だけ
+    mine = d.first(
+        '''SELECT
+              COUNT(*) AS total,
+              COUNT(*) FILTER (WHERE c.status_id IS NULL OR s.category = 'not_started') AS not_started,
+              COUNT(*) FILTER (WHERE s.category = 'in_progress') AS in_progress,
+              COUNT(*) FILTER (WHERE s.category = 'appointment') AS appointment,
+              COUNT(*) FILTER (WHERE s.category = 'won') AS won,
+              COUNT(*) FILTER (WHERE s.category = 'lost') AS lost
+            FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
+            WHERE c.is_active = 1 AND c.assigned_user_id = %s''',
+        (user['id'],),
     )
     pending = d.value(
         f'''SELECT COUNT(DISTINCT a.company_id) FROM telema_ai_suggestions a JOIN telema_companies c ON c.id = a.company_id
@@ -52,11 +64,12 @@ def get_dashboard():
     )
     calls = d.first(
         '''SELECT COUNT(*) AS calls_today, COUNT(DISTINCT cl.company_id) AS companies_called
-           FROM telema_call_logs cl WHERE cl.is_active = 1 AND cl.called_at >= %s AND cl.called_at < %s AND (%s OR cl.user_id = %s)''',
-        (today_start, today_end, user['role'] != 'sales', user['id']),
+           FROM telema_call_logs cl WHERE cl.is_active = 1 AND cl.called_at >= %s AND cl.called_at < %s AND cl.user_id = %s''',
+        (today_start, today_end, user['id']),
     )
     return jsonify({
         'counts': {k: v or 0 for k, v in counts.items()},
+        'my_counts': {k: v or 0 for k, v in mine.items()},
         'calls_today': calls,
         'companies_needing_review': pending or 0,
         'today': today_list,
