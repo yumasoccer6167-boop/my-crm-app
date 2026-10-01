@@ -100,10 +100,34 @@ def test_架電履歴は無効化でき件数が再計算される(client):
 def test_ダッシュボードに今日の架電予定と件数が出る(client):
     d = client.api('/dashboard')[1]
     assert d['counts']['total'] == 1
+    assert d['counts']['mine'] == 0
+    assert 'recent' not in d
     assert d['counts']['in_progress'] == 1
     assert d['calls_today']['calls_today'] == 1
     assert d['today'][0]['company_name'] == '古河保育園'
 
+
+
+def test_担当ごと月ごとにコール数と時間設定成立数を数える(client):
+    from datetime import datetime, timedelta, timezone
+    cid = client.api('/companies', {'company_name': '実績テスト保育園'})[1]['id']
+    appo = client.status_id('時間設定成立')
+    jst = datetime.now(timezone.utc) + timedelta(hours=9)
+    # 今月1日 0:30 JST（UTC では前月末日）→ 今月に数える
+    first = (datetime(jst.year, jst.month, 1, 0, 30, tzinfo=timezone.utc) - timedelta(hours=9)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    client.api(f'/companies/{cid}/calls', {'raw_note': '月初', 'called_at': first})
+    client.api(f'/companies/{cid}/calls', {'raw_note': 'アポ', 'result_status_id': appo})
+    removed = client.api(f'/companies/{cid}/calls', {'raw_note': '誤登録', 'result_status_id': appo})[1]
+    client.api(f'/calls/{removed["id"]}/deactivate', method='POST')
+
+    status, r = client.api('/dashboard/calls-monthly?months=3')
+    assert status == 200
+    assert len(r['months']) == 3 and r['months'][2] == jst.strftime('%Y-%m')
+    mine = [x for x in r['rows'] if x['month'] == r['months'][2] and x['user_name'] == 'オーナー']
+    assert sum(x['appointments'] for x in mine) == 1
+    assert sum(x['calls'] for x in mine) >= 2
+    assert '時間設定成立' in r['appointment_labels']
+    assert client.api('/dashboard/calls-monthly?months=0')[0] == 400
 
 def test_絞り込み候補(client):
     f = client.api('/companies/facets')[1]
