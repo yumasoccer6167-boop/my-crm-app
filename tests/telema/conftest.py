@@ -36,10 +36,11 @@ def pg():
 
 
 class Client:
-    def __init__(self, http, token, connect):
+    def __init__(self, http, token, connect, uri):
         self.http = http
         self.token = token
         self.connect = connect
+        self.uri = uri
 
     def api(self, path, body=None, method=None):
         method = method or ('POST' if body is not None else 'GET')
@@ -89,4 +90,4 @@ def client(pg):
     http = crm.app.test_client()
     r = http.post('/api/login', json={'username': 'owner', 'password': 'owner1234'})
     assert r.status_code == 200, r.get_json()
-    yield Client(http, r.get_json()['token'], connect)
+    yield Client(http, r.get_json()['token'], connect, uri)

@@ -1,5 +1,5 @@
 {
-  // 型チェックは TypeScript で書いた src/telema（育てるテレマリスト）だけを対象にする。ビルドは Vite が行う
+  // 型チェックは TypeScript で書いた育てるテレマリスト（画面 src/telema・管理者用CLI scripts/telema）だけを対象にする。ビルドは Vite が行う
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
@@ -14,7 +14,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
-    "types": ["vite/client"]
+    "types": ["vite/client", "node"]
   },
-  "include": ["src/telema"]
+  "include": ["src/telema", "scripts/telema"]
 }

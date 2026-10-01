@@ -36,6 +36,34 @@
 
 `DATABASE_URL` は CRM 本体と同じものを使う。
 
+## リストの取り込み（管理者用CLI）
+
+Excel のリストを手元から本番DBへ取り込む。列名がバラバラでも項目を自動で認識し、既存の施設と重複する行は統合する。
+
+準備（初回だけ）：Render の PostgreSQL の「External Database URL」を `.env.local` に書く（`.gitignore` 済み。**コミットしない・人に送らない**）。
+
+```
+DATABASE_URL=postgresql://...
+```
+
+```bash
+pip install openpyxl
+python3 scripts/telema/xlsx-to-json.py リスト.xlsx /tmp/list.json
+npm run telema:import -- /tmp/list.json --source "茨城県 認可施設" --type public_data --dry-run   # 内容の確認だけ
+npm run telema:import -- /tmp/list.json --source "茨城県 認可施設" --type public_data             # 取り込む
+```
+
+- 事業所番号・法人番号・電話番号が既存と一致する行は既存の施設に統合する（空欄の補完と元データ列の追記だけ。既存の値は上書きしない）
+- 電話が同じでも施設名が違う場合は別の施設として登録する（`--on-phone-match merge|separate|skip` で変更可）
+- 1回の取り込みはまとめて適用する。途中で失敗したら何も登録されない
+
+既存データの重複統合（電話番号と施設名が一致する施設を1件にまとめる）：
+
+```bash
+npm run telema:merge             # 統合予定と要確認の一覧を出すだけ
+npm run telema:merge -- --apply  # 統合する
+```
+
 ## 開発
 
 ```bash
