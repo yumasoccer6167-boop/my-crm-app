@@ -2,7 +2,7 @@ import { NavLink, Outlet } from "react-router";
 import { useMasters } from "../lib/masters";
 
 const NAV = [
-  { to: "/", label: "今日", end: true },
+  { to: "/", label: "マイページ", end: true },
   { to: "/companies", label: "リスト" },
   { to: "/network", label: "つながり" },
   { to: "/import", label: "取り込み" },

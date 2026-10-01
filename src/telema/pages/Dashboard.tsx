@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { CallStatsCard } from "../components/CallStatsCard";
 import { CompanyTable } from "../components/CompanyTable";
 import { Card, Empty, ErrorBox, Loading } from "../components/ui";
 import { api, unwrap } from "../lib/api";
@@ -48,7 +49,11 @@ export function Dashboard() {
           <CompanyTable items={data.today} />
         ) : (
           <Empty>
-            今日の架電予定はありません。<Link to="/companies?category=not_started" className="text-indigo-700 underline">未架電リスト</Link>から始めましょう
+            今日の架電予定はありません。
+            <Link to="/companies?category=not_started" className="text-indigo-700 underline">
+              未架電リスト
+            </Link>
+            から始めましょう
           </Empty>
         )}
       </Card>
@@ -61,7 +66,7 @@ export function Dashboard() {
 
       {/* 2. 現在の状態 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-        <Stat label="総企業数" value={k.total} to="/companies" />
+        <Stat label="総企業数（自分の担当）" value={k.mine} to="/companies?assigned=me" />
         <Stat label="未架電" value={k.not_started} to="/companies?category=not_started" />
         <Stat label="進行中" value={k.in_progress} to="/companies?category=in_progress" tone="text-sky-700" />
         <Stat label="アポ獲得" value={k.appointment} to="/companies?category=appointment" tone="text-amber-600" />
@@ -70,9 +75,8 @@ export function Dashboard() {
         <Stat label="今日の架電" value={data.calls_today.calls_today} />
       </div>
 
-      <Card title="最近更新された企業">
-        {data.recent.length ? <CompanyTable items={data.recent} /> : <Empty>まだ企業が登録されていません。「取り込み」からリストを追加してください</Empty>}
-      </Card>
+      {/* 3. 担当ごとの実績 */}
+      <CallStatsCard />
     </div>
   );
 }
