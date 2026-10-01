@@ -12,34 +12,52 @@ export function UserTag({ category }: { category: string | null }) {
   );
 }
 
-/** 施設を名前・電話・住所・担当者名で探して1件選ぶ（ユーザーかどうかは問わない） */
+/**
+ * 施設を名前・電話・住所・担当者名で探して1件選ぶ（ユーザーかどうかは問わない）。
+ * onCreate を渡すと、見つからないときに入力した名前で新しい施設を登録する入口を出す
+ */
 export function CompanyPicker({
   placeholder,
   exclude = [],
   autoFocus,
   onPick,
+  onCreate,
   onError,
 }: {
   placeholder: string;
   exclude?: number[];
   autoFocus?: boolean;
   onPick: (c: CompanyListItem) => void;
+  onCreate?: (name: string) => void;
   onError: (message: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<CompanyListItem[]>([]);
+  // 検索が終わった語（新規登録の入口は、検索結果を見てから出す）
+  const [searched, setSearched] = useState("");
   const excludeKey = exclude.join(",");
 
   // 入力が止まってから検索
   useEffect(() => {
     if (q.trim().length < 2) {
       setHits([]);
+      setSearched("");
       return;
     }
     const t = setTimeout(async () => {
       try {
-        const r = await unwrap(api.companies.$get({ query: { q: q.trim(), per_page: "10", sort: "company_name", skip_count: "1" } }));
+        const r = await unwrap(
+          api.companies.$get({
+            query: {
+              q: q.trim(),
+              per_page: "10",
+              sort: "company_name",
+              skip_count: "1",
+            },
+          }),
+        );
         setHits(r.items.filter((x) => !exclude.includes(x.id)));
+        setSearched(q.trim());
       } catch (e) {
         onError(e instanceof Error ? e.message : String(e));
       }
@@ -51,7 +69,7 @@ export function CompanyPicker({
   return (
     <div>
       <input className={inputCls} autoFocus={autoFocus} placeholder={placeholder} value={q} onChange={(e) => setQ(e.target.value)} />
-      {hits.length > 0 && (
+      {(hits.length > 0 || (onCreate && searched)) && (
         <ul className="mt-1 max-h-56 overflow-y-auto rounded-md bg-white ring-1 ring-slate-200">
           {hits.map((h) => (
             <li key={h.id}>
@@ -64,6 +82,21 @@ export function CompanyPicker({
               </button>
             </li>
           ))}
+          {onCreate && searched && (
+            <li className="border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => onCreate(searched)}
+                className="block w-full px-2.5 py-1.5 text-left text-sm text-indigo-700 hover:bg-indigo-50"
+              >
+                ＋「{searched}」を新しい園として登録
+                <div className="text-xs text-slate-500">
+                  {hits.length === 0 ? "見つかりませんでした。" : "上に無ければ、"}
+                  まだ登録の無い園を追加してつなぎます
+                </div>
+              </button>
+            </li>
+          )}
         </ul>
       )}
     </div>
