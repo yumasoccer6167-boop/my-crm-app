@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { TEMPERATURES } from "../shared/constants";
 import { CallEntry } from "../components/company/CallEntry";
 import { ContactsCard } from "../components/company/ContactsCard";
 import { FieldsCard } from "../components/company/FieldsCard";
 import { RelationsCard } from "../components/company/RelationsCard";
 import { Timeline } from "../components/company/Timeline";
-import { Card, ErrorBox, Loading, selectCls, StatusBadge } from "../components/ui";
+import { Button, Card, ErrorBox, Loading, selectCls, StatusBadge } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import { fmtDateTime, fmtShort, isOverdue } from "../lib/format";
 import { useMasters } from "../lib/masters";
@@ -15,6 +15,7 @@ import { useApi } from "../lib/useApi";
 export function CompanyDetail() {
   const { id = "" } = useParams();
   const { me, statuses, users } = useMasters();
+  const nav = useNavigate();
   const detail = useApi(() => unwrap(api.companies[":id"].$get({ param: { id } })), [id]);
   const calls = useApi(() => unwrap(api.companies[":id"].calls.$get({ param: { id } })), [id]);
   const [patchError, setPatchError] = useState<string | null>(null);
@@ -42,6 +43,17 @@ export function CompanyDetail() {
     }
   }
 
+  async function remove() {
+    if (!confirm(`「${company.company_name}」をリストから削除します。架電履歴などの記録は残りますが、一覧には表示されなくなります。よろしいですか？`)) return;
+    setPatchError(null);
+    try {
+      await unwrap(api.companies["bulk-delete"].$post({ json: { company_ids: [company.id] } }));
+      nav("/companies");
+    } catch (e) {
+      setPatchError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const nextCallAt = company.next_call_at as string | null;
   const phone = company.phone as string | null;
 
@@ -59,11 +71,18 @@ export function CompanyDetail() {
               {[organization?.name as string | undefined, company.industry as string | null, company.address as string | null].filter(Boolean).join(" · ")}
             </div>
           </div>
-          {phone && (
-            <a href={`tel:${phone}`} className="rounded-md bg-indigo-600 px-4 py-2 text-lg font-semibold tabular-nums text-white hover:bg-indigo-700">
-              {phone}
-            </a>
-          )}
+          <div className="flex items-center gap-2">
+            {phone && (
+              <a href={`tel:${phone}`} className="rounded-md bg-indigo-600 px-4 py-2 text-lg font-semibold tabular-nums text-white hover:bg-indigo-700">
+                {phone}
+              </a>
+            )}
+            {editable && (
+              <Button variant="danger" size="sm" onClick={remove}>
+                削除
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
