@@ -57,7 +57,7 @@ export function Card({ title, action, children, className = "" }: { title?: Reac
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div role="alert" className="flex items-start justify-between gap-3 rounded-md bg-rose-50 p-3 text-sm text-rose-800 ring-1 ring-rose-200">
-      <span>{message}</span>
+      <span className="whitespace-pre-line">{message}</span>
       {onRetry && (
         <Button size="sm" variant="danger" onClick={onRetry}>
           再試行
