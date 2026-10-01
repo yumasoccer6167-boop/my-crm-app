@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "preview": "vite preview",
     "telema:import": "tsx scripts/telema/import-excel.ts",
-    "telema:merge": "tsx scripts/telema/merge-duplicates.ts"
+    "telema:merge": "tsx scripts/telema/merge-duplicates.ts",
+    "telema:geocode": "tsx scripts/telema/geocode.ts"
   },
   "dependencies": {
     "lucide-react": "^1.24.0",

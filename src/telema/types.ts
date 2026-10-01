@@ -12,6 +12,20 @@ export type CallStatus = {
   is_active: number;
 };
 export type UserRow = { id: number; name: string; email: string | null; role: Role; is_active: number };
+export type VisitTarget = {
+  id: number;
+  company_name: string;
+  prefecture: string | null;
+  city: string | null;
+  address: string | null;
+  phone: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  status_label: string;
+  last_called_at: string | null;
+  assigned_user_id: number | null;
+};
+
 export type ListSource = { id: number; name: string; source_type: string; description: string | null; created_at: string; company_count: number };
 
 export type CompanyListItem = {
