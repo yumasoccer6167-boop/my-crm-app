@@ -177,7 +177,7 @@ export type CompanyDetailData = {
 export type CompanyListData = { total: number | null; page: number; per_page: number; items: CompanyListItem[] };
 export type Facet = { value: string; n: number };
 
-type CountKey = "total" | "not_started" | "in_progress" | "appointment" | "won" | "lost" | "excluded" | "due_today" | "overdue" | "updated_today";
+type CountKey = "total" | "mine" | "not_started" | "in_progress" | "appointment" | "won" | "lost" | "excluded" | "due_today" | "overdue" | "updated_today";
 export type PrefectureStat = { prefecture: string; total: number; users: number };
 
 export type DashboardData = {
@@ -185,8 +185,11 @@ export type DashboardData = {
   calls_today: { calls_today: number; companies_called: number };
   companies_needing_review: number;
   today: CompanyListItem[];
-  recent: CompanyListItem[];
 };
+
+/** 担当（架電した人）ごと・月ごとの架電数と時間設定成立（アポ）数 */
+export type MonthlyCallRow = { month: string; user_id: number | null; user_name: string | null; calls: number; appointments: number };
+export type MonthlyCallsData = { months: string[]; rows: MonthlyCallRow[]; appointment_labels: string[] };
 
 type UsageRow = { calls: number; cost_usd: number };
 export type AIUsageData = {

@@ -14,6 +14,7 @@ import type {
   Contact,
   CurrentUser,
   DashboardData,
+  MonthlyCallsData,
   Facet,
   GraphEdge,
   GraphNode,
@@ -35,7 +36,7 @@ type Api = {
   users: { $get: Call<UserRow[]> };
   "list-sources": { $get: Call<ListSource[]> };
   "visit-targets": { $get: Call<VisitTarget[]> };
-  dashboard: { $get: Call<DashboardData> };
+  dashboard: { $get: Call<DashboardData>; "calls-monthly": { $get: Call<MonthlyCallsData> } };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
   companies: {
     $get: Call<CompanyListData>;
