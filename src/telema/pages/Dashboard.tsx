@@ -28,6 +28,7 @@ export function Dashboard() {
   if (loading && !data) return <Loading />;
   if (!data) return null;
   const k = data.counts;
+  const my = data.my_counts;
 
   return (
     <div className="space-y-5">
@@ -64,15 +65,15 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* 2. 現在の状態 */}
+      {/* 2. 自分の担当の状態（件数はすべて自分の分） */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-        <Stat label="総企業数（自分の担当）" value={k.mine} to="/companies?assigned=me" />
-        <Stat label="未架電" value={k.not_started} to="/companies?category=not_started" />
-        <Stat label="進行中" value={k.in_progress} to="/companies?category=in_progress" tone="text-sky-700" />
-        <Stat label="アポ獲得" value={k.appointment} to="/companies?category=appointment" tone="text-amber-600" />
-        <Stat label="受注" value={k.won} to="/companies?category=won" tone="text-emerald-700" />
-        <Stat label="失注・NG" value={k.lost} to="/companies?category=lost" tone="text-rose-600" />
-        <Stat label="今日の架電" value={data.calls_today.calls_today} />
+        <Stat label="総企業数" value={my.total} to="/companies?assigned=me" />
+        <Stat label="未架電" value={my.not_started} to="/companies?assigned=me&category=not_started" />
+        <Stat label="進行中" value={my.in_progress} to="/companies?assigned=me&category=in_progress" tone="text-sky-700" />
+        <Stat label="アポ獲得" value={my.appointment} to="/companies?assigned=me&category=appointment" tone="text-amber-600" />
+        <Stat label="受注" value={my.won} to="/companies?assigned=me&category=won" tone="text-emerald-700" />
+        <Stat label="失注・NG" value={my.lost} to="/companies?assigned=me&category=lost" tone="text-rose-600" />
+        <Stat label="今日の架電（自分）" value={data.calls_today.calls_today} />
       </div>
 
       {/* 3. 担当ごとの実績 */}
