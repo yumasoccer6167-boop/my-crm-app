@@ -38,7 +38,7 @@ type Api = {
   companies: {
     $get: Call<CompanyListData>;
     $post: Call<Company>;
-    facets: { $get: Call<{ industries: Facet[]; cities: Facet[] }> };
+    facets: { $get: Call<{ industries: Facet[]; prefectures: Facet[]; cities: Facet[] }> };
     "bulk-assign": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
     "bulk-delete": { $post: Call<{ deleted: number; not_found: number }> };
     ":id": {

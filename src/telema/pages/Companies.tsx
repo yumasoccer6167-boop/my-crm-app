@@ -5,9 +5,10 @@ import { CompanyTable } from "../components/CompanyTable";
 import { Button, Card, Empty, ErrorBox, inputCls, Loading, selectCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import { useMasters } from "../lib/masters";
+import { PREFECTURES } from "../shared/prefectures";
 import { useApi } from "../lib/useApi";
 
-const FILTER_KEYS = ["q", "source_id", "category", "status_id", "industry", "city", "assigned", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
+const FILTER_KEYS = ["q", "source_id", "category", "status_id", "industry", "prefecture", "city", "assigned", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
 
 const SORT_OPTIONS = [
   { value: "next_call_at:asc", label: "次回架電が近い順" },
@@ -50,7 +51,7 @@ export function Companies() {
   const canAssign = me.role !== "sales";
   const [selected, setSelected] = useState<Set<number>>(new Set());
   useEffect(() => setSelected(new Set()), [filterKey]);
-  const facets = useApi(() => unwrap(api.companies.facets.$get()), []);
+  const facets = useApi(() => unwrap(api.companies.facets.$get({ query: { prefecture: query.prefecture } })), [query.prefecture ?? ""]);
   const sources = useApi(() => unwrap(api["list-sources"].$get()), []);
 
   function update(patch: Record<string, string | undefined>) {
@@ -152,6 +153,16 @@ export function Companies() {
                 {f.value}（{f.n}）
               </option>
             ))}
+          </select>
+          <select value={query.prefecture ?? ""} onChange={(e) => update({ prefecture: e.target.value || undefined, city: undefined })} className={selectCls}>
+            <option value="">都道府県</option>
+            {[...(facets.data?.prefectures ?? [])]
+              .sort((a, b) => PREFECTURES.indexOf(a.value as never) - PREFECTURES.indexOf(b.value as never))
+              .map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.value}（{f.n}）
+                </option>
+              ))}
           </select>
           <select {...sel("city")}>
             <option value="">市区町村</option>

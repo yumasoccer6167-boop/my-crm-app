@@ -244,3 +244,14 @@ def test_salesは自分の担当と未割当だけ削除できる(client):
     finally:
         client.set_my_role('admin')
     assert client.api(f'/companies/{theirs}')[0] == 200
+
+
+def test_都道府県で絞り込める(client):
+    client.api('/companies', {'company_name': '県別A園', 'address': '鳥取県鳥取市東町1-1'})
+    client.api('/companies', {'company_name': '県別B園', 'address': '沖縄県那覇市泉崎1-1'})
+    f = client.api('/companies/facets')[1]
+    assert {'value': '鳥取県', 'n': 1} in f['prefectures'] and {'value': '沖縄県', 'n': 1} in f['prefectures']
+    f = client.api('/companies/facets?prefecture=' + quote('鳥取県'))[1]
+    assert [c['value'] for c in f['cities']] == ['鳥取市']
+    items = client.api('/companies?prefecture=' + quote('鳥取県'))[1]['items']
+    assert [c['company_name'] for c in items] == ['県別A園']
