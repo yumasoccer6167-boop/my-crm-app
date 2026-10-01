@@ -577,6 +577,10 @@ try:
 except Exception as e:
     print('DB init error:', e)
 
+# ---------- 育てるテレマリスト（/api/telema/*、テーブルは telema_*） ----------
+from telema import register_telema  # noqa: E402
+register_telema(app, get_conn=get_conn, get_current_user=get_current_user, run_migrations=bool(DATABASE_URL))
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
