@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import {
   Home, Users, PenTool, Plus, Search, Edit, X, Phone, MapPin, Save,
   Trash2, Package, Settings, CheckCircle, Filter, Mail, Globe,
   ChevronDown, Star, Camera, Upload, Download, Copy, BarChart,
   Bot, Sparkles, Send, FileText, ClipboardList, CalendarDays,
   ChevronLeft, ChevronRight, CheckSquare, Square, Mic, LayoutGrid, List,
-  Heart, Video, MessageCircle, BookOpen, Briefcase, AlertTriangle, PieChart, User, Link2, Target, XCircle
+  Heart, Video, MessageCircle, BookOpen, Briefcase, AlertTriangle, PieChart, User, Link2, Target, XCircle, PhoneCall
 } from 'lucide-react';
+
+// 育てるテレマリスト（src/telema）。開いたときだけ読み込む
+const TelemaApp = lazy(() => import('./telema/TelemaApp'));
 
 // ---------- 初期データ ----------
 const initialProducts = [{ id: 1, name: 'SP-MEO' }, { id: 2, name: 'SP' }];
@@ -5478,6 +5481,7 @@ export default function App() {
     { id: 'customers', icon: <Users className="w-4 h-4" />, label: '顧客リスト' },
     { id: 'calendar', icon: <CalendarDays className="w-4 h-4" />, label: 'カレンダー' },
     { id: 'recall', icon: <Phone className="w-4 h-4" />, label: '再コール', badge: recallOverdueCount },
+    { id: 'telema', icon: <PhoneCall className="w-4 h-4" />, label: 'テレマリスト' },
     { id: 'teleappt_stats', icon: <BarChart className="w-4 h-4" />, label: 'テレアポ集計' },
     { id: 'daily_report', icon: <FileText className="w-4 h-4" />, label: '日報' },
     { id: 'email', icon: <Mail className="w-4 h-4" />, label: 'メール制作' },
@@ -5489,7 +5493,7 @@ export default function App() {
   ];
 
   const titles = {
-    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', recall: '再コール管理', teleappt_stats: 'テレアポ集計', daily_report: '日報',
+    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', recall: '再コール管理', telema: 'テレマリスト', teleappt_stats: 'テレアポ集計', daily_report: '日報',
     email: 'メール制作', case_studies: 'ユーザー管理（導入事例）', knowledge: '営業ノウハウ', ai: 'AIアシスタント', mypage: 'マイページ', settings: '設定・管理',
   };
 
@@ -5591,6 +5595,11 @@ export default function App() {
             associationTypes={associationTypes}
             onOpenCustomer={openCustomerFromHome} showAlert={showAlert}
           />
+        )}
+        {activeTab === 'telema' && (
+          <Suspense fallback={<p className="text-slate-400 font-bold text-sm">読み込み中...</p>}>
+            <TelemaApp />
+          </Suspense>
         )}
         {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} customers={customers} activityTypes={effectiveActivityTypes} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} teleGoals={teleGoals || {}} setTeleGoals={setTeleGoals} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />}
         {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />}
