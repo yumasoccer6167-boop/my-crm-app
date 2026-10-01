@@ -24,6 +24,7 @@ export type VisitTarget = {
   status_label: string;
   last_called_at: string | null;
   assigned_user_id: number | null;
+  visited_at: string | null;
 };
 
 export type ListSource = { id: number; name: string; source_type: string; description: string | null; created_at: string; company_count: number };

@@ -211,6 +211,7 @@ COMPANY_PATCH = {
     'temperature': Enum(TEMPERATURES),
     'next_call_at': IsoDatetime(nullable=True),
     'assigned_user_id': Int(nullable=True),
+    'visited_at': IsoDatetime(nullable=True),  # 初回訪問した日時。入っている施設は訪問ルートから外す
 }
 
 
