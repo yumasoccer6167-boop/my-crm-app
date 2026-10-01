@@ -25,11 +25,11 @@ import {
 import { useApi } from "../lib/useApi";
 
 // 点の色＝都道府県（色相）× つながりの多さ（明るさ）。ユーザー（受注）は緑の輪で示す
-const CUSTOMER_RING = "#34d399";
+const CUSTOMER_RING = "#10b981";
 const CROSS_COLOR = "#f97316";
-// 図は暗い背景に描く（CROSS_LINE は図の中の県をまたぐ線）
-const BG = "#0b1220";
-const CROSS_LINE = "#fb923c";
+// 図は明るい背景に描く（CROSS_LINE は図の中の県をまたぐ線。BG は文字のふち取りにも使う）
+const BG = "#ffffff";
+const CROSS_LINE = "#f97316";
 
 type View = { k: number; x: number; y: number };
 type Sim = { nodes: SimNode[]; byId: Map<number, SimNode>; links: SimLink[]; groups: Map<string, Group>; alpha: number };
@@ -63,6 +63,8 @@ export function Network() {
   );
   // 全体表示で指しているバブル（その県の線だけを強調する）
   const [hoverPref, setHoverPref] = useState<string | null>(null);
+  // 最大表示（図と右の欄を画面いっぱいに広げる）。Esc で戻す
+  const [full, setFull] = useState(false);
   const raf = useRef(0);
   const running = useRef(false);
   // 表示位置・縮尺。ドラッグ・ホイール中は DOM の transform だけを書き換え（React の再描画なし）、
@@ -252,6 +254,24 @@ export function Network() {
   }
 
   /** すべての円が画面に収まるように縮尺と位置を合わせる */
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setFull(false);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [full]);
+
+  // 大きさが変わったら、新しい大きさ（ResizeObserver で反映）に合わせて全体を収め直す
+  function toggleFull() {
+    setFull((f) => !f);
+    setTimeout(fitView, 80);
+  }
+
   function fitView() {
     const gs = [...sim.current.groups.values()];
     if (gs.length === 0) return;
@@ -443,7 +463,7 @@ export function Network() {
               stroke={CROSS_LINE}
               strokeWidth={(active ? w + 1 : w) / view.k}
               strokeLinecap="round"
-              opacity={hoverPref ? (active ? 0.95 : 0.06) : 0.45}
+              opacity={hoverPref ? (active ? 0.95 : 0.08) : 0.5}
             />
             {active && (
               <text
@@ -453,7 +473,7 @@ export function Network() {
                 dy={4 / view.k}
                 fontSize={11 / view.k}
                 fontWeight={600}
-                fill="#fed7aa"
+                fill="#c2410c"
                 stroke={BG}
                 strokeWidth={3 / view.k}
                 paintOrder="stroke"
@@ -465,6 +485,7 @@ export function Network() {
         );
       });
 
+  const overlayBtn = "rounded-md bg-white/90 px-2 py-1 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-300 backdrop-blur hover:bg-white";
   const chip = (active: boolean) =>
     `shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${active ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`;
 
@@ -591,13 +612,19 @@ export function Network() {
         )}
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[1fr_20rem]">
+      <div
+        className={
+          full
+            ? "fixed inset-0 z-50 grid grid-rows-[1fr_auto] gap-3 bg-slate-100 p-3 lg:grid-cols-[1fr_20rem] lg:grid-rows-1"
+            : "grid gap-3 lg:grid-cols-[1fr_20rem]"
+        }
+      >
         <div
-          className="relative overflow-hidden rounded-xl ring-1 ring-slate-800"
+          className={`relative overflow-hidden rounded-xl shadow-sm ring-1 ring-slate-200 ${full ? "min-h-0" : ""}`}
           style={{
-            background: BG,
+            background: "#f8fafc",
             backgroundImage:
-              "radial-gradient(ellipse at 50% 35%, rgba(99,102,241,0.16), transparent 65%), radial-gradient(rgba(148,163,184,0.10) 1px, transparent 1px)",
+              "radial-gradient(ellipse at 50% 35%, rgba(99,102,241,0.08), transparent 65%), radial-gradient(rgba(100,116,139,0.18) 1px, transparent 1px)",
             backgroundSize: "100% 100%, 22px 22px",
           }}
         >
@@ -607,7 +634,7 @@ export function Network() {
             <svg
               ref={svgRef}
               viewBox={`${-size.w / 2} ${-size.h / 2} ${size.w} ${size.h}`}
-              className="h-[70vh] w-full cursor-grab touch-none select-none active:cursor-grabbing"
+              className={`${full ? "h-full" : "h-[70vh]"} w-full cursor-grab touch-none select-none active:cursor-grabbing`}
               onPointerDown={(e) => onPointerDown(e)}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
@@ -651,11 +678,11 @@ export function Network() {
                           onPointerLeave={() => setHoverPref(null)}
                         >
                           <title>{`${b.pref}\n施設 ${b.n}（ユーザー ${b.users}）`}</title>
-                          <circle r={b.r * (1.06 + 0.12 * b.t)} fill={c.glow} opacity={0.08 + 0.22 * b.t} />
-                          <circle r={b.r} fill={`url(#bubble-${i})`} stroke={hit ? "#fff" : "rgba(255,255,255,0.18)"} strokeWidth={(hit ? 2.5 : 1) / view.k} />
+                          <circle r={b.r * (1.06 + 0.12 * b.t)} fill={c.glow} opacity={0.06 + 0.14 * b.t} />
+                          <circle r={b.r} fill={`url(#bubble-${i})`} stroke={hit ? "#4f46e5" : "rgba(15,23,42,0.12)"} strokeWidth={(hit ? 2.5 : 1) / view.k} />
                           {b.users > 0 && (
                             <>
-                              <circle r={ring} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={3 / view.k} />
+                              <circle r={ring} fill="none" stroke="rgba(15,23,42,0.08)" strokeWidth={3 / view.k} />
                               <circle
                                 r={ring}
                                 fill="none"
@@ -673,14 +700,14 @@ export function Network() {
                               textAnchor="middle"
                               fontSize={12 / view.k}
                               fontWeight={700}
-                              fill="#f8fafc"
-                              stroke="rgba(11,18,32,0.35)"
-                              strokeWidth={2 / view.k}
+                              fill="#0f172a"
+                              stroke="rgba(255,255,255,0.7)"
+                              strokeWidth={2.5 / view.k}
                               paintOrder="stroke"
                             >
                               {name}
                               {showCount && (
-                                <tspan x={0} dy={14 / view.k} fontSize={11 / view.k} fontWeight={500} fill="rgba(248,250,252,0.75)">
+                                <tspan x={0} dy={14 / view.k} fontSize={11 / view.k} fontWeight={500} fill="#475569">
                                   {b.n}
                                 </tspan>
                               )}
@@ -736,7 +763,7 @@ export function Network() {
                       const cross = isCross(e);
                       const active = sel ? e.source === sel.id || e.target === sel.id : hoverEdge === e.id;
                       const faded = sel && !active;
-                      const color = cross ? (active ? "#fdba74" : CROSS_LINE) : active ? "#a5b4fc" : "rgba(148,163,184,0.4)";
+                      const color = cross ? (active ? "#ea580c" : CROSS_LINE) : active ? "#6366f1" : "rgba(100,116,139,0.45)";
                       return (
                         <g key={e.id} onPointerEnter={() => setHoverEdge(e.id)} onPointerLeave={() => setHoverEdge(null)}>
                           <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={10 / view.k} />
@@ -758,7 +785,7 @@ export function Network() {
                               textAnchor="middle"
                               dy={-4 / view.k}
                               fontSize={11 / view.k}
-                              fill={cross ? "#fed7aa" : "#c7d2fe"}
+                              fill={cross ? "#c2410c" : "#4338ca"}
                               stroke={BG}
                               strokeWidth={3 / view.k}
                               paintOrder="stroke"
@@ -788,12 +815,12 @@ export function Network() {
                         >
                           <title>{[n.company_name, n.contact_name && `担当 ${n.contact_name}`, n.address].filter(Boolean).join("\n")}</title>
                           {/* つながりの多い点は光らせる */}
-                          {t > 0.3 && <circle r={r * (1.6 + 1.4 * t)} fill={color} opacity={0.12 + 0.2 * t} />}
+                          {t > 0.3 && <circle r={r * (1.6 + 1.4 * t)} fill={color} opacity={0.1 + 0.15 * t} />}
                           {customer && <circle r={r + 2.5 / view.k} fill="none" stroke={CUSTOMER_RING} strokeWidth={1.5 / view.k} />}
                           <circle
                             r={r}
                             fill={n.ghost ? BG : color}
-                            stroke={isSel || hit ? "#fff" : n.ghost ? color : "rgba(11,18,32,0.7)"}
+                            stroke={isSel || hit ? "#4f46e5" : n.ghost ? color : "#ffffff"}
                             strokeWidth={(isSel || hit || n.ghost ? 2 : 1) / view.k}
                           />
                           {showLabel && (
@@ -801,14 +828,14 @@ export function Network() {
                               y={r + 12 / view.k}
                               textAnchor="middle"
                               fontSize={11 / view.k}
-                              fill={n.ghost ? "#94a3b8" : "#e2e8f0"}
+                              fill={n.ghost ? "#64748b" : "#1e293b"}
                               stroke={BG}
                               strokeWidth={3 / view.k}
                               paintOrder="stroke"
                             >
                               {n.company_name}
                               {n.contact_name && (
-                                <tspan x={0} dy={13 / view.k} fontSize={10 / view.k} fill="#94a3b8">
+                                <tspan x={0} dy={13 / view.k} fontSize={10 / view.k} fill="#64748b">
                                   {n.contact_name}
                                 </tspan>
                               )}
@@ -827,18 +854,22 @@ export function Network() {
               ? "県のバブルをクリックでその県の相関図・ドラッグで移動・ホイールで拡大縮小"
               : "ドラッグで移動・ホイールで拡大縮小・点をクリックで詳細・県名をクリックでその県の相関図"}
           </div>
-          {sub.nodes.length > 0 && (
-            <button
-              type="button"
-              onClick={fitView}
-              className="absolute right-2 top-2 rounded-md bg-white/10 px-2 py-1 text-xs text-slate-200 ring-1 ring-white/15 backdrop-blur hover:bg-white/20"
-            >
-              全体が収まるように表示
+          <div className="absolute right-2 top-2 flex gap-1.5">
+            {sub.nodes.length > 0 && (
+              <button type="button" onClick={fitView} className={overlayBtn}>
+                全体が収まるように表示
+              </button>
+            )}
+            <button type="button" onClick={toggleFull} className={overlayBtn} title={full ? "元の大きさに戻す（Esc）" : "画面いっぱいに表示"}>
+              {full ? "✕ 元に戻す" : "⤢ 最大表示"}
             </button>
-          )}
+          </div>
         </div>
 
-        <Card title={connect ? "つながりを追加" : sel ? "選択中の施設" : pref === "all" ? "全体" : pref}>
+        <Card
+          className={full ? "max-h-[40vh] overflow-y-auto lg:max-h-none" : ""}
+          title={connect ? "つながりを追加" : sel ? "選択中の施設" : pref === "all" ? "全体" : pref}
+        >
           {connect ? (
             <ConnectForm key={connect.initial?.id ?? "new"} initial={connect.initial} onSaved={onConnected} onClose={() => setConnect(null)} />
           ) : sel ? (

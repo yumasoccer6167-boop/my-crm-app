@@ -225,28 +225,28 @@ export function prefHue(pref: string): number | null {
   return i < 0 ? null : (200 + i * 137.508) % 360;
 }
 
-// 相関図は暗い背景に描く。つながりの多い点ほど明るく光る
-/** 点の色。t はつながりの多さ（0〜1）。多いほど鮮やかで明るく、少ないほど暗くくすむ */
+// 相関図は明るい背景に描く。つながりの多い点ほど濃く鮮やかになる
+/** 点の色。t はつながりの多さ（0〜1）。多いほど鮮やかで濃く、少ないほど淡くくすむ */
 export function nodeColor(pref: string, t: number): string {
   const h = prefHue(pref);
-  if (h == null) return `hsl(215 ${12 + 15 * t}% ${42 + 26 * t}%)`;
-  return `hsl(${h.toFixed(0)} ${30 + 65 * t}% ${40 + 28 * t}%)`;
+  if (h == null) return `hsl(215 ${12 + 15 * t}% ${68 - 22 * t}%)`;
+  return `hsl(${h.toFixed(0)} ${40 + 50 * t}% ${66 - 20 * t}%)`;
 }
 
-/** 都道府県の円・県名の色（暗い背景用） */
+/** 都道府県の円・県名の色（明るい背景用） */
 export function prefTint(pref: string): { fill: string; stroke: string; text: string } {
   const h = prefHue(pref);
-  if (h == null) return { fill: "rgba(148,163,184,0.06)", stroke: "rgba(148,163,184,0.3)", text: "#cbd5e1" };
+  if (h == null) return { fill: "rgba(148,163,184,0.08)", stroke: "rgba(100,116,139,0.35)", text: "#475569" };
   const hue = h.toFixed(0);
-  return { fill: `hsl(${hue} 70% 55% / 0.07)`, stroke: `hsl(${hue} 70% 65% / 0.35)`, text: `hsl(${hue} 85% 78%)` };
+  return { fill: `hsl(${hue} 80% 60% / 0.08)`, stroke: `hsl(${hue} 55% 50% / 0.35)`, text: `hsl(${hue} 60% 32%)` };
 }
 
 /** 全体表示のバブルの塗り（中心が明るいグラデーションの両端） */
 export function bubbleShades(pref: string, t: number): { inner: string; outer: string; glow: string } {
   const h = prefHue(pref);
-  if (h == null) return { inner: "hsl(215 15% 62%)", outer: "hsl(215 15% 30%)", glow: "hsl(215 15% 50%)" };
+  if (h == null) return { inner: "hsl(215 20% 92%)", outer: "hsl(215 15% 72%)", glow: "hsl(215 20% 70%)" };
   const hue = h.toFixed(0);
-  return { inner: `hsl(${hue} ${60 + 35 * t}% ${58 + 12 * t}%)`, outer: `hsl(${hue} ${45 + 30 * t}% ${26 + 10 * t}%)`, glow: `hsl(${hue} 90% 60%)` };
+  return { inner: `hsl(${hue} ${70 + 25 * t}% ${92 - 8 * t}%)`, outer: `hsl(${hue} ${50 + 35 * t}% ${74 - 18 * t}%)`, glow: `hsl(${hue} 85% 60%)` };
 }
 
 /** つながりの本数 → 0〜1（本数の差が大きくても見分けやすいよう対数で伸ばす） */
