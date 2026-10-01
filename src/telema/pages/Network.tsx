@@ -7,9 +7,11 @@ import { NetworkList } from "../components/NetworkList";
 import { Button, Card, Empty, ErrorBox, inputCls, Loading, StatusBadge } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import {
+  bubbleShades,
   degreeScale,
   fitGroups,
   layoutAll,
+  layoutBubbles,
   layoutFocused,
   nodeColor,
   prefOf,
@@ -23,8 +25,11 @@ import {
 import { useApi } from "../lib/useApi";
 
 // 点の色＝都道府県（色相）× つながりの多さ（明るさ）。ユーザー（受注）は緑の輪で示す
-const CUSTOMER_RING = "#10b981";
+const CUSTOMER_RING = "#34d399";
 const CROSS_COLOR = "#f97316";
+// 図は暗い背景に描く（CROSS_LINE は図の中の県をまたぐ線）
+const BG = "#0b1220";
+const CROSS_LINE = "#fb923c";
 
 type View = { k: number; x: number; y: number };
 type Sim = { nodes: SimNode[]; byId: Map<number, SimNode>; links: SimLink[]; groups: Map<string, Group>; alpha: number };
@@ -53,7 +58,11 @@ export function Network() {
   const sizeRef = useRef(size);
   sizeRef.current = size;
   const sim = useRef<Sim>({ nodes: [], byId: new Map(), links: [], groups: new Map(), alpha: 0 });
-  const drag = useRef<{ kind: "pan" | "node"; id?: number; sx: number; sy: number; vx: number; vy: number; moved: boolean } | null>(null);
+  const drag = useRef<{ kind: "pan" | "node" | "pref"; id?: number; pref?: string; sx: number; sy: number; vx: number; vy: number; moved: boolean } | null>(
+    null,
+  );
+  // 全体表示で指しているバブル（その県の線だけを強調する）
+  const [hoverPref, setHoverPref] = useState<string | null>(null);
   const raf = useRef(0);
   const running = useRef(false);
   // 表示位置・縮尺。ドラッグ・ホイール中は DOM の transform だけを書き換え（React の再描画なし）、
@@ -122,6 +131,37 @@ export function Network() {
     return { nodes, edges, groups: layoutFocused(pref, inside.size, ghostCounts) };
   }, [data, pref, all]);
 
+  // 全体表示：点は描かず、都道府県ごとのバブルと、県をまたぐつながりを県どうしの曲線にまとめて描く
+  const bubbles = useMemo(() => {
+    if (!data || pref !== "all") return null;
+    const st = new Map<string, { n: number; users: number; deg: number }>();
+    for (const n of data.nodes) {
+      const x = st.get(prefOf(n)) ?? { n: 0, users: 0, deg: 0 };
+      x.n++;
+      if (n.status_category === "won") x.users++;
+      x.deg += degree.of(n.id);
+      st.set(prefOf(n), x);
+    }
+    const maxAvg = Math.max(0, ...[...st.values()].map((x) => x.deg / x.n));
+    const list = layoutBubbles([...st].map(([p, x]) => ({ pref: p, n: x.n, users: x.users, t: degreeScale(x.deg / x.n, maxAvg) })));
+    const links = new Map<string, { a: string; b: string; count: number }>();
+    for (const e of data.edges) {
+      const pa = prefOf(all.get(e.source)!);
+      const pb = prefOf(all.get(e.target)!);
+      if (pa === pb) continue;
+      const [a, b] = pa < pb ? [pa, pb] : [pb, pa];
+      const l = links.get(`${a}|${b}`) ?? { a, b, count: 0 };
+      l.count++;
+      links.set(`${a}|${b}`, l);
+    }
+    return {
+      list,
+      byPref: new Map(list.map((b) => [b.pref, b])),
+      links: [...links.values()],
+      maxLink: Math.max(0, ...[...links.values()].map((l) => l.count)),
+    };
+  }, [data, pref, all, degree]);
+
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return;
@@ -133,10 +173,18 @@ export function Network() {
     return () => ro.disconnect();
   }, [sub && sub.nodes.length > 0]);
 
-
   // 点を円の中心のまわりに並べてから動かし始める（同じ円にいた点は前回の位置を引き継ぐ）
   useEffect(() => {
     if (!sub) return;
+    if (bubbles) {
+      // 全体表示は配置が決まっているので力学計算をしない
+      cancelAnimationFrame(raf.current);
+      running.current = false;
+      sim.current = { nodes: [], byId: new Map(), links: [], groups: new Map(bubbles.list.map((b) => [b.key, b])), alpha: 0 };
+      needsFit.current = true;
+      fitView();
+      return;
+    }
     const prev = sim.current.byId;
     const groups = new Map(sub.groups.map((g) => [g.key, g]));
     const counter = new Map<string, number>();
@@ -164,7 +212,13 @@ export function Network() {
       running.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sub]);
+  }, [sub, bubbles]);
+
+  // 全体表示は計算のループが無いので、表示サイズが決まったら（変わったら）収まるように合わせ直す
+  useEffect(() => {
+    if (bubbles && needsFit.current) fitView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size]);
 
   function restart(alpha = sim.current.alpha) {
     sim.current.alpha = Math.max(sim.current.alpha, alpha);
@@ -258,10 +312,19 @@ export function Network() {
     return { x: (pt.x - v.x) / v.k, y: (pt.y - v.y) / v.k };
   }
 
-  function onPointerDown(e: ReactPointerEvent, nodeId?: number) {
+  function onPointerDown(e: ReactPointerEvent, nodeId?: number, prefKey?: string) {
     e.stopPropagation();
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-    drag.current = { kind: nodeId ? "node" : "pan", id: nodeId, sx: e.clientX, sy: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y, moved: false };
+    drag.current = {
+      kind: nodeId ? "node" : prefKey ? "pref" : "pan",
+      id: nodeId,
+      pref: prefKey,
+      sx: e.clientX,
+      sy: e.clientY,
+      vx: viewRef.current.x,
+      vy: viewRef.current.y,
+      moved: false,
+    };
   }
   function onPointerMove(e: ReactPointerEvent) {
     const d = drag.current;
@@ -269,7 +332,7 @@ export function Network() {
     if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 3) d.moved = true;
     if (!d.moved) return;
     needsFit.current = false;
-    if (d.kind === "pan") {
+    if (d.kind !== "node") {
       const ctm = svgRef.current!.getScreenCTM()!;
       moveView({ ...viewRef.current, x: d.vx + (e.clientX - d.sx) / ctm.a, y: d.vy + (e.clientY - d.sy) / ctm.d }, 1000);
     } else {
@@ -285,8 +348,10 @@ export function Network() {
   function onPointerUp() {
     const d = drag.current;
     drag.current = null;
-    if (d?.kind === "pan" && d.moved) setViewNow(viewRef.current);
+    if (d && d.kind !== "node" && d.moved) setViewNow(viewRef.current);
     if (!d || d.moved) return;
+    // バブルをクリック → その県の相関図
+    if (d.kind === "pref") return selectPref(d.pref!);
     setSelected(d.kind === "node" ? (d.id ?? null) : null);
   }
   // ホイールで拡大縮小。React の onWheel は preventDefault できずページも一緒にスクロールするので、直接登録する
@@ -318,15 +383,20 @@ export function Network() {
     setSelected(id);
   }
 
+  /** その施設の都道府県を開き、配置が落ち着いたら中央に出す（全体表示から施設へ移るとき） */
+  function jumpTo(id: number) {
+    pendingFocus.current = id;
+    setSelected(id);
+    const next = new URLSearchParams(params);
+    next.set("focus", String(id));
+    next.delete("pref");
+    setParams(next, { replace: true });
+  }
+
   // 追加したつながりの施設がある都道府県を開き、その施設を中央に出す
   function onConnected(aId: number) {
     setConnect(null);
-    pendingFocus.current = aId;
-    setSelected(aId);
-    const next = new URLSearchParams(params);
-    next.set("focus", String(aId));
-    next.delete("pref");
-    setParams(next, { replace: true });
+    jumpTo(aId);
     void graph.reload();
   }
 
@@ -334,6 +404,8 @@ export function Network() {
   if (!data || !sub) return <Loading />;
 
   const s = sim.current;
+  // 全体表示：検索に当たった施設がある県
+  const matchPrefs = bubbles && matches ? new Set([...matches].map((id) => prefOf(all.get(id)!))) : null;
   const sel = selected != null ? s.byId.get(selected) : undefined;
   const selNeighbors = sel ? (neighbors.get(sel.id) ?? new Set<number>()) : null;
   const dim = (id: number) => (selNeighbors ? id !== sel!.id && !selNeighbors.has(id) : matches ? !matches.has(id) : false);
@@ -350,6 +422,49 @@ export function Network() {
   }
   const groupSize = new Map<string, number>();
   for (const n of s.nodes) groupSize.set(n.group, (groupSize.get(n.group) ?? 0) + 1);
+  // 全体表示の県どうしの曲線。指している県の線はバブルの上に重ねて描く
+  const bubbleLinks = (onTop: boolean) =>
+    bubbles?.links
+      .filter((l) => (hoverPref === l.a || hoverPref === l.b) === onTop)
+      .map((l) => {
+        const a = bubbles!.byPref.get(l.a)!;
+        const b = bubbles!.byPref.get(l.b)!;
+        const mx = (a.x + b.x) / 2;
+        const my = (a.y + b.y) / 2;
+        const cx = mx - (b.y - a.y) * 0.18;
+        const cy = my + (b.x - a.x) * 0.18;
+        const active = hoverPref === l.a || hoverPref === l.b;
+        const w = 1.2 + (3.5 * Math.log1p(l.count)) / Math.log1p(bubbles!.maxLink);
+        return (
+          <g key={`${l.a}|${l.b}`} pointerEvents="none">
+            <path
+              d={`M${a.x} ${a.y} Q${cx} ${cy} ${b.x} ${b.y}`}
+              fill="none"
+              stroke={CROSS_LINE}
+              strokeWidth={(active ? w + 1 : w) / view.k}
+              strokeLinecap="round"
+              opacity={hoverPref ? (active ? 0.95 : 0.06) : 0.45}
+            />
+            {active && (
+              <text
+                x={0.25 * a.x + 0.5 * cx + 0.25 * b.x}
+                y={0.25 * a.y + 0.5 * cy + 0.25 * b.y}
+                textAnchor="middle"
+                dy={4 / view.k}
+                fontSize={11 / view.k}
+                fontWeight={600}
+                fill="#fed7aa"
+                stroke={BG}
+                strokeWidth={3 / view.k}
+                paintOrder="stroke"
+              >
+                {l.count}本
+              </text>
+            )}
+          </g>
+        );
+      });
+
   const chip = (active: boolean) =>
     `shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${active ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`;
 
@@ -368,7 +483,7 @@ export function Network() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
             const first = matches && [...matches][0];
-            if (e.key === "Enter" && first) centerOn(first);
+            if (e.key === "Enter" && first) bubbles ? jumpTo(first) : centerOn(first);
           }}
         />
         <label className="flex items-center gap-1.5 text-sm text-slate-700">
@@ -407,43 +522,87 @@ export function Network() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
-        <span className="flex items-center gap-1">
-          色＝都道府県　つながり 少
-          <span
-            className="inline-block h-2.5 w-16 rounded-full"
-            style={{ background: `linear-gradient(to right, ${nodeColor("東京都", 0)}, ${nodeColor("東京都", 0.5)}, ${nodeColor("東京都", 1)})` }}
-          />
-          多（明るいほど多い）
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-300 ring-2" style={{ ["--tw-ring-color" as string]: CUSTOMER_RING }} />
-          ユーザー（受注）
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-300" />
-          ユーザー以外
-        </span>
-        <span className="flex items-center gap-1">
-          <svg width="22" height="6" aria-hidden="true">
-            <line x1="0" y1="3" x2="22" y2="3" stroke={CROSS_COLOR} strokeWidth="2" strokeDasharray="5 3" />
-          </svg>
-          県をまたぐつながり
-        </span>
-        {pref !== "all" && (
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-slate-400 bg-white" />
-            他県の施設
-          </span>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+        {bubbles ? (
+          <>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-3 w-3 rounded-full"
+                style={{ background: `radial-gradient(circle at 35% 30%, ${bubbleShades("東京都", 1).inner}, ${bubbleShades("東京都", 1).outer})` }}
+              />
+              円の大きさ＝施設数・明るいほどつながりが多い
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg width="14" height="14" aria-hidden="true">
+                <circle cx="7" cy="7" r="5.5" fill="none" stroke="#cbd5e1" strokeWidth="2" />
+                <circle
+                  cx="7"
+                  cy="7"
+                  r="5.5"
+                  fill="none"
+                  stroke={CUSTOMER_RING}
+                  strokeWidth="2"
+                  strokeDasharray="13 40"
+                  transform="rotate(-90 7 7)"
+                  strokeLinecap="round"
+                />
+              </svg>
+              緑の弧＝ユーザー（受注）の割合
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg width="24" height="10" aria-hidden="true">
+                <path d="M1 8 Q12 0 23 8" fill="none" stroke={CROSS_COLOR} strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              県をまたぐつながり（太いほど多い）
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="flex items-center gap-1.5">
+              色＝都道府県　つながり 少
+              <span
+                className="inline-block h-2.5 w-16 rounded-full"
+                style={{ background: `linear-gradient(to right, ${nodeColor("東京都", 0)}, ${nodeColor("東京都", 0.5)}, ${nodeColor("東京都", 1)})` }}
+              />
+              多
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full bg-slate-400 ring-2 ring-offset-1"
+                style={{ ["--tw-ring-color" as string]: CUSTOMER_RING }}
+              />
+              ユーザー（受注）
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-400" />
+              ユーザー以外
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg width="22" height="6" aria-hidden="true">
+                <line x1="0" y1="3" x2="22" y2="3" stroke={CROSS_COLOR} strokeWidth="2" strokeDasharray="5 3" />
+              </svg>
+              県をまたぐつながり
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-slate-400 bg-white" />
+              他県の施設
+            </span>
+          </>
         )}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[1fr_20rem]">
-        <div className="relative overflow-hidden rounded-lg bg-white ring-1 ring-slate-200">
+        <div
+          className="relative overflow-hidden rounded-xl ring-1 ring-slate-800"
+          style={{
+            background: BG,
+            backgroundImage:
+              "radial-gradient(ellipse at 50% 35%, rgba(99,102,241,0.16), transparent 65%), radial-gradient(rgba(148,163,184,0.10) 1px, transparent 1px)",
+            backgroundSize: "100% 100%, 22px 22px",
+          }}
+        >
           {sub.nodes.length === 0 ? (
-            <Empty>
-              まだつながりがありません。右上の「＋つなぐ」か会社カルテの「つながり」で、知り合いの施設を登録すると点と線で表示されます。
-            </Empty>
+            <Empty>まだつながりがありません。右上の「＋つなぐ」か会社カルテの「つながり」で、知り合いの施設を登録すると点と線で表示されます。</Empty>
           ) : (
             <svg
               ref={svgRef}
@@ -453,140 +612,226 @@ export function Network() {
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
             >
+              {bubbles && (
+                <defs>
+                  {bubbles.list.map((b, i) => {
+                    const c = bubbleShades(b.pref, b.t);
+                    return (
+                      <radialGradient key={b.key} id={`bubble-${i}`} cx="35%" cy="30%" r="75%">
+                        <stop offset="0%" stopColor={c.inner} />
+                        <stop offset="100%" stopColor={c.outer} />
+                      </radialGradient>
+                    );
+                  })}
+                </defs>
+              )}
               <g ref={gRef} transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
-                {/* 都道府県のまとまり */}
-                {[...s.groups.values()].map((g) => {
-                  const tint = prefTint(g.pref);
-                  return (
-                    <g key={g.key}>
-                      <circle
-                        cx={g.x}
-                        cy={g.y}
-                        r={g.r}
-                        fill={tint.fill}
-                        fillOpacity={g.ghost ? 0.6 : 1}
-                        stroke={tint.stroke}
-                        strokeWidth={1.5 / view.k}
-                        strokeDasharray={g.ghost ? `${6 / view.k} ${4 / view.k}` : undefined}
-                      />
-                      <text
-                        x={g.x}
-                        y={g.y - g.r - 6 / view.k}
-                        textAnchor="middle"
-                        fontSize={13 / view.k}
-                        fontWeight={600}
-                        fill={tint.text}
-                        stroke="white"
-                        strokeWidth={3 / view.k}
-                        paintOrder="stroke"
-                        className={g.pref !== pref ? "cursor-pointer hover:underline" : undefined}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={() => g.pref !== pref && selectPref(g.pref)}
-                      >
-                        {g.pref} {groupSize.get(g.key) ?? 0}
-                        {g.pref !== pref && " ›"}
-                      </text>
-                    </g>
-                  );
-                })}
-                {sub.edges.map((e) => {
-                  const a = s.byId.get(e.source);
-                  const b = s.byId.get(e.target);
-                  if (!a || !b) return null;
-                  const cross = isCross(e);
-                  const active = sel ? e.source === sel.id || e.target === sel.id : hoverEdge === e.id;
-                  const faded = sel && !active;
-                  const color = cross ? (active ? "#c2410c" : CROSS_COLOR) : active ? "#4f46e5" : "#cbd5e1";
-                  return (
-                    <g key={e.id} onPointerEnter={() => setHoverEdge(e.id)} onPointerLeave={() => setHoverEdge(null)}>
-                      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={10 / view.k} />
-                      <line
-                        x1={a.x}
-                        y1={a.y}
-                        x2={b.x}
-                        y2={b.y}
-                        stroke={color}
-                        strokeWidth={(active ? 2.5 : cross ? 1.8 : 1.5) / view.k}
-                        strokeDasharray={cross ? `${6 / view.k} ${4 / view.k}` : undefined}
-                        opacity={faded ? 0.25 : 1}
-                      />
-                      {active && e.label && (
-                        <text
-                          x={(a.x + b.x) / 2}
-                          y={(a.y + b.y) / 2}
-                          textAnchor="middle"
-                          dy={-4 / view.k}
-                          fontSize={11 / view.k}
-                          fill={cross ? "#c2410c" : "#4338ca"}
-                          stroke="white"
-                          strokeWidth={3 / view.k}
-                          paintOrder="stroke"
+                {bubbles ? (
+                  <>
+                    {/* 県をまたぐつながり（県どうしを1本の曲線にまとめる） */}
+                    {bubbleLinks(false)}
+                    {bubbles.list.map((b, i) => {
+                      const c = bubbleShades(b.pref, b.t);
+                      const hit = matchPrefs?.has(b.pref);
+                      const faded = (hoverPref && hoverPref !== b.pref) || (matchPrefs && !hit);
+                      const ring = b.r + 4 / view.k;
+                      const C = 2 * Math.PI * ring;
+                      // 県名は「都・府・県」を省いてバブルの中に書く。入りきらない大きさのときは出さない（マウスを乗せると出る）
+                      const name = b.pref.replace(/[都府県]$/, "");
+                      const showName = b.r * view.k >= Math.max(15, name.length * 6.5) || hoverPref === b.pref;
+                      const showCount = b.r * view.k >= 24;
+                      return (
+                        <g
+                          key={b.key}
+                          transform={`translate(${b.x} ${b.y})`}
+                          opacity={faded ? 0.35 : 1}
+                          className="cursor-pointer"
+                          onPointerDown={(e) => onPointerDown(e, undefined, b.pref)}
+                          onPointerEnter={() => setHoverPref(b.pref)}
+                          onPointerLeave={() => setHoverPref(null)}
                         >
-                          {e.label}
-                        </text>
-                      )}
-                    </g>
-                  );
-                })}
-                {s.nodes.map((n) => {
-                  const isSel = n.id === selected;
-                  const faded = dim(n.id);
-                  const hit = matches?.has(n.id);
-                  const showLabel = isSel || view.k >= 0.6 || !!selNeighbors?.has(n.id) || hit;
-                  const r = (isSel ? 9 : 7) / Math.sqrt(view.k);
-                  const t = degreeScale(degree.of(n.id), degree.max);
-                  const color = nodeColor(prefOf(n), t);
-                  const customer = n.status_category === "won";
-                  return (
-                    <g
-                      key={n.id}
-                      transform={`translate(${n.x} ${n.y})`}
-                      opacity={faded ? 0.2 : 1}
-                      className="cursor-pointer"
-                      onPointerDown={(e) => onPointerDown(e, n.id)}
-                    >
-                      <title>{[n.company_name, n.contact_name && `担当 ${n.contact_name}`, n.address].filter(Boolean).join("\n")}</title>
-                      {/* つながりの多い点はうっすら光らせる */}
-                      {t > 0.4 && <circle r={r * (1.4 + t)} fill={color} opacity={0.22 * t} />}
-                      {customer && <circle r={r + 3 / view.k} fill="none" stroke={CUSTOMER_RING} strokeWidth={2 / view.k} />}
-                      <circle
-                        r={r}
-                        fill={n.ghost ? "white" : color}
-                        stroke={isSel || hit ? "#312e81" : n.ghost ? color : "white"}
-                        strokeWidth={(isSel || hit || n.ghost ? 2.5 : 1.5) / view.k}
-                      />
-                      {showLabel && (
-                        <text
-                          y={r + 12 / view.k}
-                          textAnchor="middle"
-                          fontSize={11 / view.k}
-                          fill={n.ghost ? "#64748b" : "#0f172a"}
-                          stroke="white"
-                          strokeWidth={3 / view.k}
-                          paintOrder="stroke"
-                        >
-                          {n.company_name}
-                          {n.contact_name && (
-                            <tspan x={0} dy={13 / view.k} fontSize={10 / view.k} fill="#64748b">
-                              {n.contact_name}
-                            </tspan>
+                          <title>{`${b.pref}\n施設 ${b.n}（ユーザー ${b.users}）`}</title>
+                          <circle r={b.r * (1.06 + 0.12 * b.t)} fill={c.glow} opacity={0.08 + 0.22 * b.t} />
+                          <circle r={b.r} fill={`url(#bubble-${i})`} stroke={hit ? "#fff" : "rgba(255,255,255,0.18)"} strokeWidth={(hit ? 2.5 : 1) / view.k} />
+                          {b.users > 0 && (
+                            <>
+                              <circle r={ring} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={3 / view.k} />
+                              <circle
+                                r={ring}
+                                fill="none"
+                                stroke={CUSTOMER_RING}
+                                strokeWidth={3 / view.k}
+                                strokeLinecap="round"
+                                strokeDasharray={`${(C * b.users) / b.n} ${C}`}
+                                transform="rotate(-90)"
+                              />
+                            </>
                           )}
-                        </text>
-                      )}
-                    </g>
-                  );
-                })}
+                          {showName && (
+                            <text
+                              y={(showCount ? -2 : 4) / view.k}
+                              textAnchor="middle"
+                              fontSize={12 / view.k}
+                              fontWeight={700}
+                              fill="#f8fafc"
+                              stroke="rgba(11,18,32,0.35)"
+                              strokeWidth={2 / view.k}
+                              paintOrder="stroke"
+                            >
+                              {name}
+                              {showCount && (
+                                <tspan x={0} dy={14 / view.k} fontSize={11 / view.k} fontWeight={500} fill="rgba(248,250,252,0.75)">
+                                  {b.n}
+                                </tspan>
+                              )}
+                            </text>
+                          )}
+                        </g>
+                      );
+                    })}
+                    {bubbleLinks(true)}
+                  </>
+                ) : (
+                  <>
+                    {/* 都道府県のまとまり */}
+                    {[...s.groups.values()].map((g) => {
+                      const tint = prefTint(g.pref);
+                      return (
+                        <g key={g.key}>
+                          <circle
+                            cx={g.x}
+                            cy={g.y}
+                            r={g.r}
+                            fill={tint.fill}
+                            fillOpacity={g.ghost ? 0.6 : 1}
+                            stroke={tint.stroke}
+                            strokeWidth={1 / view.k}
+                            strokeDasharray={g.ghost ? `${6 / view.k} ${4 / view.k}` : undefined}
+                          />
+                          <text
+                            x={g.x}
+                            y={g.y - g.r - 8 / view.k}
+                            textAnchor="middle"
+                            fontSize={12 / view.k}
+                            fontWeight={600}
+                            letterSpacing={0.5 / view.k}
+                            fill={tint.text}
+                            stroke={BG}
+                            strokeWidth={3 / view.k}
+                            paintOrder="stroke"
+                            className={g.pref !== pref ? "cursor-pointer hover:underline" : undefined}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => g.pref !== pref && selectPref(g.pref)}
+                          >
+                            {g.pref} {groupSize.get(g.key) ?? 0}
+                            {g.pref !== pref && " ›"}
+                          </text>
+                        </g>
+                      );
+                    })}
+                    {sub.edges.map((e) => {
+                      const a = s.byId.get(e.source);
+                      const b = s.byId.get(e.target);
+                      if (!a || !b) return null;
+                      const cross = isCross(e);
+                      const active = sel ? e.source === sel.id || e.target === sel.id : hoverEdge === e.id;
+                      const faded = sel && !active;
+                      const color = cross ? (active ? "#fdba74" : CROSS_LINE) : active ? "#a5b4fc" : "rgba(148,163,184,0.4)";
+                      return (
+                        <g key={e.id} onPointerEnter={() => setHoverEdge(e.id)} onPointerLeave={() => setHoverEdge(null)}>
+                          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={10 / view.k} />
+                          <line
+                            x1={a.x}
+                            y1={a.y}
+                            x2={b.x}
+                            y2={b.y}
+                            stroke={color}
+                            strokeWidth={(active ? 2 : 1.2) / view.k}
+                            strokeLinecap="round"
+                            strokeDasharray={cross ? `${5 / view.k} ${4 / view.k}` : undefined}
+                            opacity={faded ? 0.15 : cross && !active ? 0.75 : 1}
+                          />
+                          {active && e.label && (
+                            <text
+                              x={(a.x + b.x) / 2}
+                              y={(a.y + b.y) / 2}
+                              textAnchor="middle"
+                              dy={-4 / view.k}
+                              fontSize={11 / view.k}
+                              fill={cross ? "#fed7aa" : "#c7d2fe"}
+                              stroke={BG}
+                              strokeWidth={3 / view.k}
+                              paintOrder="stroke"
+                            >
+                              {e.label}
+                            </text>
+                          )}
+                        </g>
+                      );
+                    })}
+                    {s.nodes.map((n) => {
+                      const isSel = n.id === selected;
+                      const faded = dim(n.id);
+                      const hit = matches?.has(n.id);
+                      const showLabel = isSel || view.k >= 1.1 || !!selNeighbors?.has(n.id) || hit;
+                      const r = (isSel ? 7 : 5) / Math.sqrt(view.k);
+                      const t = degreeScale(degree.of(n.id), degree.max);
+                      const color = nodeColor(prefOf(n), t);
+                      const customer = n.status_category === "won";
+                      return (
+                        <g
+                          key={n.id}
+                          transform={`translate(${n.x} ${n.y})`}
+                          opacity={faded ? 0.18 : 1}
+                          className="cursor-pointer"
+                          onPointerDown={(e) => onPointerDown(e, n.id)}
+                        >
+                          <title>{[n.company_name, n.contact_name && `担当 ${n.contact_name}`, n.address].filter(Boolean).join("\n")}</title>
+                          {/* つながりの多い点は光らせる */}
+                          {t > 0.3 && <circle r={r * (1.6 + 1.4 * t)} fill={color} opacity={0.12 + 0.2 * t} />}
+                          {customer && <circle r={r + 2.5 / view.k} fill="none" stroke={CUSTOMER_RING} strokeWidth={1.5 / view.k} />}
+                          <circle
+                            r={r}
+                            fill={n.ghost ? BG : color}
+                            stroke={isSel || hit ? "#fff" : n.ghost ? color : "rgba(11,18,32,0.7)"}
+                            strokeWidth={(isSel || hit || n.ghost ? 2 : 1) / view.k}
+                          />
+                          {showLabel && (
+                            <text
+                              y={r + 12 / view.k}
+                              textAnchor="middle"
+                              fontSize={11 / view.k}
+                              fill={n.ghost ? "#94a3b8" : "#e2e8f0"}
+                              stroke={BG}
+                              strokeWidth={3 / view.k}
+                              paintOrder="stroke"
+                            >
+                              {n.company_name}
+                              {n.contact_name && (
+                                <tspan x={0} dy={13 / view.k} fontSize={10 / view.k} fill="#94a3b8">
+                                  {n.contact_name}
+                                </tspan>
+                              )}
+                            </text>
+                          )}
+                        </g>
+                      );
+                    })}
+                  </>
+                )}
               </g>
             </svg>
           )}
-          <div className="pointer-events-none absolute bottom-2 left-3 text-[11px] text-slate-400">
-            ドラッグで移動・ホイールで拡大縮小・点をクリックで詳細・県名をクリックでその県の相関図
+          <div className="pointer-events-none absolute bottom-2 left-3 right-3 text-[11px] text-slate-500">
+            {bubbles
+              ? "県のバブルをクリックでその県の相関図・ドラッグで移動・ホイールで拡大縮小"
+              : "ドラッグで移動・ホイールで拡大縮小・点をクリックで詳細・県名をクリックでその県の相関図"}
           </div>
           {sub.nodes.length > 0 && (
             <button
               type="button"
               onClick={fitView}
-              className="absolute right-2 top-2 rounded-md bg-white/90 px-2 py-1 text-xs text-slate-600 ring-1 ring-slate-300 hover:bg-slate-50"
+              className="absolute right-2 top-2 rounded-md bg-white/10 px-2 py-1 text-xs text-slate-200 ring-1 ring-white/15 backdrop-blur hover:bg-white/20"
             >
               全体が収まるように表示
             </button>
@@ -607,7 +852,12 @@ export function Network() {
                   </div>
                 </div>
                 <div className="mt-1 text-slate-700">
-                  担当者：{sel.contact_name ? `${sel.contact_name}${sel.contact_role ? `（${sel.contact_role}）` : ""}` : <span className="text-slate-400">未判明</span>}
+                  担当者：
+                  {sel.contact_name ? (
+                    `${sel.contact_name}${sel.contact_role ? `（${sel.contact_role}）` : ""}`
+                  ) : (
+                    <span className="text-slate-400">未判明</span>
+                  )}
                 </div>
                 <div className="text-xs text-slate-500">{sel.address ?? "住所未登録"}</div>
                 <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
@@ -665,6 +915,46 @@ export function Network() {
             </div>
           ) : (
             <div className="space-y-3 text-sm">
+              {bubbles && (
+                <div>
+                  <div className="mb-1.5 text-xs text-slate-500">都道府県（施設数順・緑はユーザー）</div>
+                  <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                    {[...bubbles.list]
+                      .sort((a, b) => b.n - a.n)
+                      .map((b) => {
+                        const max = Math.max(...bubbles.list.map((x) => x.n));
+                        return (
+                          <li key={b.key}>
+                            <button
+                              type="button"
+                              onClick={() => selectPref(b.pref)}
+                              onPointerEnter={() => setHoverPref(b.pref)}
+                              onPointerLeave={() => setHoverPref(null)}
+                              className="group block w-full text-left"
+                            >
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="flex items-center gap-1.5 font-medium text-slate-700 group-hover:text-indigo-700">
+                                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: nodeColor(b.pref, 1) }} />
+                                  {b.pref}
+                                </span>
+                                <span className="tabular-nums text-slate-500">
+                                  {b.n}
+                                  {b.users > 0 && <span className="text-emerald-600">（{b.users}）</span>}
+                                </span>
+                              </div>
+                              <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                <div className="flex h-full" style={{ width: `${(b.n / max) * 100}%` }}>
+                                  <div className="h-full bg-emerald-400" style={{ width: `${(b.users / b.n) * 100}%` }} />
+                                  <div className="h-full flex-1" style={{ background: nodeColor(b.pref, 0.6) }} />
+                                </div>
+                              </div>
+                            </button>
+                          </li>
+                        );
+                      })}
+                  </ul>
+                </div>
+              )}
               {pref !== "all" && (
                 <div>
                   <div className="mb-1 text-xs text-slate-500">つながっている他の都道府県（{linkedPrefs.size}）</div>
@@ -689,10 +979,18 @@ export function Network() {
                 </div>
               )}
               <ul className="list-disc space-y-1 pl-4 text-slate-600">
-                <li>点 = 施設（園名・担当者・住所）、線 = 知り合い関係です。</li>
-                <li>円は都道府県のまとまりです。県をまたぐつながりはオレンジの破線で表示します。</li>
-                <li>上の県名か、図の中の県名をクリックするとその県の相関図になります。</li>
-                <li>つながりは右上の「＋つなぐ」か、下の施設一覧の「＋知り合いをつなぐ」で、ユーザー・ユーザー以外を問わず2つの施設を選んで登録します（会社カルテの「つながり」カードからも登録できます）。</li>
+                {bubbles ? (
+                  <li>全体では都道府県ごとにまとめて表示します。バブルか上の県名をクリックすると、その県の施設（点）と知り合い関係（線）が見られます。</li>
+                ) : (
+                  <>
+                    <li>点 = 施設（園名・担当者・住所）、線 = 知り合い関係です。</li>
+                    <li>円は都道府県のまとまりです。県をまたぐつながりはオレンジの破線で表示します。</li>
+                    <li>上の県名か、図の中の県名をクリックするとその県の相関図になります。</li>
+                  </>
+                )}
+                <li>
+                  つながりは右上の「＋つなぐ」か、下の施設一覧の「＋知り合いをつなぐ」で、ユーザー・ユーザー以外を問わず2つの施設を選んで登録します（会社カルテの「つながり」カードからも登録できます）。
+                </li>
                 <li>知り合いの園がまだ登録されていなければ、検索結果の「新しい園として登録」からその場で追加できます。</li>
               </ul>
             </div>
@@ -707,7 +1005,8 @@ export function Network() {
         all={all}
         query={query}
         onFocus={(id) => {
-          centerOn(id);
+          if (bubbles) jumpTo(id);
+          else centerOn(id);
           svgRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
         }}
         onConnected={() => void graph.reload()}
