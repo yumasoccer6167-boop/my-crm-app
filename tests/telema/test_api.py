@@ -304,3 +304,12 @@ def test_訪問ルート用にユーザーの施設だけ返す(client):
     assert '訪問A園' in names and '訪問B園' not in names
     a = next(r for r in rows if r['company_name'] == '訪問A園')
     assert a['latitude'] == 35.66 and a['status_label'] == '受注成立'
+
+
+def test_訪問済みにすると印が残り戻せる(client):
+    won = client.status_id('受注成立')
+    cid = client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id) VALUES ('訪問済み園', '訪問済み園', '長野県', %s) RETURNING id", (won,))[0]['id']
+    status, row = client.api(f'/companies/{cid}', {'visited_at': '2026-10-01T10:00:00+09:00'}, method='PATCH')
+    assert status == 200 and row['visited_at'] == '2026-10-01T01:00:00.000Z'
+    assert next(r for r in client.api('/visit-targets')[1] if r['id'] == cid)['visited_at'] == '2026-10-01T01:00:00.000Z'
+    assert client.api(f'/companies/{cid}', {'visited_at': None}, method='PATCH')[1]['visited_at'] is None

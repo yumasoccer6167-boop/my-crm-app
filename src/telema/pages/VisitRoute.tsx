@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
-import { Card, Empty, ErrorBox, Loading, selectCls } from "../components/ui";
+import { Button, Card, Empty, ErrorBox, Loading, selectCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { dayUrl, fmtTime, legUrl, planDays, type Day } from "../lib/visit-route";
@@ -9,6 +9,7 @@ import { prefOrder } from "../lib/network-layout";
 // 日ごとの色（地図の線・点と日別カードの印をそろえる）
 const COLORS = ["#0f766e", "#c2410c", "#2563eb", "#9333ea", "#ca8a04", "#0891b2", "#78716c", "#db2777", "#4d7c0f", "#4f46e5", "#b91c1c", "#059669"];
 const color = (i: number) => COLORS[i % COLORS.length]!;
+const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" });
 const count = (d: Day) => d.stops.reduce((n, s) => n + 1 + s.also.length, 0);
 
 /** ユーザー（受注）の施設を、都道府県ごとに1日数件ずつ回る初回訪問ルート */
@@ -17,6 +18,23 @@ export function VisitRoute() {
   const [stay, setStay] = useState(60);
   const [maxStops, setMaxStops] = useState(4);
   const [pref, setPref] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  /** 訪問済みにする（visited = false で戻す）。同じ場所にまとめた施設も一緒に変える */
+  async function markVisited(ids: number[], visited: boolean) {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const visited_at = visited ? new Date().toISOString() : null;
+      await Promise.all(ids.map((id) => unwrap(api.companies[":id"].$patch({ param: { id: String(id) }, json: { visited_at } }))));
+      await reload();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const byPref = useMemo(() => {
     const m = new Map<string, NonNullable<typeof data>>();
@@ -27,8 +45,12 @@ export function VisitRoute() {
     return [...m].sort((a, b) => prefOrder(a[0]) - prefOrder(b[0]));
   }, [data]);
 
-  const cur = pref ?? byPref.slice().sort((a, b) => b[1].length - a[1].length)[0]?.[0] ?? null;
-  const targets = byPref.find(([p]) => p === cur)?.[1] ?? [];
+  const pendingCount = (list: NonNullable<typeof data>) => list.filter((t) => !t.visited_at).length;
+  const cur = pref ?? byPref.slice().sort((a, b) => pendingCount(b[1]) - pendingCount(a[1]))[0]?.[0] ?? null;
+  const inPref = byPref.find(([p]) => p === cur)?.[1] ?? [];
+  // 訪問済みの施設はルートに入れない
+  const targets = useMemo(() => inPref.filter((t) => !t.visited_at), [inPref]);
+  const visited = inPref.filter((t) => t.visited_at).sort((a, b) => b.visited_at!.localeCompare(a.visited_at!));
   const days = useMemo(() => planDays(targets, { stay, maxStops }), [targets, stay, maxStops]);
   const unlocated = targets.filter((t) => t.latitude == null || t.longitude == null);
 
@@ -44,7 +66,8 @@ export function VisitRoute() {
       <div>
         <h1 className="text-lg font-bold text-slate-900">初回訪問ルート</h1>
         <p className="text-sm text-slate-500">
-          ユーザー（受注）の施設を都道府県ごとに、1日数件ずつ回れるように自動で組みます。移動時間は直線距離からの目安なので、出発前に「経路」のリンクで確認してください。
+          ユーザー（受注）の施設を都道府県ごとに、1日数件ずつ回れるように自動で組みます。訪問した施設は「✓
+          訪問済み」でルートから外れます。移動時間は直線距離からの目安なので、出発前に「経路」のリンクで確認してください。
         </p>
       </div>
 
@@ -56,7 +79,8 @@ export function VisitRoute() {
             onClick={() => setPref(p)}
             className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${p === cur ? "bg-teal-600 text-white ring-teal-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
           >
-            {p} {list.length}
+            {p} {pendingCount(list)}
+            {pendingCount(list) < list.length && <span className="ml-1 opacity-70">／済{list.length - pendingCount(list)}</span>}
           </button>
         ))}
       </div>
@@ -95,6 +119,8 @@ export function VisitRoute() {
         </div>
       </div>
 
+      {saveError && <ErrorBox message={saveError} />}
+
       <div className="grid items-start gap-4 lg:grid-cols-[22rem_1fr]">
         <div className="space-y-3 lg:sticky lg:top-3">
           <Card title="地図（色＝訪問日・線は回る順番・北が上）">{days.length ? <RouteMap days={days} /> : <Empty>位置の分かる施設がありません</Empty>}</Card>
@@ -110,6 +136,24 @@ export function VisitRoute() {
                       {t.company_name}
                     </Link>
                     <span className="ml-1 text-xs text-slate-500">{t.address ?? t.city ?? "住所なし"}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          {visited.length > 0 && (
+            <Card title={`訪問済み（${visited.length}）`}>
+              <p className="mb-2 text-xs text-slate-500">ルートから外しています。「戻す」でルートに入れ直します。</p>
+              <ul className="max-h-72 space-y-1 overflow-y-auto text-sm">
+                {visited.map((t) => (
+                  <li key={t.id} className="flex items-center gap-2">
+                    <span className="w-12 shrink-0 text-xs tabular-nums text-slate-500">{fmtDay(t.visited_at!)}</span>
+                    <Link to={`/companies/${t.id}`} className="min-w-0 flex-1 truncate text-teal-700 hover:underline">
+                      {t.company_name}
+                    </Link>
+                    <Button size="sm" variant="ghost" disabled={saving} onClick={() => markVisited([t.id], false)}>
+                      戻す
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -155,7 +199,15 @@ export function VisitRoute() {
                     )}
                     <div className="grid grid-cols-[3.5rem_1fr] gap-2 py-1">
                       <span className="pt-0.5 text-sm tabular-nums text-slate-500">{fmtTime(d.times[j]!)}</span>
-                      <div className="min-w-0">
+                      <div className="relative min-w-0 pr-24">
+                        <Button
+                          size="sm"
+                          className="absolute right-0 top-0"
+                          disabled={saving}
+                          onClick={() => markVisited([s.main.id, ...s.also.map((a) => a.id)], true)}
+                        >
+                          ✓ 訪問済み
+                        </Button>
                         <Link to={`/companies/${s.main.id}`} className="font-semibold text-slate-900 hover:text-teal-700 hover:underline">
                           {s.main.company_name}
                         </Link>

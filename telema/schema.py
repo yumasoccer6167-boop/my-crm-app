@@ -363,6 +363,10 @@ INSERT INTO telema_call_statuses (label, category, sort_order) VALUES
   ('5店舗以上',      'excluded',    160),
   ('10店鋪以上',     'excluded',    170);
 """,
+    # 2: 初回訪問の済み印（訪問ルートから外す）
+    r"""
+ALTER TABLE telema_companies ADD COLUMN visited_at TEXT;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く
