@@ -255,3 +255,15 @@ def test_都道府県で絞り込める(client):
     assert [c['value'] for c in f['cities']] == ['鳥取市']
     items = client.api('/companies?prefecture=' + quote('鳥取県'))[1]['items']
     assert [c['company_name'] for c in items] == ['県別A園']
+
+
+def test_訪問ルート用にユーザーの施設だけ返す(client):
+    won = client.status_id('受注成立')
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, latitude, longitude, status_id) VALUES ('訪問A園', '訪問A園', '山梨県', 35.66, 138.57, %s)", (won,))
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture) VALUES ('訪問B園', '訪問B園', '山梨県')")
+    status, rows = client.api('/visit-targets')
+    assert status == 200
+    names = [r['company_name'] for r in rows]
+    assert '訪問A園' in names and '訪問B園' not in names
+    a = next(r for r in rows if r['company_name'] == '訪問A園')
+    assert a['latitude'] == 35.66 and a['status_label'] == '受注成立'

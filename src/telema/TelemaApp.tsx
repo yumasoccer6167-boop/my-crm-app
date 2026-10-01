@@ -7,6 +7,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
 import { Network } from "./pages/Network";
 import { Settings } from "./pages/Settings";
+import { VisitRoute } from "./pages/VisitRoute";
 
 // CRM本体はURLを使わずタブで画面を切り替えているので、テレマリスト内の画面遷移もURLを変えないメモリ上のルーターで行う
 const router = createMemoryRouter([
@@ -17,6 +18,7 @@ const router = createMemoryRouter([
       { path: "/companies", element: <Companies /> },
       { path: "/companies/:id", element: <CompanyDetail /> },
       { path: "/network", element: <Network /> },
+      { path: "/visits", element: <VisitRoute /> },
       { path: "/import", element: <ImportPage /> },
       { path: "/settings", element: <Settings /> },
     ],

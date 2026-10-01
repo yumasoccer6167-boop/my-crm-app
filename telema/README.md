@@ -57,6 +57,13 @@ npm run telema:import -- /tmp/list.json --source "茨城県 認可施設" --type
 - 電話が同じでも施設名が違う場合は別の施設として登録する（`--on-phone-match merge|separate|skip` で変更可）
 - 1回の取り込みはまとめて適用する。途中で失敗したら何も登録されない
 
+施設の位置（緯度・経度）を住所から入れる（国土地理院の住所検索 API。訪問ルートの画面で使う）：
+
+```bash
+npm run telema:geocode -- --won --dry-run  # ユーザー（受注）だけ、確認のみ
+npm run telema:geocode -- --won            # ユーザーだけ反映（位置の無い施設すべては --won を外す）
+```
+
 既存データの重複統合（電話番号と施設名が一致する施設を1件にまとめる）：
 
 ```bash

@@ -21,6 +21,7 @@ import type {
   PrefectureStat,
   RelationItem,
   UserRow,
+  VisitTarget,
 } from "../types";
 
 type Args = { param?: Record<string, string>; query?: Record<string, string | number | undefined>; json?: unknown };
@@ -33,6 +34,7 @@ type Api = {
   statuses: { $get: Call<CallStatus[]>; $post: Call<CallStatus>; ":id": { $patch: Call<CallStatus> } };
   users: { $get: Call<UserRow[]> };
   "list-sources": { $get: Call<ListSource[]> };
+  "visit-targets": { $get: Call<VisitTarget[]> };
   dashboard: { $get: Call<DashboardData> };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
   companies: {
