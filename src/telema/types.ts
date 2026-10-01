@@ -164,6 +164,8 @@ export type CompanyListData = { total: number | null; page: number; per_page: nu
 export type Facet = { value: string; n: number };
 
 type CountKey = "total" | "not_started" | "in_progress" | "appointment" | "won" | "lost" | "excluded" | "due_today" | "overdue" | "updated_today";
+export type PrefectureStat = { prefecture: string; total: number; users: number };
+
 export type DashboardData = {
   counts: Record<CountKey, number>;
   calls_today: { calls_today: number; companies_called: number };

@@ -60,3 +60,17 @@ def get_dashboard():
         'today': today_list,
         'recent': recent,
     })
+
+
+@bp.get('/prefecture-stats')
+def get_prefecture_stats():
+    """都道府県別の登録施設数と、そのうちユーザー（ステータス区分が受注）の件数。シェアの把握用なので担当に関係なく全体を数える"""
+    rows = db().all(
+        '''SELECT COALESCE(NULLIF(c.prefecture, ''), '不明') AS prefecture,
+              COUNT(*) AS total,
+              COUNT(*) FILTER (WHERE s.category = 'won') AS users
+           FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
+           WHERE c.is_active = 1
+           GROUP BY 1'''
+    )
+    return jsonify(rows)

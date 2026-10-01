@@ -2,6 +2,7 @@ import { useState } from "react";
 import { STATUS_CATEGORIES } from "../shared/constants";
 import { AIUsageCard } from "../components/AIUsageCard";
 import { AssigneeMappingCard } from "../components/AssigneeMappingCard";
+import { PrefectureStatsCard } from "../components/PrefectureStatsCard";
 import { Button, Card, CATEGORY_STYLE, ErrorBox, inputCls, selectCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import { useMasters } from "../lib/masters";
@@ -30,6 +31,8 @@ export function Settings() {
       {error && <ErrorBox message={error} />}
 
       {isAdmin && <AIUsageCard />}
+
+      <PrefectureStatsCard />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="ステータス">

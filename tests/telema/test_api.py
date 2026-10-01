@@ -209,3 +209,16 @@ def test_エラー時は途中の書き込みを残さない(client):
     status, _ = client.api('/companies', {'company_name': '失敗園', 'organization_name': '失敗法人', 'status_id': 999999})
     assert status == 500
     assert client.sql('SELECT COUNT(*) AS n FROM telema_organizations')[0]['n'] == before
+
+
+def test_都道府県別の総数とユーザー件数(client):
+    won = client.status_id('受注成立')
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id) VALUES ('統計A園', '統計A園', '栃木県', %s)", (won,))
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture) VALUES ('統計B園', '統計B園', '栃木県')")
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id, is_active) VALUES ('統計C園', '統計C園', '栃木県', %s, 0)", (won,))
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized) VALUES ('統計D園', '統計D園')")
+    status, rows = client.api('/prefecture-stats')
+    assert status == 200
+    by = {r['prefecture']: r for r in rows}
+    assert by['栃木県'] == {'prefecture': '栃木県', 'total': 2, 'users': 1}
+    assert by['不明']['total'] >= 1
