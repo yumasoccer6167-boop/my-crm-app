@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import type { GraphEdge } from "../types";
 import { UserTag } from "../components/CompanyPicker";
 import { ConnectForm, type PickedCompany } from "../components/ConnectForm";
+import { NetworkList } from "../components/NetworkList";
 import { Button, Card, Empty, ErrorBox, inputCls, Loading, StatusBadge } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import {
@@ -691,12 +692,26 @@ export function Network() {
                 <li>点 = 施設（園名・担当者・住所）、線 = 知り合い関係です。</li>
                 <li>円は都道府県のまとまりです。県をまたぐつながりはオレンジの破線で表示します。</li>
                 <li>上の県名か、図の中の県名をクリックするとその県の相関図になります。</li>
-                <li>つながりは右上の「＋つなぐ」で、ユーザー・ユーザー以外を問わず2つの施設を選んで登録します（会社カルテの「つながり」カードからも登録できます）。</li>
+                <li>つながりは右上の「＋つなぐ」か、下の施設一覧の「＋知り合いをつなぐ」で、ユーザー・ユーザー以外を問わず2つの施設を選んで登録します（会社カルテの「つながり」カードからも登録できます）。</li>
+                <li>知り合いの園がまだ登録されていなければ、検索結果の「新しい園として登録」からその場で追加できます。</li>
               </ul>
             </div>
           )}
         </Card>
       </div>
+
+      <NetworkList
+        title={pref === "all" ? "全体" : pref}
+        nodes={sub.nodes.filter((x) => !x.ghost).map((x) => x.n)}
+        edges={data.edges}
+        all={all}
+        query={query}
+        onFocus={(id) => {
+          centerOn(id);
+          svgRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }}
+        onConnected={() => void graph.reload()}
+      />
     </div>
   );
 }
