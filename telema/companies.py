@@ -319,6 +319,22 @@ def bulk_assign():
     return jsonify({'updated': len(changed), 'unchanged': len(before) - len(changed), 'not_found': len(ids) - len(before)})
 
 
+@bp.post('/companies/bulk-delete')
+def bulk_delete():
+    """施設をリストから削除する（履歴は残すため is_active = 0）。sales は自分の担当と未割当のみ"""
+    b = parse({'company_ids': IntList(min_len=1, max_len=500)}, body())
+    user = current_user()
+    vis_sql, vis_params = company_visibility(user)
+    d = db()
+    ids = list(dict.fromkeys(b['company_ids']))
+    targets = d.all(f'SELECT id, assigned_user_id FROM telema_companies c WHERE c.is_active = 1 AND {vis_sql} AND c.id = ANY(%s)', [*vis_params, ids])
+    deletable = [r for r in targets if can_edit_company(user, r['assigned_user_id'])]
+    for r in deletable:
+        d.run('UPDATE telema_companies SET is_active = 0, updated_at = telema_now() WHERE id = %s', (r['id'],))
+        audit(d, user['id'], 'deactivate', 'company', r['id'], {'is_active': 1}, {'is_active': 0})
+    return jsonify({'deleted': len(deletable), 'not_found': len(ids) - len(deletable)})
+
+
 @bp.patch('/companies/<id>')
 def update_company(id):
     id = parse_id(id)

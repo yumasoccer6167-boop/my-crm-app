@@ -46,7 +46,7 @@ export function Companies() {
     return r;
   }, [key]);
   const total = data?.total ?? knownTotal;
-  // 一括割当用の選択。ページをまたいで保持し、絞り込み条件が変わったら外す
+  // 一括割当・一括削除用の選択。ページをまたいで保持し、絞り込み条件が変わったら外す
   const canAssign = me.role !== "sales";
   const [selected, setSelected] = useState<Set<number>>(new Set());
   useEffect(() => setSelected(new Set()), [filterKey]);
@@ -219,8 +219,9 @@ export function Companies() {
           <Empty>条件に合う企業はありません</Empty>
         ) : (
           <>
-            {canAssign && selected.size > 0 && (
-              <BulkAssignBar
+            {selected.size > 0 && (
+              <BulkActionBar
+                canAssign={canAssign}
                 count={selected.size}
                 users={users.filter((u) => u.is_active)}
                 ids={[...selected]}
@@ -231,12 +232,7 @@ export function Companies() {
                 onClear={() => setSelected(new Set())}
               />
             )}
-            <CompanyTable
-              items={data.items}
-              showAssignee={me.role !== "sales"}
-              selected={canAssign ? selected : undefined}
-              onSelectedChange={canAssign ? setSelected : undefined}
-            />
+            <CompanyTable items={data.items} showAssignee={me.role !== "sales"} selected={selected} onSelectedChange={setSelected} />
             {pages > 1 && (
               <div className="mt-4 flex items-center justify-center gap-3 text-sm">
                 <Button size="sm" disabled={page <= 1} onClick={() => update({ page: String(page - 1) })}>
@@ -257,13 +253,15 @@ export function Companies() {
   );
 }
 
-function BulkAssignBar({
+function BulkActionBar({
+  canAssign,
   count,
   users,
   ids,
   onDone,
   onClear,
 }: {
+  canAssign: boolean;
   count: number;
   users: { id: number; name: string }[];
   ids: number[];
@@ -291,20 +289,42 @@ function BulkAssignBar({
     }
   }
 
+  async function remove() {
+    if (!confirm(`選択した${count}件をリストから削除します。架電履歴などの記録は残りますが、一覧には表示されなくなります。よろしいですか？`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await unwrap(api.companies["bulk-delete"].$post({ json: { company_ids: ids } }));
+      if (r.not_found) alert(`${r.deleted}件を削除しました（${r.not_found}件は担当外または削除済みのため削除できませんでした）`);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md bg-indigo-50 px-3 py-2 text-sm ring-1 ring-indigo-200">
       <span className="font-medium text-indigo-900">{count}件を選択中</span>
-      <select value={target} onChange={(e) => setTarget(e.target.value)} className={selectCls}>
-        <option value="">営業担当を選ぶ</option>
-        {users.map((u) => (
-          <option key={u.id} value={u.id}>
-            {u.name}
-          </option>
-        ))}
-        <option value="none">（割当を外す）</option>
-      </select>
-      <Button variant="primary" size="sm" disabled={!target || saving} onClick={assign}>
-        {saving ? "割当中…" : "一括割当"}
+      {canAssign && (
+        <>
+          <select value={target} onChange={(e) => setTarget(e.target.value)} className={selectCls}>
+            <option value="">営業担当を選ぶ</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+            <option value="none">（割当を外す）</option>
+          </select>
+          <Button variant="primary" size="sm" disabled={!target || saving} onClick={assign}>
+            {saving ? "処理中…" : "一括割当"}
+          </Button>
+        </>
+      )}
+      <Button variant="danger" size="sm" disabled={saving} onClick={remove}>
+        削除
       </Button>
       <Button variant="ghost" size="sm" onClick={onClear}>
         選択を解除

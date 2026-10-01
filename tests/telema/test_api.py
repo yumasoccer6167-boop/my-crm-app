@@ -222,3 +222,25 @@ def test_都道府県別の総数とユーザー件数(client):
     by = {r['prefecture']: r for r in rows}
     assert by['栃木県'] == {'prefecture': '栃木県', 'total': 2, 'users': 1}
     assert by['不明']['total'] >= 1
+
+
+def test_施設を削除すると一覧から消え履歴は残る(client):
+    ids = [client.api('/companies', {'company_name': n})[1]['id'] for n in ('削除A園', '削除B園')]
+    status, body = client.api('/companies/bulk-delete', {'company_ids': [*ids, 999999]})
+    assert status == 200 and body == {'deleted': 2, 'not_found': 1}
+    assert client.api(f'/companies/{ids[0]}')[0] == 404
+    assert client.api('/companies?q=削除')[1]['total'] == 0
+    assert client.sql('SELECT COUNT(*) AS n FROM telema_companies WHERE id = ANY(%s) AND is_active = 0', (ids,)) == [{'n': 2}]
+    assert client.sql("SELECT COUNT(*) AS n FROM telema_audit_logs WHERE action = 'deactivate' AND entity_type = 'company'")[0]['n'] >= 2
+
+
+def test_salesは自分の担当と未割当だけ削除できる(client):
+    other = client.add_user('別の営業')
+    mine = client.api('/companies', {'company_name': '削除未割当園'})[1]['id']
+    theirs = client.api('/companies', {'company_name': '削除他人園', 'assigned_user_id': other})[1]['id']
+    client.set_my_role('sales')
+    try:
+        assert client.api('/companies/bulk-delete', {'company_ids': [mine, theirs]})[1] == {'deleted': 1, 'not_found': 1}
+    finally:
+        client.set_my_role('admin')
+    assert client.api(f'/companies/{theirs}')[0] == 200
