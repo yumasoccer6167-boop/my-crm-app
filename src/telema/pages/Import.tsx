@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, ErrorBox, inputCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
+import { DuplicateList, findDuplicates } from "../components/DuplicateList";
+import type { DuplicateCandidate } from "../types";
 
 /** Excel/CSV取り込みは STEP 7 で実装。先に手入力の1件登録を置く */
 export function ImportPage() {
@@ -9,11 +11,20 @@ export function ImportPage() {
   const [f, setF] = useState({ company_name: "", organization_name: "", phone: "", address: "", industry: "" });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // 重複候補（確認済みなら null のまま登録する）
+  const [dups, setDups] = useState<DuplicateCandidate[] | null>(null);
 
   async function create() {
     setSaving(true);
     setError(null);
     try {
+      if (!dups) {
+        const found = await findDuplicates(f);
+        if (found.length) {
+          setDups(found);
+          return;
+        }
+      }
       const row = await unwrap(
         api.companies.$post({
           json: {
@@ -34,7 +45,15 @@ export function ImportPage() {
   }
 
   const input = (k: keyof typeof f, placeholder: string) => (
-    <input className={inputCls} placeholder={placeholder} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+    <input
+      className={inputCls}
+      placeholder={placeholder}
+      value={f[k]}
+      onChange={(e) => {
+        setF({ ...f, [k]: e.target.value });
+        setDups(null);
+      }}
+    />
   );
 
   return (
@@ -54,9 +73,10 @@ export function ImportPage() {
           {input("address", "住所")}
           {input("industry", "業種・施設類型")}
           {error && <ErrorBox message={error} />}
+          {dups && <DuplicateList items={dups} />}
           <div className="flex justify-end">
             <Button variant="primary" disabled={!f.company_name.trim() || saving} onClick={create}>
-              登録してカルテを開く
+              {dups ? "別の施設なので登録する" : "登録してカルテを開く"}
             </Button>
           </div>
         </div>

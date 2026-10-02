@@ -1,5 +1,7 @@
 /**
- * 既存データの重複統合（管理者用CLI）。電話番号が同じで、施設名も一致（表記ゆれ含む）する施設を1件にまとめる。
+ * 既存データの重複統合（管理者用CLI）。次のどちらかに当たる施設を1件にまとめる。
+ *   - 電話番号が同じで、施設名も一致（表記ゆれ含む）
+ *   - 施設名（正規化）と住所（正規化）が同じ（電話番号が無い・違う施設の重複）
  *
  *   npm run telema:merge                 統合予定と要確認の一覧を出すだけ（DBは変更しない）
  *   npm run telema:merge -- --apply      統合を実行する
@@ -8,7 +10,7 @@
  * - 接続先は DATABASE_URL（環境変数 または .env.local）
  * - 残す施設：架電履歴あり → ステータスあり → 事業所番号あり → 古い順
  * - 残す施設の空欄だけを補完し、既存の値は上書きしない。元データ列は無いキーだけ追加
- * - 架電履歴・先方担当者・AI提案・取得元の紐付けは残す施設へ付け替える
+ * - 架電履歴・先方担当者・AI提案・取得元の紐付け・つながりは残す施設へ付け替える
  * - 統合される施設は削除せず is_active = 0。統合前の全項目を telema_audit_logs（action = 'merge'）に残す
  * - 電話は同じでも施設名が違う組（本部番号の共有、同じ法人の別事業など）は統合せず「要確認」として出す
  */
@@ -32,7 +34,9 @@ const pairs = args
 type Row = Record<string, unknown> & {
   id: number;
   company_name: string;
-  phone_normalized: string;
+  phone_normalized: string | null;
+  company_name_normalized: string;
+  address_normalized: string | null;
   status_id: number | null;
   status_label: string | null;
   facility_code: string | null;
@@ -48,8 +52,11 @@ try {
   // ---------- 対象 ----------
   const SELECT = "SELECT c.*, s.label AS status_label FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id";
   const rows = (await db.query<Row>(
-    `${SELECT} WHERE c.is_active = 1 AND c.phone_normalized IN (
-       SELECT phone_normalized FROM telema_companies WHERE is_active = 1 AND phone_normalized IS NOT NULL GROUP BY phone_normalized HAVING COUNT(*) > 1)`,
+    `${SELECT} WHERE c.is_active = 1 AND (c.phone_normalized IN (
+       SELECT phone_normalized FROM telema_companies WHERE is_active = 1 AND phone_normalized IS NOT NULL GROUP BY phone_normalized HAVING COUNT(*) > 1)
+     OR (c.company_name_normalized, c.address_normalized) IN (
+       SELECT company_name_normalized, address_normalized FROM telema_companies WHERE is_active = 1 AND address_normalized IS NOT NULL
+       GROUP BY 1, 2 HAVING COUNT(*) > 1))`,
   )).rows;
   const byId = new Map(rows.map((r) => [r.id, r]));
 
@@ -60,22 +67,44 @@ try {
     Number(b.facility_code != null) - Number(a.facility_code != null) ||
     a.id - b.id;
 
+  // 同じ施設どうしをつなぐ（union-find）。電話＋施設名の一致、施設名＋住所の一致のどちらでもつながる
+  const parent = new Map(rows.map((r) => [r.id, r.id]));
+  const find = (id: number): number => (parent.get(id) === id ? id : find(parent.get(id)!));
+  const union = (a: number, b: number) => parent.set(find(a), find(b));
   const groups = new Map<string, Row[]>();
-  for (const r of rows) groups.set(r.phone_normalized, [...(groups.get(r.phone_normalized) ?? []), r]);
+  for (const r of rows) if (r.phone_normalized) groups.set(r.phone_normalized, [...(groups.get(r.phone_normalized) ?? []), r]);
+  for (const [phone, members] of groups) if (members.length < 2) groups.delete(phone);
+  for (const members of groups.values())
+    for (const [i, a] of members.entries())
+      for (const b of members.slice(i + 1)) if (isSameFacilityName(a.company_name, b.company_name)) union(a.id, b.id);
+  const byNameAddress = new Map<string, Row[]>();
+  for (const r of rows) {
+    if (!r.address_normalized) continue;
+    const key = `${r.company_name_normalized}|${r.address_normalized}`;
+    byNameAddress.set(key, [...(byNameAddress.get(key) ?? []), r]);
+  }
+  let nameAddressPairs = 0;
+  for (const members of byNameAddress.values())
+    for (const r of members.slice(1))
+      if (find(r.id) !== find(members[0]!.id)) {
+        union(r.id, members[0]!.id);
+        nameAddressPairs++;
+      }
 
   type Merge = { keep: Row; drops: Row[]; manual?: boolean };
   const merges: Merge[] = [];
+  const clusters = new Map<number, Row[]>();
+  for (const r of rows) clusters.set(find(r.id), [...(clusters.get(find(r.id)) ?? []), r]);
+  for (const cl of clusters.values()) {
+    if (cl.length < 2) continue;
+    const [keep, ...drops] = [...cl].sort(priority);
+    merges.push({ keep: keep!, drops });
+  }
+  // 電話は同じでも、まとまらなかった施設がある組（本部番号の共有など）
   const review: Row[][] = [];
   for (const members of groups.values()) {
-    // 施設名が一致するものどうしでまとめる
-    const clusters: Row[][] = [];
-    for (const r of [...members].sort(priority)) {
-      const cl = clusters.find((c) => c.some((x) => isSameFacilityName(x.company_name, r.company_name)));
-      if (cl) cl.push(r);
-      else clusters.push([r]);
-    }
-    for (const cl of clusters) if (cl.length > 1) merges.push({ keep: cl[0]!, drops: cl.slice(1) });
-    if (clusters.length > 1) review.push(clusters.map((c) => c[0]!));
+    const roots = [...new Set(members.map((r) => find(r.id)))];
+    if (roots.length > 1) review.push(roots.map((root) => clusters.get(root)!.sort(priority)[0]!));
   }
 
   // 人が判断した組
@@ -99,7 +128,7 @@ try {
     ]);
   const lines: string[] = [];
   lines.push(`# 重複統合（${describeTarget()}）`, "");
-  lines.push(`電話番号が重複する施設 ${rows.length}件 / ${groups.size}組`, "");
+  lines.push(`電話番号または施設名＋住所が重複する施設 ${rows.length}件（電話番号の重複 ${groups.size}組、施設名＋住所で追加でつながった ${nameAddressPairs}件）`, "");
   lines.push(`## 統合する ${merges.length}組（統合される施設 ${merges.reduce((n, m) => n + m.drops.length, 0)}件）`, "");
   for (const m of merges) {
     lines.push(`- 残す ${label(m.keep)} ← ${m.drops.map(label).join("、")}${m.manual ? "（手動指定）" : ""}`);
@@ -124,7 +153,7 @@ try {
       "organization_id", "name_kana", "facility_code", "corporate_number", "phone_alt", "website", "website_domain", "postal_code", "prefecture", "city",
       "address", "address_normalized", "latitude", "longitude", "industry", "employee_count", "notes", "status_id", "ai_temperature", "ai_temperature_score",
       "interest", "pain_point", "decision_timing", "budget", "current_service", "competitor", "ng_reason", "summary", "current_note", "next_action",
-      "next_call_at", "assigned_user_id", "google_rating", "google_review_count", "map_url",
+      "next_call_at", "assigned_user_id", "google_rating", "google_review_count", "map_url", "visited_at",
     ];
     for (const m of merges) {
       const k = m.keep.id;
@@ -140,6 +169,18 @@ try {
         );
         for (const table of ["telema_call_logs", "telema_contacts", "telema_ai_suggestions", "telema_company_sources"]) {
           await db.query(`UPDATE ${table} SET company_id = $1 WHERE company_id = $2`, [k, d.id]);
+        }
+        // つながり：相手を残す施設に付け替える。自分自身へのつながりになるもの・既にあるつながりと重なるものは無効にする
+        const rels = (await db.query<{ id: number; company_a_id: number; company_b_id: number }>(
+          "SELECT id, company_a_id, company_b_id FROM telema_company_relations WHERE is_active = 1 AND (company_a_id = $1 OR company_b_id = $1)",
+          [d.id],
+        )).rows;
+        for (const r of rels) {
+          const other = r.company_a_id === d.id ? r.company_b_id : r.company_a_id;
+          const [a, b] = [Math.min(k, other), Math.max(k, other)];
+          const dup = a === b || (await db.query("SELECT 1 FROM telema_company_relations WHERE is_active = 1 AND company_a_id = $1 AND company_b_id = $2 AND id <> $3", [a, b, r.id])).rowCount;
+          if (dup) await db.query("UPDATE telema_company_relations SET is_active = 0, updated_at = telema_now() WHERE id = $1", [r.id]);
+          else await db.query("UPDATE telema_company_relations SET company_a_id = $1, company_b_id = $2, updated_at = telema_now() WHERE id = $3", [a, b, r.id]);
         }
         await db.query(
           `INSERT INTO telema_company_field_sources (company_id, field, source, source_ref, confidence, updated_by, updated_at)

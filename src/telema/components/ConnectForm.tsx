@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import type { Contact } from "../types";
+import type { Contact, DuplicateCandidate } from "../types";
 import { api, unwrap } from "../lib/api";
 import { CompanyPicker, UserTag } from "./CompanyPicker";
+import { DuplicateList, findDuplicates } from "./DuplicateList";
 import { Button, ErrorBox, inputCls } from "./ui";
 
 /** 選んだ施設（検索結果・相関図の点のどちらからでも） */
 export type PickedCompany = {
   id: number;
   company_name: string;
-  status_category: string | null;
+  is_user: number;
 };
 // creating：見つからなかった園を新しく登録している途中（入力した園名）。isNew：この画面で登録した園
 type Side = {
@@ -22,20 +23,39 @@ const emptySide: Side = { company: null, contacts: [], contactId: "" };
 
 /** まだ登録の無い園を、園名・電話・住所・担当者だけで登録する（つなぐ相手として使う） */
 function NewCompanyForm({ name, onCreated, onCancel }: { name: string; onCreated: (s: Side) => void; onCancel: () => void }) {
+  // 検索欄に電話番号を入れて見つからなかったときは、電話番号の欄に入れておく
+  const isPhone = /^[\d０-９\-‐－ー()（）\s]{9,}$/.test(name);
   const [v, setV] = useState({
-    company_name: name,
-    phone: "",
+    company_name: isPhone ? "" : name,
+    phone: isPhone ? name : "",
     address: "",
     contact: "",
     role: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const set = (k: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [k]: e.target.value });
+  const [dups, setDups] = useState<DuplicateCandidate[] | null>(null);
+  const set = (k: keyof typeof v) => (e: { target: { value: string } }) => {
+    setV({ ...v, [k]: e.target.value });
+    setDups(null);
+  };
+
+  /** 重複候補から既存の施設を選ぶ */
+  function pickExisting(c: DuplicateCandidate) {
+    onCreated({ company: { id: c.id, company_name: c.company_name, is_user: c.is_user }, contacts: [], contactId: "" });
+  }
 
   async function save() {
     setSaving(true);
+    setError(null);
     try {
+      if (!dups) {
+        const found = await findDuplicates(v);
+        if (found.length) {
+          setDups(found);
+          return;
+        }
+      }
       const row = await unwrap(
         api.companies.$post({
           json: {
@@ -57,7 +77,7 @@ function NewCompanyForm({ name, onCreated, onCancel }: { name: string; onCreated
         company: {
           id: row.id,
           company_name: row.company_name,
-          status_category: null,
+          is_user: 0,
         },
         contacts: contact ? [contact] : [],
         contactId: contact ? String(contact.id) : "",
@@ -80,13 +100,14 @@ function NewCompanyForm({ name, onCreated, onCancel }: { name: string; onCreated
         <input className={inputCls} placeholder="知り合いの担当者名" value={v.contact} onChange={set("contact")} />
         <input className={`${inputCls} max-w-28`} placeholder="役職" value={v.role} onChange={set("role")} />
       </div>
+      {dups && <DuplicateList items={dups} onPick={pickExisting} />}
       {error && <ErrorBox message={error} />}
       <div className="flex justify-end gap-1">
         <Button size="sm" variant="ghost" onClick={onCancel}>
           戻る
         </Button>
         <Button size="sm" variant="primary" disabled={!v.company_name.trim() || saving} onClick={save}>
-          登録して選ぶ
+          {dups ? "別の園なので登録する" : "登録して選ぶ"}
         </Button>
       </div>
     </div>
@@ -94,7 +115,7 @@ function NewCompanyForm({ name, onCreated, onCancel }: { name: string; onCreated
 }
 
 /**
- * 相関図から施設どうしをつなぐ。ユーザー（受注）・ユーザー以外を問わず2つの施設を選ぶ。
+ * 相関図から施設どうしをつなぐ。ユーザー・ユーザー以外を問わず2つの施設を選ぶ。
  * 知り合いの園がまだ登録されていなければ、その場で新規登録してつなぐ。
  * 登録は会社カルテと同じ POST /companies/:id/relations（a 側の施設を編集できる人だけ）
  */
@@ -154,7 +175,7 @@ export function ConnectForm({ initial, onSaved, onClose }: { initial?: PickedCom
         <>
           <div className="flex items-center gap-1.5 text-sm">
             <span className="min-w-0 truncate font-medium text-slate-900">{s.company.company_name}</span>
-            <UserTag category={s.company.status_category} />
+            <UserTag isUser={s.company.is_user} />
             {s.isNew && (
               <span className="shrink-0 rounded bg-indigo-50 px-1.5 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200">新規登録</span>
             )}

@@ -109,3 +109,20 @@ def test_重複統合は一覧だけ出し_applyで統合する(client):
     assert client.sql("SELECT action FROM telema_audit_logs WHERE action = 'merge' AND entity_id = %s", (keep,)) == [{'action': 'merge'}]
     # 名前が違う組は統合しない
     assert count(client, "SELECT COUNT(*) AS n FROM telema_companies WHERE phone_normalized = '0291110001' AND is_active = 1") == 2
+
+
+def test_重複統合は施設名と住所の一致もまとめ_つながりを付け替える(client):
+    ins = "INSERT INTO telema_companies (company_name, company_name_normalized, address_normalized, phone_normalized) VALUES (%s, %s, %s, %s) RETURNING id"
+    keep = client.sql(ins, ('住所一致園', '住所一致園', '茨城県笠間市1-1', None))[0]['id']
+    drop = client.sql(ins, ('住所一致園', '住所一致園', '茨城県笠間市1-1', '0296000001'))[0]['id']
+    other = client.sql(ins, ('つながり相手園', 'つながり相手園', '茨城県笠間市9-9', None))[0]['id']
+    client.sql('INSERT INTO telema_company_relations (company_a_id, company_b_id) VALUES (%s, %s)', (min(drop, other), max(drop, other)))
+    client.sql('INSERT INTO telema_company_relations (company_a_id, company_b_id) VALUES (%s, %s)', (keep, drop))
+    client.sql('UPDATE telema_companies SET visited_at = %s WHERE id = %s', ('2026-10-01T01:00:00.000Z', drop))
+
+    out = run(client, 'merge-duplicates.ts', '--apply')
+    assert '完了' in out
+    assert client.sql('SELECT is_active, visited_at FROM telema_companies WHERE id = %s', (keep,)) == [{'is_active': 1, 'visited_at': '2026-10-01T01:00:00.000Z'}]
+    assert client.sql('SELECT is_active FROM telema_companies WHERE id = %s', (drop,)) == [{'is_active': 0}]
+    rels = client.sql('SELECT company_a_id, company_b_id FROM telema_company_relations WHERE is_active = 1 AND %s IN (company_a_id, company_b_id, %s)', (keep, drop))
+    assert rels == [{'company_a_id': min(keep, other), 'company_b_id': max(keep, other)}]

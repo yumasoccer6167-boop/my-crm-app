@@ -12,6 +12,8 @@ export type CallStatus = {
   is_active: number;
 };
 export type UserRow = { id: number; name: string; email: string | null; role: Role; is_active: number };
+export type DuplicateCandidate = { id: number; company_name: string; address: string | null; phone: string | null; match: "phone" | "name_address" | "name"; is_user: number };
+
 export type VisitTarget = {
   id: number;
   company_name: string;
@@ -21,7 +23,7 @@ export type VisitTarget = {
   phone: string | null;
   latitude: number | null;
   longitude: number | null;
-  status_label: string;
+  status_label: string | null;
   last_called_at: string | null;
   assigned_user_id: number | null;
   visited_at: string | null;
@@ -41,6 +43,7 @@ export type CompanyListItem = {
   status_id: number | null;
   status_label: string | null;
   status_category: string | null;
+  is_user: number;
   temperature: string;
   contact_name: string | null;
   last_called_at: string | null;
@@ -130,6 +133,7 @@ export type RelationItem = {
   other_address: string | null;
   other_status_label: string | null;
   other_status_category: string | null;
+  other_is_user: number;
   my_contact_id: number | null;
   my_contact_name: string | null;
   other_contact_id: number | null;
@@ -150,6 +154,7 @@ export type GraphNode = {
   contact_role: string | null;
   status_label: string | null;
   status_category: string | null;
+  is_user: number;
   latitude: number | null;
   longitude: number | null;
 };

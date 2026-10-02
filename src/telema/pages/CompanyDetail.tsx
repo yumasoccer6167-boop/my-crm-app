@@ -66,7 +66,16 @@ export function CompanyDetail() {
             <Link to="/companies" className="text-xs text-slate-500 hover:underline">
               ← リスト
             </Link>
-            <h1 className="mt-0.5 text-xl font-bold text-slate-900">{company.company_name}</h1>
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-900">{company.company_name}</h1>
+              {/* ユーザー（導入済み）は営業ステータスとは別に持つ */}
+              <label
+                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${company.is_user ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-slate-50 text-slate-500 ring-slate-200"} ${editable ? "cursor-pointer" : ""}`}
+              >
+                <input type="checkbox" disabled={!editable} checked={!!company.is_user} onChange={(e) => patch({ is_user: e.target.checked })} />
+                ユーザー
+              </label>
+            </div>
             <div className="text-sm text-slate-500">
               {[organization?.name as string | undefined, company.industry as string | null, company.address as string | null].filter(Boolean).join(" · ")}
             </div>

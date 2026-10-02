@@ -367,6 +367,16 @@ INSERT INTO telema_call_statuses (label, category, sort_order) VALUES
     r"""
 ALTER TABLE telema_companies ADD COLUMN visited_at TEXT;
 """,
+    # 3: ユーザー（導入済み）をステータスとは別の項目にする。ステータス「ユーザー」の施設は is_user = 1・ステータス「受注成立」へ移し、
+    #    ステータス「ユーザー」は無効にする（見込み・再コールなどの営業ステータスはユーザーにも付けられる）
+    r"""
+ALTER TABLE telema_companies ADD COLUMN is_user INTEGER NOT NULL DEFAULT 0;
+UPDATE telema_companies SET is_user = 1,
+  status_id = COALESCE((SELECT id FROM telema_call_statuses WHERE label = '受注成立'), status_id), updated_at = telema_now()
+  WHERE status_id IN (SELECT id FROM telema_call_statuses WHERE label = 'ユーザー');
+UPDATE telema_call_statuses SET is_active = 0, updated_at = telema_now() WHERE label = 'ユーザー';
+CREATE INDEX telema_idx_co_is_user ON telema_companies(is_user) WHERE is_user = 1;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

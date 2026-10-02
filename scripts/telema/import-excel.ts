@@ -5,6 +5,7 @@
  *   npm run telema:import -- /tmp/list.json --source "茨城県 認可施設" --type public_data [--dry-run]
  *     [--on-phone-match merge-name|merge|separate|skip]  電話一致時（既定 merge-name）
  *        merge-name : 施設名も一致（表記ゆれ含む）する場合だけ既存に統合。名前が違えば separate
+ *        merge-similar : merge-name に加え、括弧内の施設名が一致・片方が法人名だけの場合も統合（normalize.ts の isLikelySameFacility）
  *                     （本部番号の共有や同じ法人の別事業など、電話が同じ別施設があるため）
  *        merge      : 施設名が違っても統合
  *        separate   : 別レコードとして登録（重複候補として一覧表示）
@@ -18,7 +19,7 @@
  * - 1つのトランザクションで適用する（途中で失敗したら何も登録されない）
  */
 import { readFileSync } from "node:fs";
-import { isSameFacilityName } from "../../src/telema/shared/normalize";
+import { isLikelySameFacility, isSameFacilityName } from "../../src/telema/shared/normalize";
 import { detectColumns } from "../../src/telema/shared/import/detect";
 import { transformRow, type ColumnMapping, type TransformedRow } from "../../src/telema/shared/import/transform";
 import { connect, describeTarget, insertMany, reserveIds } from "./db";
@@ -35,8 +36,9 @@ if (!input) throw new Error("入力JSONを指定してください");
 const dryRun = flag("dry-run");
 const sourceName = opt("source") ?? input;
 const sourceType = opt("type") ?? "excel";
-const onPhoneMatch = (opt("on-phone-match") ?? "merge-name") as "merge" | "merge-name" | "separate" | "skip";
-if (!["merge", "merge-name", "separate", "skip"].includes(onPhoneMatch)) throw new Error("--on-phone-match は merge / merge-name / separate / skip");
+const onPhoneMatch = (opt("on-phone-match") ?? "merge-name") as "merge" | "merge-name" | "merge-similar" | "separate" | "skip";
+if (!["merge", "merge-name", "merge-similar", "separate", "skip"].includes(onPhoneMatch))
+  throw new Error("--on-phone-match は merge / merge-name / merge-similar / separate / skip");
 const skipStatus = flag("skip-status");
 
 const data = JSON.parse(readFileSync(input, "utf8")) as { file: string; sheet: string; headers: string[]; rows: string[][] };
@@ -95,7 +97,13 @@ try {
     if (cnHit) return merge(cnHit, "corporate_number");
     const ph = c.phone_normalized ? byPhone.get(c.phone_normalized) : undefined;
     if (ph && onPhoneMatch === "skip") return { row, kind: "skip", phoneCandidate: ph };
-    if (ph && (onPhoneMatch === "merge" || (onPhoneMatch === "merge-name" && isSameFacilityName(c.company_name, ph.company_name)))) return merge(ph, "phone");
+    if (
+      ph &&
+      (onPhoneMatch === "merge" ||
+        (onPhoneMatch === "merge-name" && isSameFacilityName(c.company_name, ph.company_name)) ||
+        (onPhoneMatch === "merge-similar" && isLikelySameFacility(c.company_name, ph.company_name)))
+    )
+      return merge(ph, "phone");
 
     // 新規。以降の行（同じファイル内の重複）が統合先として見つけられるよう登録しておく
     const id = --tempSeq;

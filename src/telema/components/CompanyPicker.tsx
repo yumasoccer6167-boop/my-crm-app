@@ -3,9 +3,9 @@ import type { CompanyListItem } from "../types";
 import { api, unwrap } from "../lib/api";
 import { inputCls } from "./ui";
 
-/** ユーザー（受注）か、それ以外か */
-export function UserTag({ category }: { category: string | null }) {
-  return category === "won" ? (
+/** ユーザー（導入済み）か、それ以外か。営業ステータスとは別に持つ */
+export function UserTag({ isUser }: { isUser: number | boolean }) {
+  return isUser ? (
     <span className="shrink-0 rounded bg-emerald-50 px-1.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>
   ) : (
     <span className="shrink-0 rounded bg-slate-50 px-1.5 text-[11px] text-slate-500 ring-1 ring-inset ring-slate-200">ユーザー以外</span>
@@ -76,7 +76,7 @@ export function CompanyPicker({
               <button type="button" onClick={() => onPick(h)} className="block w-full px-2.5 py-1.5 text-left text-sm hover:bg-indigo-50">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate font-medium text-slate-900">{h.company_name}</span>
-                  <UserTag category={h.status_category} />
+                  <UserTag isUser={h.is_user} />
                 </div>
                 <div className="text-xs text-slate-500">{[h.city, h.contact_name, h.phone].filter(Boolean).join(" · ")}</div>
               </button>

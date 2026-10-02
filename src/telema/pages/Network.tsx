@@ -24,7 +24,7 @@ import {
 } from "../lib/network-layout";
 import { useApi } from "../lib/useApi";
 
-// 点の色＝都道府県（色相）× つながりの多さ（明るさ）。ユーザー（受注）は緑の輪で示す
+// 点の色＝都道府県（色相）× つながりの多さ（明るさ）。ユーザーは緑の輪で示す
 const CUSTOMER_RING = "#10b981";
 const CROSS_COLOR = "#f97316";
 // 図は明るい背景に描く（CROSS_LINE は図の中の県をまたぐ線。BG は文字のふち取りにも使う）
@@ -140,7 +140,7 @@ export function Network() {
     for (const n of data.nodes) {
       const x = st.get(prefOf(n)) ?? { n: 0, users: 0, deg: 0 };
       x.n++;
-      if (n.status_category === "won") x.users++;
+      if (n.is_user) x.users++;
       x.deg += degree.of(n.id);
       st.set(prefOf(n), x);
     }
@@ -518,7 +518,7 @@ export function Network() {
               setParams(next, { replace: true });
             }}
           />
-          つながりの無いユーザー（受注）も表示
+          つながりの無いユーザーも表示
         </label>
         <Button size="sm" variant="primary" className="ml-auto" onClick={() => setConnect({ initial: sel })}>
           ＋つなぐ
@@ -568,7 +568,7 @@ export function Network() {
                   strokeLinecap="round"
                 />
               </svg>
-              緑の弧＝ユーザー（受注）の割合
+              緑の弧＝ユーザーの割合
             </span>
             <span className="flex items-center gap-1.5">
               <svg width="24" height="10" aria-hidden="true">
@@ -592,7 +592,7 @@ export function Network() {
                 className="inline-block h-2.5 w-2.5 rounded-full bg-slate-400 ring-2 ring-offset-1"
                 style={{ ["--tw-ring-color" as string]: CUSTOMER_RING }}
               />
-              ユーザー（受注）
+              ユーザー
             </span>
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-400" />
@@ -804,7 +804,7 @@ export function Network() {
                       const r = (isSel ? 7 : 5) / Math.sqrt(view.k);
                       const t = degreeScale(degree.of(n.id), degree.max);
                       const color = nodeColor(prefOf(n), t);
-                      const customer = n.status_category === "won";
+                      const customer = !!n.is_user;
                       return (
                         <g
                           key={n.id}
@@ -878,7 +878,7 @@ export function Network() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="font-semibold text-slate-900">{sel.company_name}</div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <UserTag category={sel.status_category} />
+                    <UserTag isUser={sel.is_user} />
                     <StatusBadge label={sel.status_label} category={sel.status_category} />
                   </div>
                 </div>
