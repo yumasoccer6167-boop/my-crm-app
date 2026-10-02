@@ -178,7 +178,11 @@ export type CompanyDetailData = {
   field_sources: FieldSource[];
   siblings: { id: number; company_name: string; status_label: string | null }[];
   pending_suggestions: number;
+  summary_suggestion: SummarySuggestion | null;
 };
+
+/** 施設のAIサマリーの提案（ai_suggestions の suggestion_type = 'summary'） */
+export type SummarySuggestion = { id: number; summary: string; next_action: string | null; calls: number; model: string | null; created_at: string };
 
 export type CompanyListData = { total: number | null; page: number; per_page: number; items: CompanyListItem[] };
 export type Facet = { value: string; n: number };

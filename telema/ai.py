@@ -129,6 +129,11 @@ class MockProvider:
     model = 'mock'
 
     def generate_json(self, system, prompt, schema, max_output_tokens=2048):
+        # 施設のAIサマリー：架電履歴の件数と最新の1件を並べるだけ
+        h = re.search(r'【架電履歴（古い順）】\n([\s\S]*)$', prompt)
+        if h:
+            lines = h.group(1).strip().split('\n')
+            return {'summary': f'（ダミーAI）架電{len(lines)}件。最新：{lines[-1][2:80]}', 'next_action': '再架電'}, (0, 0), self.model
         m = re.search(r'【今回の架電メモ】\n([\s\S]*?)(\n【|$)', prompt)
         note = m.group(1).strip() if m else ''
         absent = bool(re.search(r'不在|いない|外出', note))
@@ -266,4 +271,46 @@ def analyze_call(call_log_id, company_id, user_id, raw_note, called_at, company_
         SYSTEM, prompt, call_schema(status_labels),
         {'feature': 'call_analysis', 'user_id': user_id, 'company_id': company_id, 'call_log_id': call_log_id},
         max_output_tokens=1500,
+    )
+
+
+# ---------- 施設のAIサマリー ----------
+SUMMARY_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'summary': {'type': 'string', 'description': 'この施設の現在の状況の要約（3〜5文。経緯・先方の反応・決裁者や時期など分かっていること）'},
+        'next_action': _str('営業担当者が次にやるべきこと（1文）。根拠が無ければ null'),
+    },
+    'required': ['summary'],
+}
+
+SUMMARY_SYSTEM = '''あなたは保育施設・幼稚園向けテレマーケティングの営業記録を読み、施設ごとの「現在の状況」をまとめる担当です。
+- 架電履歴（古い順）と会社カルテの情報だけを根拠にする。書かれていないこと（氏名・予算・時期など）は作らない
+- 最新の架電の内容を重視し、古い情報と食い違う場合は新しい方を採る
+- 営業担当者が電話をかける前に10秒で読める長さにする
+- 出力は日本語'''
+
+# 要約に渡す架電は新しい方から最大この件数（古い順に並べ直して渡す）
+SUMMARY_CALL_LIMIT = 30
+
+
+def summarize_company(company_id, user_id, company_name, status, contacts, karte, calls):
+    """施設全体のAIサマリー（架電履歴をまとめた現在の状況と、次にやること）"""
+    karte_lines = '\n'.join(f'- {k}：{v}' for k, v in karte.items() if v)
+    contact_lines = '\n'.join(f'- {c["name"]}' + (f'（{c["role"]}）' if c.get('role') else '') for c in contacts if c.get('name'))
+    call_lines = '\n'.join(
+        f'- {_jst(h["called_at"])}' + (f' {h["user_name"]}' if h.get('user_name') else '') + (f' [{h["result_label"]}]' if h.get('result_label') else '')
+        + f'：{(h["raw_note"] or h["summary"] or "")[:300]}'
+        for h in calls)
+    prompt = f'''【施設名】{company_name}
+【現在のステータス】{status or "未設定"}
+【先方担当者】
+{contact_lines or "なし"}
+【会社カルテ】
+{karte_lines or "なし"}
+【架電履歴（古い順）】
+{call_lines}'''
+    return AIService().generate_json(
+        SUMMARY_SYSTEM, prompt, SUMMARY_SCHEMA, {'feature': 'company_summary', 'user_id': user_id, 'company_id': company_id},
+        max_output_tokens=1200,
     )

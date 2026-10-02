@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router";
+import { NavLink, Outlet, useLocation } from "react-router";
+import { listHref } from "../lib/list-query";
 import { useMasters } from "../lib/masters";
 
 const NAV = [
@@ -14,6 +15,9 @@ const ROLE_LABEL = { admin: "管理者", manager: "マネージャー", sales: "
 
 export function Layout() {
   const { me } = useMasters();
+  // 「リスト」は前回の絞り込み条件付きの URL にする（リストを開いている間は今の条件。保存は描画の後なので URL から取る）
+  const loc = useLocation();
+  const listTo = loc.pathname === "/companies" ? `/companies${loc.search}` : listHref();
   return (
     <div className="text-slate-900">
       <div className="mb-4 flex items-center gap-4 border-b border-slate-200">
@@ -21,7 +25,7 @@ export function Layout() {
           {NAV.map((n) => (
             <NavLink
               key={n.to}
-              to={n.to}
+              to={n.to === "/companies" ? listTo : n.to}
               end={n.end}
               className={({ isActive }) =>
                 `whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${isActive ? "border-teal-600 text-teal-700" : "border-transparent text-slate-600 hover:text-slate-900"}`

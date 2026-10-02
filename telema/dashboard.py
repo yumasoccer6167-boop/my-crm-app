@@ -55,7 +55,7 @@ def get_dashboard():
     )
     pending = d.value(
         f'''SELECT COUNT(DISTINCT a.company_id) FROM telema_ai_suggestions a JOIN telema_companies c ON c.id = a.company_id
-            WHERE a.status = 'pending' AND {scope}''',
+            WHERE a.status = 'pending' AND a.suggestion_type <> 'summary' AND {scope}''',
         vis_params,
     )
     today_list = d.all(
