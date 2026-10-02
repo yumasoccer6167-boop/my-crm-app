@@ -4,7 +4,7 @@ import { STATUS_CATEGORIES, TEMPERATURES } from "../shared/constants";
 import { CompanyTable } from "../components/CompanyTable";
 import { Button, Card, Empty, ErrorBox, inputCls, Loading, selectCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
-import { saveListQuery } from "../lib/list-query";
+import { lastOpened, saveListQuery } from "../lib/list-query";
 import { useMasters } from "../lib/masters";
 import { PREFECTURES } from "../shared/prefectures";
 import { useApi } from "../lib/useApi";
@@ -50,6 +50,16 @@ export function Companies() {
     return r;
   }, [key]);
   const total = data?.total ?? knownTotal;
+  // 会社カルテから戻ったとき、直前に開いていた施設の行までスクロールして目印を付ける（開いた直後の1回だけ）
+  const [highlightId] = useState(lastOpened);
+  const scrolled = useRef(false);
+  useEffect(() => {
+    if (scrolled.current || !data || highlightId == null) return;
+    scrolled.current = true;
+    // PC用の表とスマホ用のカードの両方にあるので、表示されている方へ
+    const row = [...document.querySelectorAll<HTMLElement>(`[data-company-id="${highlightId}"]`)].find((el) => el.offsetParent !== null);
+    row?.scrollIntoView({ block: "center" });
+  }, [data, highlightId]);
   // 一括割当・一括削除用の選択。ページをまたいで保持し、絞り込み条件が変わったら外す
   const canAssign = me.role !== "sales";
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -251,7 +261,7 @@ export function Companies() {
                 onClear={() => setSelected(new Set())}
               />
             )}
-            <CompanyTable items={data.items} showAssignee={me.role !== "sales"} selected={selected} onSelectedChange={setSelected} />
+            <CompanyTable items={data.items} showAssignee={me.role !== "sales"} selected={selected} onSelectedChange={setSelected} highlightId={highlightId} />
             {pages > 1 && (
               <div className="mt-4 flex items-center justify-center gap-3 text-sm">
                 <Button size="sm" disabled={page <= 1} onClick={() => update({ page: String(page - 1) })}>

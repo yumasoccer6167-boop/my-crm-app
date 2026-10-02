@@ -24,9 +24,12 @@ export function CompanyTable({
   showAssignee = true,
   selected,
   onSelectedChange,
+  highlightId,
 }: {
   items: CompanyListItem[];
   showAssignee?: boolean;
+  /** 目印を付ける行（リストに戻ったときの、直前に開いていた施設） */
+  highlightId?: number | null;
   /** 渡すと行の選択チェックボックスを出す */
   selected?: Set<number>;
   onSelectedChange?: (next: Set<number>) => void;
@@ -71,7 +74,11 @@ export function CompanyTable({
           </thead>
           <tbody>
             {items.map((c) => (
-              <tr key={c.id} className={`border-b border-slate-100 hover:bg-slate-50 ${selected?.has(c.id) ? "bg-indigo-50" : ""}`}>
+              <tr
+                key={c.id}
+                data-company-id={c.id}
+                className={`border-b border-slate-100 hover:bg-slate-50 ${selected?.has(c.id) ? "bg-indigo-50" : c.id === highlightId ? "bg-amber-50 shadow-[inset_3px_0_0_#f59e0b]" : ""}`}
+              >
                 {selectable && (
                   <td className="py-2 pr-2">
                     <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} aria-label={`${c.company_name}を選択`} />
@@ -123,7 +130,7 @@ export function CompanyTable({
 
       <ul className="divide-y divide-slate-100 md:hidden">
         {items.map((c) => (
-          <li key={c.id} className="py-3">
+          <li key={c.id} data-company-id={c.id} className={`py-3 ${c.id === highlightId ? "-mx-2 rounded-md bg-amber-50 px-2 shadow-[inset_3px_0_0_#f59e0b]" : ""}`}>
             <div className="flex items-start justify-between gap-2">
               <label className="flex items-start gap-2">
                 {selectable && (
