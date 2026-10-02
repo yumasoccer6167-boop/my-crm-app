@@ -1,8 +1,8 @@
 /**
  * 管理者用CLI：緯度・経度が空の施設に、住所から位置を入れる（国土地理院の住所検索 API を使う）。
  *
- *   npm run telema:geocode -- --won --dry-run   ユーザー（ステータス区分が受注）だけ、確認のみ
- *   npm run telema:geocode -- --won             ユーザーだけ反映
+ *   npm run telema:geocode -- --users --dry-run ユーザーの施設だけ、確認のみ
+ *   npm run telema:geocode -- --users           ユーザーだけ反映
  *   npm run telema:geocode                      位置の無い施設すべて
  *     [--limit 100]  件数を絞る
  *
@@ -19,7 +19,7 @@ const opt = (name: string) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const dryRun = flag("dry-run");
-const wonOnly = flag("won");
+const usersOnly = flag("users");
 const limit = Number(opt("limit")) || null;
 
 const API = "https://msearch.gsi.go.jp/address-search/AddressSearch?q=";
@@ -52,14 +52,13 @@ try {
   const rows = (
     await db.query<{ id: number; company_name: string; prefecture: string | null; city: string | null; address: string | null }>(
       `SELECT c.id, c.company_name, c.prefecture, c.city, c.address FROM telema_companies c
-       LEFT JOIN telema_call_statuses s ON s.id = c.status_id
        WHERE c.is_active = 1 AND (c.latitude IS NULL OR c.longitude IS NULL) AND (c.address IS NOT NULL OR c.city IS NOT NULL)
-         AND ($1::boolean IS FALSE OR s.category = 'won')
+         AND ($1::boolean IS FALSE OR c.is_user = 1)
        ORDER BY c.id ${limit ? "LIMIT " + limit : ""}`,
-      [wonOnly],
+      [usersOnly],
     )
   ).rows;
-  console.log(`\n■ 接続先 ${describeTarget()}：位置の無い施設 ${rows.length}件${wonOnly ? "（ユーザーのみ）" : ""}${dryRun ? "（確認のみ）" : ""}`);
+  console.log(`\n■ 接続先 ${describeTarget()}：位置の無い施設 ${rows.length}件${usersOnly ? "（ユーザーのみ）" : ""}${dryRun ? "（確認のみ）" : ""}`);
 
   let ok = 0;
   const failed: string[] = [];

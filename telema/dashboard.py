@@ -8,7 +8,7 @@ from .context import ApiError, current_user, db
 from .routes import bp
 
 LIST_COLUMNS = '''c.id, c.company_name, o.name AS organization_name, c.phone, c.city, c.industry,
-  c.google_rating, c.google_review_count, c.status_id, s.label AS status_label, s.category AS status_category, c.temperature,
+  c.google_rating, c.google_review_count, c.status_id, s.label AS status_label, s.category AS status_category, c.is_user, c.temperature,
   NULL AS contact_name, c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at'''
 LIST_FROM = '''FROM telema_companies c
   LEFT JOIN telema_call_statuses s ON s.id = c.status_id
@@ -113,12 +113,12 @@ def get_calls_monthly():
 
 @bp.get('/prefecture-stats')
 def get_prefecture_stats():
-    """都道府県別の登録施設数と、そのうちユーザー（ステータス区分が受注）の件数。シェアの把握用なので担当に関係なく全体を数える"""
+    """都道府県別の登録施設数と、そのうちユーザーの件数。シェアの把握用なので担当に関係なく全体を数える"""
     rows = db().all(
         '''SELECT COALESCE(NULLIF(c.prefecture, ''), '不明') AS prefecture,
               COUNT(*) AS total,
-              COUNT(*) FILTER (WHERE s.category = 'won') AS users
-           FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
+              COUNT(*) FILTER (WHERE c.is_user = 1) AS users
+           FROM telema_companies c
            WHERE c.is_active = 1
            GROUP BY 1'''
     )

@@ -150,6 +150,9 @@ export function RelationsCard({ companyId, contacts, editable }: { companyId: nu
               <Link to={`/companies/${r.other_company_id}`} className="truncate font-medium text-indigo-700 hover:underline">
                 {r.other_company_name}
               </Link>
+              {!!r.other_is_user && (
+                <span className="rounded bg-emerald-50 px-1.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>
+              )}
               {r.other_status_label && <StatusBadge label={r.other_status_label} category={r.other_status_category} />}
               {editable && (
                 <span className="ml-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100">

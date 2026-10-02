@@ -77,6 +77,26 @@ export function isSameFacilityName(a: unknown, b: unknown): boolean {
   return Math.min(x.length, y.length) >= 4 && (x.includes(y) || y.includes(x));
 }
 
+const CORP = /^(社会福祉法人|学校法人|宗教法人|株式会社|有限会社|合同会社|一般社団法人|一般財団法人|公益社団法人|公益財団法人|特定非営利活動法人|NPO法人)/;
+
+/**
+ * 電話番号が同じ2施設が同じ施設らしいか（取り込みの --on-phone-match merge-similar 用）。
+ * isSameFacilityName に加えて、次も同じ施設とみなす
+ *  - 括弧の中の施設名が一致：「株式会社とことこ（なないろ保育園）」と「なないろ保育園」
+ *  - 片方が法人名だけ（施設名を含まない）：「社会福祉法人青葉学園」と「フラワー保育園」（申込みを法人名でしている）
+ */
+export function isLikelySameFacility(a: unknown, b: unknown): boolean {
+  if (isSameFacilityName(a, b)) return true;
+  const inner = (v: unknown) => [...normalizeCompanyName(v).matchAll(/\(([^)]+)\)/g)].map((m) => m[1]!);
+  if (inner(a).some((x) => isSameFacilityName(x, b)) || inner(b).some((x) => isSameFacilityName(a, x))) return true;
+  const corpOnly = (v: unknown) => {
+    const n = toHalfWidth(String(v ?? "")).replace(/[\s　]/g, "").replace(/（/g, "(");
+    const rest = n.replace(CORP, "").replace(/学園$/, "");
+    return CORP.test(n) && !n.includes("(") && !/(園|保育|幼稚|こども|子ども|ナーサリー|キッズ|ルーム|スクール)/.test(rest);
+  };
+  return corpOnly(a) || corpOnly(b);
+}
+
 /** 比較用の住所：〒・郵便番号・空白を除去、数字の漢数字化はしない（誤爆を避ける） */
 export function normalizeAddress(v: unknown): string {
   if (v == null) return "";

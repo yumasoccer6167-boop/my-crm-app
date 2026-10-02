@@ -8,7 +8,7 @@ import { useMasters } from "../lib/masters";
 import { PREFECTURES } from "../shared/prefectures";
 import { useApi } from "../lib/useApi";
 
-const FILTER_KEYS = ["q", "source_id", "category", "status_id", "industry", "prefecture", "city", "assigned", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
+const FILTER_KEYS = ["q", "source_id", "user", "category", "status_id", "industry", "prefecture", "city", "assigned", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
 
 const SORT_OPTIONS = [
   { value: "next_call_at:asc", label: "次回架電が近い順" },
@@ -106,6 +106,11 @@ export function Companies() {
                 {s.name}（{s.company_count}）
               </option>
             ))}
+          </select>
+          <select {...sel("user")}>
+            <option value="">ユーザー／それ以外</option>
+            <option value="1">ユーザーのみ</option>
+            <option value="0">ユーザー以外</option>
           </select>
           <select {...sel("status_id")}>
             <option value="">ステータス</option>

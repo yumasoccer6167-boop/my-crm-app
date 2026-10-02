@@ -60,11 +60,11 @@ npm run telema:import -- /tmp/list.json --source "茨城県 認可施設" --type
 施設の位置（緯度・経度）を住所から入れる（国土地理院の住所検索 API。訪問ルートの画面で使う）：
 
 ```bash
-npm run telema:geocode -- --won --dry-run  # ユーザー（受注）だけ、確認のみ
-npm run telema:geocode -- --won            # ユーザーだけ反映（位置の無い施設すべては --won を外す）
+npm run telema:geocode -- --users --dry-run  # ユーザーだけ、確認のみ
+npm run telema:geocode -- --users            # ユーザーだけ反映（位置の無い施設すべては --users を外す）
 ```
 
-既存データの重複統合（電話番号と施設名が一致する施設を1件にまとめる）：
+既存データの重複統合（電話番号と施設名が一致する施設、施設名と住所が一致する施設を1件にまとめる。つながり・訪問済みも引き継ぐ）：
 
 ```bash
 npm run telema:merge             # 統合予定と要確認の一覧を出すだけ

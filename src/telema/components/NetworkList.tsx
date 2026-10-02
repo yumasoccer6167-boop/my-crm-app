@@ -51,10 +51,10 @@ export function NetworkList({
   }, [edges, all]);
 
   const counts = { all: nodes.length, user: 0, other: 0 };
-  for (const n of nodes) counts[n.status_category === "won" ? "user" : "other"]++;
+  for (const n of nodes) counts[n.is_user ? "user" : "other"]++;
 
   const rows = nodes
-    .filter((n) => kind === "all" || (kind === "user") === (n.status_category === "won"))
+    .filter((n) => kind === "all" || (kind === "user") === !!n.is_user)
     .filter((n) => !lonely || !friends.has(n.id))
     .filter((n) => !query || [n.company_name, n.contact_name, n.address].some((v) => v?.includes(query)));
 
@@ -130,7 +130,7 @@ export function NetworkList({
                             >
                               {n.company_name}
                             </button>
-                            <UserTag category={n.status_category} />
+                            <UserTag isUser={n.is_user} />
                           </div>
                           <Link to={`/companies/${n.id}`} className="text-xs text-indigo-700 hover:underline">
                             カルテ
@@ -157,7 +157,7 @@ export function NetworkList({
                                   key={f.id}
                                   type="button"
                                   onClick={() => onFocus(f.id)}
-                                  className={`rounded px-1.5 ring-1 ring-inset hover:underline ${f.status_category === "won" ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-slate-50 text-slate-700 ring-slate-200"}`}
+                                  className={`rounded px-1.5 ring-1 ring-inset hover:underline ${f.is_user ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-slate-50 text-slate-700 ring-slate-200"}`}
                                 >
                                   {f.company_name}
                                 </button>

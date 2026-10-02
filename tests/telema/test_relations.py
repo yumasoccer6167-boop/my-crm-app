@@ -37,11 +37,12 @@ def test_担当者どうしをつなぎ両方の施設から相手が見える(c
 
 def test_相関図は点と線を返しつながりの無いユーザーも点で出せる(client):
     lonely = add_company(client, 'ひとり保育園', status='受注成立')
+    client.sql('UPDATE telema_companies SET is_user = 1 WHERE id = %s', (lonely,))
     g = client.api('/relations/graph')[1]
     names = [n['company_name'] for n in g['nodes']]
     assert {'ひかり保育園', 'さくら幼稚園', 'ひとり保育園'} <= set(names)
     assert 'みどり園' not in names
-    assert next(n for n in g['nodes'] if n['id'] == lonely)['status_label'] == '受注成立'
+    assert {'status_label': '受注成立', 'is_user': 1}.items() <= next(n for n in g['nodes'] if n['id'] == lonely).items()
     hikari = next(n for n in g['nodes'] if n['company_name'] == 'ひかり保育園')
     assert {'address': '茨城県水戸市1-1', 'prefecture': '茨城県', 'contact_name': '田中', 'contact_role': '園長'}.items() <= hikari.items()
     assert len(g['edges']) == 1

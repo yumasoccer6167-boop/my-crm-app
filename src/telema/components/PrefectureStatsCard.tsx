@@ -6,7 +6,7 @@ import { Card, Empty, ErrorBox, Loading } from "./ui";
 const ORDER = new Map<string, number>(PREFECTURES.map((p, i) => [p, i]));
 const pct = (users: number, total: number) => (total ? `${((users / total) * 100).toFixed(1)}%` : "-");
 
-/** 都道府県別の幼稚園・保育園の総数（テレマリストの登録施設数）と、そのうちユーザー（ステータス区分が受注）の件数・割合 */
+/** 都道府県別の幼稚園・保育園の総数（テレマリストの登録施設数）と、そのうちユーザーの件数・割合 */
 export function PrefectureStatsCard() {
   const { data, error, loading, reload } = useApi(() => unwrap(api["prefecture-stats"].$get()), []);
 
@@ -25,7 +25,9 @@ export function PrefectureStatsCard() {
         <Empty>登録されている施設はありません</Empty>
       ) : (
         <>
-          <p className="mb-2 text-xs text-slate-500">総数＝テレマリストに登録されている幼稚園・保育園の数。ユーザー＝ステータスの区分が「受注」の施設。</p>
+          <p className="mb-2 text-xs text-slate-500">
+            総数＝テレマリストに登録されている幼稚園・保育園の数。ユーザー＝「ユーザー」の印が付いている施設（営業ステータスとは別）。
+          </p>
           <div className="max-h-96 overflow-y-auto">
             <table className="w-full text-sm tabular-nums">
               <thead className="sticky top-0 bg-white text-xs text-slate-500">

@@ -43,7 +43,7 @@ def company_relations(id):
     # 自分側を a / b どちらに保存したかで相手側の列が入れ替わるので、向きを揃えてから結合する
     return jsonify(db().all(
         f'''SELECT r.id, o.id AS other_company_id, o.company_name AS other_company_name, o.address AS other_address,
-              s.label AS other_status_label, s.category AS other_status_category,
+              s.label AS other_status_label, s.category AS other_status_category, o.is_user AS other_is_user,
               mc.id AS my_contact_id, mc.name AS my_contact_name, oc.id AS other_contact_id, oc.name AS other_contact_name,
               r.label, r.notes, r.created_at
             FROM (
@@ -132,7 +132,7 @@ def update_relation(id):
 
 @bp.get('/relations/graph')
 def relation_graph():
-    # customers=1 のとき、つながりがまだ無い「ユーザー（受注成立）」も点として出す
+    # customers=1 のとき、つながりがまだ無いユーザーも点として出す
     customers = request.args.get('customers', '1')
     if customers not in ('0', '1'):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（customers: 0 か 1 で指定してください）')
@@ -154,10 +154,10 @@ def relation_graph():
     vis_sql, vis_params = company_visibility(user)
     nodes = d.all(
         f'''SELECT c.id, c.company_name, c.address, c.prefecture, c.city, {_key_contact("name")} AS contact_name, {_key_contact("role")} AS contact_role,
-              s.label AS status_label, s.category AS status_category, c.latitude, c.longitude
+              s.label AS status_label, s.category AS status_category, c.is_user, c.latitude, c.longitude
             FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
             WHERE c.is_active = 1 AND {vis_sql}
-              AND (c.id = ANY(%s) {"OR s.category = 'won'" if customers == '1' else ''})
+              AND (c.id = ANY(%s) {"OR c.is_user = 1" if customers == '1' else ''})
             ORDER BY c.company_name_normalized LIMIT 2000''',
         [*vis_params, ids])
     return jsonify({'nodes': nodes, 'edges': edges})

@@ -78,9 +78,12 @@ export function CompanyTable({
                   </td>
                 )}
                 <td className="max-w-72 py-2 pr-3">
-                  <Link to={`/companies/${c.id}`} className="block truncate font-medium text-indigo-700 hover:underline">
-                    {c.company_name}
-                  </Link>
+                  <div className="flex items-center">
+                    <Link to={`/companies/${c.id}`} className="truncate font-medium text-indigo-700 hover:underline">
+                      {c.company_name}
+                    </Link>
+                    {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 align-middle text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
+                  </div>
                   <div className="truncate text-xs text-slate-500">
                     {[c.city, c.industry, c.organization_name].filter(Boolean).join(" · ")}
                   </div>
@@ -129,6 +132,7 @@ export function CompanyTable({
                 <Link to={`/companies/${c.id}`} className="font-medium text-indigo-700">
                   {c.company_name}
                 </Link>
+                {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 align-middle text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
               </label>
               <StatusBadge label={c.status_label} category={c.status_category} />
             </div>

@@ -12,7 +12,7 @@ const color = (i: number) => COLORS[i % COLORS.length]!;
 const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" });
 const count = (d: Day) => d.stops.reduce((n, s) => n + 1 + s.also.length, 0);
 
-/** ユーザー（受注）の施設を、都道府県ごとに1日数件ずつ回る初回訪問ルート */
+/** ユーザーの施設を、都道府県ごとに1日数件ずつ回る初回訪問ルート */
 export function VisitRoute() {
   const { data, error, reload } = useApi(() => unwrap(api["visit-targets"].$get()), []);
   const [stay, setStay] = useState(60);
@@ -56,7 +56,7 @@ export function VisitRoute() {
 
   if (error) return <ErrorBox message={error} onRetry={reload} />;
   if (!data) return <Loading />;
-  if (data.length === 0) return <Empty>ユーザー（ステータスの区分が「受注」）の施設がまだありません</Empty>;
+  if (data.length === 0) return <Empty>ユーザーの施設がまだありません（施設の詳細画面で「ユーザー」の印を付けると出ます）</Empty>;
 
   const located = targets.length - unlocated.length;
   const avgTravel = days.length ? Math.round(days.reduce((n, d) => n + d.travel, 0) / days.length) : 0;
@@ -66,7 +66,7 @@ export function VisitRoute() {
       <div>
         <h1 className="text-lg font-bold text-slate-900">初回訪問ルート</h1>
         <p className="text-sm text-slate-500">
-          ユーザー（受注）の施設を都道府県ごとに、1日数件ずつ回れるように自動で組みます。訪問した施設は「✓
+          ユーザーの施設を都道府県ごとに、1日数件ずつ回れるように自動で組みます。訪問した施設は「✓
           訪問済み」でルートから外れます。移動時間は直線距離からの目安なので、出発前に「経路」のリンクで確認してください。
         </p>
       </div>

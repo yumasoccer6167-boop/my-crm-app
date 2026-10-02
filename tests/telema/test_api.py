@@ -250,9 +250,9 @@ def test_エラー時は途中の書き込みを残さない(client):
 
 def test_都道府県別の総数とユーザー件数(client):
     won = client.status_id('受注成立')
-    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id) VALUES ('統計A園', '統計A園', '栃木県', %s)", (won,))
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id, is_user) VALUES ('統計A園', '統計A園', '栃木県', %s, 1)", (won,))
     client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture) VALUES ('統計B園', '統計B園', '栃木県')")
-    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id, is_active) VALUES ('統計C園', '統計C園', '栃木県', %s, 0)", (won,))
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id, is_user, is_active) VALUES ('統計C園', '統計C園', '栃木県', %s, 1, 0)", (won,))
     client.sql("INSERT INTO telema_companies (company_name, company_name_normalized) VALUES ('統計D園', '統計D園')")
     status, rows = client.api('/prefecture-stats')
     assert status == 200
@@ -296,8 +296,8 @@ def test_都道府県で絞り込める(client):
 
 def test_訪問ルート用にユーザーの施設だけ返す(client):
     won = client.status_id('受注成立')
-    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, latitude, longitude, status_id) VALUES ('訪問A園', '訪問A園', '山梨県', 35.66, 138.57, %s)", (won,))
-    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture) VALUES ('訪問B園', '訪問B園', '山梨県')")
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, latitude, longitude, status_id, is_user) VALUES ('訪問A園', '訪問A園', '山梨県', 35.66, 138.57, %s, 1)", (won,))
+    client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id) VALUES ('訪問B園', '訪問B園', '山梨県', %s)", (won,))
     status, rows = client.api('/visit-targets')
     assert status == 200
     names = [r['company_name'] for r in rows]
@@ -308,8 +308,29 @@ def test_訪問ルート用にユーザーの施設だけ返す(client):
 
 def test_訪問済みにすると印が残り戻せる(client):
     won = client.status_id('受注成立')
-    cid = client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id) VALUES ('訪問済み園', '訪問済み園', '長野県', %s) RETURNING id", (won,))[0]['id']
+    cid = client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, prefecture, status_id, is_user) VALUES ('訪問済み園', '訪問済み園', '長野県', %s, 1) RETURNING id", (won,))[0]['id']
     status, row = client.api(f'/companies/{cid}', {'visited_at': '2026-10-01T10:00:00+09:00'}, method='PATCH')
     assert status == 200 and row['visited_at'] == '2026-10-01T01:00:00.000Z'
     assert next(r for r in client.api('/visit-targets')[1] if r['id'] == cid)['visited_at'] == '2026-10-01T01:00:00.000Z'
     assert client.api(f'/companies/{cid}', {'visited_at': None}, method='PATCH')[1]['visited_at'] is None
+
+
+def test_登録前に重複候補を返す(client):
+    client.api('/companies', {'company_name': '重複確認こども園', 'phone': '0299-11-2233', 'address': '茨城県水戸市三の丸1-1'})
+    rows = client.api('/companies/duplicates?phone=' + quote('0299112233'))[1]
+    assert [(r['company_name'], r['match']) for r in rows] == [('重複確認こども園', 'phone')]
+    rows = client.api('/companies/duplicates?company_name=' + quote('重複確認 こども園') + '&address=' + quote('茨城県水戸市三の丸１－１'))[1]
+    assert rows[0]['match'] == 'name_address'
+    assert client.api('/companies/duplicates?company_name=' + quote('重複確認こども園') + '&address=' + quote('大阪府大阪市北区1-1'))[1] == []
+    assert client.api('/companies/duplicates')[1] == []
+
+
+def test_ユーザーはステータスと別に設定でき一覧で絞り込める(client):
+    co = client.api('/companies', {'company_name': 'ユーザー別枠園', 'status_id': client.status_id('再コール')})[1]
+    assert co['is_user'] == 0
+    status, row = client.api(f'/companies/{co["id"]}', {'is_user': True}, method='PATCH')
+    assert status == 200 and row['is_user'] == 1 and row['status_id'] == client.status_id('再コール')
+    items = client.api('/companies?user=1&q=' + quote('ユーザー別枠園'))[1]['items']
+    assert [(i['company_name'], i['is_user'], i['status_label']) for i in items] == [('ユーザー別枠園', 1, '再コール')]
+    assert client.api('/companies?user=0&q=' + quote('ユーザー別枠園'))[1]['total'] == 0
+    assert client.api('/companies?user=2')[0] == 400

@@ -52,6 +52,9 @@ def _list_query():
     q['q'] = (get('q') or '').strip()[:100] or None
     q['status_id'] = num('status_id', True)
     q['category'] = (get('category') or '')[:20] or None
+    q['user'] = get('user')
+    if q['user'] not in (None, '1', '0'):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（user: 1 か 0 で指定してください）')
     for k, mx in (('industry', 100), ('prefecture', 10), ('city', 50)):
         q[k] = (get(k) or '')[:mx] or None
     assigned = get('assigned')
@@ -101,6 +104,9 @@ def list_companies():
     elif q['category']:
         where.append('s.category = %s')
         params.append(q['category'])
+    if q['user'] is not None:
+        where.append('c.is_user = %s')
+        params.append(int(q['user']))
     for col in ('industry', 'prefecture', 'city', 'temperature'):
         if q[col]:
             where.append(f'c.{col} = %s')
@@ -146,7 +152,7 @@ def list_companies():
     d = db()
     rows = d.all(
         f'''SELECT c.id, c.company_name, o.name AS organization_name, c.phone, c.city, c.industry,
-              c.google_rating, c.google_review_count, c.status_id, s.label AS status_label, s.category AS status_category, c.temperature,
+              c.google_rating, c.google_review_count, c.status_id, s.label AS status_label, s.category AS status_category, c.is_user, c.temperature,
               (SELECT ct.name FROM telema_contacts ct WHERE ct.company_id = c.id AND ct.is_active = 1 AND ct.name IS NOT NULL
                  ORDER BY ct.is_decision_maker DESC, ct.updated_at DESC LIMIT 1) AS contact_name,
               c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at
@@ -212,6 +218,7 @@ COMPANY_PATCH = {
     'next_call_at': IsoDatetime(nullable=True),
     'assigned_user_id': Int(nullable=True),
     'visited_at': IsoDatetime(nullable=True),  # 初回訪問した日時。入っている施設は訪問ルートから外す
+    'is_user': Bool(),  # ユーザー（導入済み）。営業ステータスとは別に持つ
 }
 
 
@@ -280,6 +287,8 @@ def create_company():
     if 'company_name' not in b:
         parse({'company_name': COMPANY_PATCH['company_name']}, raw)
     organization_name = b.pop('organization_name', None)
+    if 'is_user' in b:
+        b['is_user'] = int(b['is_user'])
     user = current_user()
     d = db()
     organization_id = None
@@ -304,6 +313,31 @@ def create_company():
     row = _company_out(row)
     audit(d, user['id'], 'create', 'company', row['id'], None, row)
     return jsonify(row), 201
+
+
+@bp.get('/companies/duplicates')
+def find_duplicates():
+    """手入力で登録する前の重複確認。電話番号の一致・施設名＋住所の一致・施設名の一致（同じ都道府県）を返す。
+    担当外の施設も含めて探す（二重登録を防ぐため。返すのは名前と住所だけ）"""
+    a = request.args
+    v = derived_columns({k: (a.get(k) or '').strip()[:300] for k in ('company_name', 'phone', 'address')})
+    name, phone, addr, pref = v.get('company_name_normalized'), v.get('phone_normalized'), v.get('address_normalized'), v.get('prefecture')
+    if not (name or phone):
+        return jsonify([])
+    rows = db().all(
+        '''SELECT id, company_name, address, phone, is_user,
+              CASE WHEN %s::text IS NOT NULL AND phone_normalized = %s THEN 'phone'
+                   WHEN %s::text IS NOT NULL AND company_name_normalized = %s AND address_normalized = %s THEN 'name_address'
+                   ELSE 'name' END AS match
+           FROM telema_companies
+           WHERE is_active = 1 AND (
+             (%s::text IS NOT NULL AND phone_normalized = %s)
+             OR (%s <> '' AND company_name_normalized = %s AND (%s::text IS NULL OR prefecture = %s)))
+           ORDER BY CASE WHEN %s::text IS NOT NULL AND phone_normalized = %s THEN 0 ELSE 1 END, id
+           LIMIT 10''',
+        (phone, phone, addr, name, addr, phone, phone, name or '', name or '', pref, pref, phone, phone),
+    )
+    return jsonify(rows)
 
 
 @bp.post('/companies/bulk-assign')
@@ -345,6 +379,8 @@ def bulk_delete():
 def update_company(id):
     id = parse_id(id)
     b = parse(COMPANY_PATCH, body(), partial=True)
+    if 'is_user' in b:
+        b['is_user'] = int(b['is_user'])
     user = current_user()
     before = load_visible_company(id)
     if not can_edit_company(user, before['assigned_user_id']):
