@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { TEMPERATURES } from "../shared/constants";
 import { CallEntry } from "../components/company/CallEntry";
@@ -10,7 +10,7 @@ import { Timeline } from "../components/company/Timeline";
 import { Button, Card, ErrorBox, Loading, selectCls, StatusBadge } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import { fmtDateTime, fmtShort, isOverdue } from "../lib/format";
-import { listHref } from "../lib/list-query";
+import { listHref, saveLastOpened } from "../lib/list-query";
 import { useMasters } from "../lib/masters";
 import { useApi } from "../lib/useApi";
 
@@ -21,6 +21,10 @@ export function CompanyDetail() {
   const detail = useApi(() => unwrap(api.companies[":id"].$get({ param: { id } })), [id]);
   const calls = useApi(() => unwrap(api.companies[":id"].calls.$get({ param: { id } })), [id]);
   const [patchError, setPatchError] = useState<string | null>(null);
+  // リストに戻ったとき、この施設の行までスクロールして目印を付ける
+  useEffect(() => {
+    if (Number(id)) saveLastOpened(Number(id));
+  }, [id]);
 
   const reloadAll = () => {
     void detail.reload();
@@ -65,8 +69,12 @@ export function CompanyDetail() {
       <section className="rounded-lg bg-white p-4 ring-1 ring-slate-200">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <Link to={listHref()} className="text-xs text-slate-500 hover:underline">
-              ← リスト
+            <Link
+              to={listHref()}
+              className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
+              title="絞り込み条件・並び順・ページはそのままで戻ります"
+            >
+              ← リストに戻る
             </Link>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-slate-900">{company.company_name}</h1>

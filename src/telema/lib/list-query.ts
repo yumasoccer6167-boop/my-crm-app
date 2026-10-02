@@ -19,3 +19,22 @@ export function listHref(): string {
     return "/companies";
   }
 }
+
+// 最後に開いた施設。リストに戻ったときにその行までスクロールして目印を付ける（案件リストを上から順にかけていく使い方のため）
+const LAST_KEY = "telema:list-last-opened";
+
+export function saveLastOpened(id: number) {
+  try {
+    localStorage.setItem(LAST_KEY, String(id));
+  } catch {
+    // 保存できなくても動作は続ける
+  }
+}
+
+export function lastOpened(): number | null {
+  try {
+    return Number(localStorage.getItem(LAST_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
