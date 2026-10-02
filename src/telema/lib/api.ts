@@ -21,6 +21,7 @@ import type {
   ListSource,
   PrefectureStat,
   RelationItem,
+  SummarySuggestion,
   UserRow,
   VisitTarget,
 } from "../types";
@@ -50,8 +51,10 @@ type Api = {
       contacts: { $post: Call<Contact> };
       calls: { $get: Call<CallLog[]>; $post: Call<CallLog> };
       relations: { $get: Call<RelationItem[]>; $post: Call<Record<string, unknown> & { id: number }> };
+      summarize: { $post: Call<SummarySuggestion> };
     };
   };
+  "ai-suggestions": { ":id": { decide: { $post: Call<{ ok: true; summary: string | null }> } } };
   contacts: { ":id": { $patch: Call<Contact> } };
   calls: {
     ":id": {

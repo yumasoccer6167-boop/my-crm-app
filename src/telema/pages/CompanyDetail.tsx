@@ -5,16 +5,18 @@ import { CallEntry } from "../components/company/CallEntry";
 import { ContactsCard } from "../components/company/ContactsCard";
 import { FieldsCard } from "../components/company/FieldsCard";
 import { RelationsCard } from "../components/company/RelationsCard";
+import { SummaryCard } from "../components/company/SummaryCard";
 import { Timeline } from "../components/company/Timeline";
 import { Button, Card, ErrorBox, Loading, selectCls, StatusBadge } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import { fmtDateTime, fmtShort, isOverdue } from "../lib/format";
+import { listHref } from "../lib/list-query";
 import { useMasters } from "../lib/masters";
 import { useApi } from "../lib/useApi";
 
 export function CompanyDetail() {
   const { id = "" } = useParams();
-  const { me, statuses, users } = useMasters();
+  const { me, statuses, users, aiAvailable } = useMasters();
   const nav = useNavigate();
   const detail = useApi(() => unwrap(api.companies[":id"].$get({ param: { id } })), [id]);
   const calls = useApi(() => unwrap(api.companies[":id"].calls.$get({ param: { id } })), [id]);
@@ -27,7 +29,7 @@ export function CompanyDetail() {
 
   if (detail.error) return <ErrorBox message={detail.error} onRetry={detail.reload} />;
   if (!detail.data) return <Loading />;
-  const { company, organization, contacts, sources, field_sources, siblings } = detail.data;
+  const { company, organization, contacts, sources, field_sources, siblings, summary_suggestion } = detail.data;
   const status = statuses.find((s) => s.id === company.status_id);
   const editable = me.role !== "sales" || company.assigned_user_id == null || company.assigned_user_id === me.id;
   const keyContact = contacts[0];
@@ -63,7 +65,7 @@ export function CompanyDetail() {
       <section className="rounded-lg bg-white p-4 ring-1 ring-slate-200">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <Link to="/companies" className="text-xs text-slate-500 hover:underline">
+            <Link to={listHref()} className="text-xs text-slate-500 hover:underline">
               ← リスト
             </Link>
             <h1 className="mt-0.5 text-xl font-bold text-slate-900">{company.company_name}</h1>
@@ -151,13 +153,15 @@ export function CompanyDetail() {
           ) : (
             <div className="rounded-md bg-slate-100 p-3 text-sm text-slate-600">他の営業担当の企業のため、架電登録はできません</div>
           )}
-          <Card title="AIサマリー">
-            {company.summary ? (
-              <p className="whitespace-pre-wrap text-sm text-slate-800">{String(company.summary)}</p>
-            ) : (
-              <p className="text-sm text-slate-400">架電履歴がたまると、AIが現在の状況を要約します（STEP 10〜11で実装）</p>
-            )}
-          </Card>
+          <SummaryCard
+            companyId={company.id}
+            summary={(company.summary as string | null) ?? null}
+            draft={summary_suggestion}
+            callCount={calls.data?.length ?? 0}
+            editable={editable}
+            aiAvailable={aiAvailable}
+            onChanged={() => void detail.reload()}
+          />
           {calls.error ? (
             <ErrorBox message={calls.error} onRetry={calls.reload} />
           ) : (

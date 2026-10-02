@@ -137,3 +137,54 @@ def test_利用料はadminだけが見られる(client):
         assert client.api('/admin/ai-usage')[0] == 403
     finally:
         client.set_my_role('admin')
+
+
+def test_施設のAIサマリーは架電が無ければ作れない(client):
+    cid = client.api('/companies', {'company_name': 'サマリー無し保育園'})[1]['id']
+    status, body = client.api(f'/companies/{cid}/summarize', method='POST')
+    assert status == 400 and '架電履歴' in body['error']['message']
+
+
+def test_施設のAIサマリーは提案として保存され採用したときだけカルテに反映される(client):
+    cid = client.api('/companies', {'company_name': 'サマリーテスト保育園'})[1]['id']
+    client.api(f'/companies/{cid}/calls', {'raw_note': '担当者不在'})
+    client.api(f'/companies/{cid}/calls', {'raw_note': '園長と話せた。来月検討'})
+
+    status, first = client.api(f'/companies/{cid}/summarize', method='POST')
+    assert status == 200
+    assert first['calls'] == 2 and '架電2件' in first['summary'] and first['next_action'] == '再架電'
+    detail = client.api(f'/companies/{cid}')[1]
+    assert detail['company']['summary'] is None
+    assert detail['summary_suggestion']['id'] == first['id']
+
+    # 作り直すと前の案は superseded、最新の案だけが出る
+    second = client.api(f'/companies/{cid}/summarize', method='POST')[1]
+    assert client.api(f'/companies/{cid}')[1]['summary_suggestion']['id'] == second['id']
+    assert client.sql('SELECT status FROM telema_ai_suggestions WHERE id = %s', (first['id'],)) == [{'status': 'superseded'}]
+    assert client.api(f'/ai-suggestions/{first["id"]}/decide', {'action': 'approve'})[0] == 409
+
+    # 修正して採用
+    assert client.api(f'/ai-suggestions/{second["id"]}/decide', {'action': 'approve', 'summary': '園長と接触済み。来月検討。'})[0] == 200
+    detail = client.api(f'/companies/{cid}')[1]
+    assert detail['company']['summary'] == '園長と接触済み。来月検討。'
+    assert detail['summary_suggestion'] is None
+    assert client.sql('SELECT status FROM telema_ai_suggestions WHERE id = %s', (second['id'],)) == [{'status': 'modified'}]
+    assert client.sql("SELECT COUNT(*) AS n FROM telema_ai_usage_logs WHERE feature = 'company_summary' AND company_id = %s", (cid,)) == [{'n': 2}]
+
+
+def test_施設のAIサマリーは破棄でき他人の担当は営業が作れない(client):
+    cid = client.api('/companies', {'company_name': 'サマリー破棄保育園'})[1]['id']
+    client.api(f'/companies/{cid}/calls', {'raw_note': '受付のみ'})
+    s = client.api(f'/companies/{cid}/summarize', method='POST')[1]
+    assert client.api(f'/ai-suggestions/{s["id"]}/decide', {'action': 'reject'})[0] == 200
+    detail = client.api(f'/companies/{cid}')[1]
+    assert detail['company']['summary'] is None and detail['summary_suggestion'] is None
+    assert client.api(f'/ai-suggestions/{s["id"]}/decide', {'action': 'nope'})[0] == 400
+
+    other = client.add_user('他の営業')
+    client.sql('UPDATE telema_companies SET assigned_user_id = %s WHERE id = %s', (other, cid))
+    client.set_my_role('sales')
+    try:
+        assert client.api(f'/companies/{cid}/summarize', method='POST')[0] == 404
+    finally:
+        client.set_my_role('admin')

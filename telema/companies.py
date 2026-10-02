@@ -1,4 +1,6 @@
 """施設一覧・会社カルテ・先方担当者。"""
+import json
+
 from flask import jsonify, request
 
 from .common import audit, can_edit_company, company_visibility, jst_day_range
@@ -265,7 +267,20 @@ def get_company(id):
             '''SELECT c.id, c.company_name, s.label AS status_label FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
                WHERE c.organization_id = %s AND c.id <> %s AND c.is_active = 1 ORDER BY c.company_name LIMIT 50''', (org_id, id)) if org_id else [],
         'pending_suggestions': d.value("SELECT COUNT(*) FROM telema_ai_suggestions WHERE company_id = %s AND status = 'pending'", (id,)),
+        'summary_suggestion': _summary_draft(d, id),
     })
+
+
+def _summary_draft(d, company_id):
+    """未決定のAIサマリー案（最新の1件）"""
+    row = d.first(
+        '''SELECT id, payload_json, model, created_at FROM telema_ai_suggestions
+           WHERE company_id = %s AND suggestion_type = 'summary' AND status = 'pending' ORDER BY id DESC LIMIT 1''', (company_id,))
+    if not row:
+        return None
+    p = json.loads(row['payload_json']) if isinstance(row['payload_json'], str) else row['payload_json']
+    return {'id': row['id'], 'summary': p['after']['summary'], 'next_action': p['after'].get('next_action'), 'calls': p.get('calls', 0),
+            'model': row['model'], 'created_at': row['created_at']}
 
 
 def _company_out(row):

@@ -4,6 +4,7 @@ import { STATUS_CATEGORIES, TEMPERATURES } from "../shared/constants";
 import { CompanyTable } from "../components/CompanyTable";
 import { Button, Card, Empty, ErrorBox, inputCls, Loading, selectCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
+import { saveListQuery } from "../lib/list-query";
 import { useMasters } from "../lib/masters";
 import { PREFECTURES } from "../shared/prefectures";
 import { useApi } from "../lib/useApi";
@@ -37,6 +38,8 @@ export function Companies() {
   }, [q]);
 
   const key = params.toString();
+  // 会社カルテから「← リスト」やメニューで戻ったときに同じ条件で開けるよう、条件が変わるたびに覚える
+  useEffect(() => saveListQuery(key), [key]);
   // ページ送り・並び替えでは件数が変わらないので、前回の件数を使い回してサーバーでの全件カウントを省く
   const filterKey = FILTER_KEYS.filter((k) => !["sort", "order", "page"].includes(k)).map((k) => `${k}=${query[k] ?? ""}`).join("&");
   const lastTotal = useRef<{ filterKey: string; total: number } | null>(null);

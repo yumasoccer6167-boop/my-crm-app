@@ -5,6 +5,7 @@ import { Card, Empty, ErrorBox, Loading, selectCls } from "./ui";
 
 const FEATURE_LABEL: Record<string, string> = {
   call_analysis: "架電メモ整理",
+  company_summary: "AIサマリー",
   karte_update: "カルテ更新提案",
   next_action: "次回アクション提案",
   column_mapping: "列の自動認識",
