@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { TEMPERATURES } from "../shared/constants";
+import { AssociationsRow } from "../components/company/AssociationsRow";
 import { CallEntry } from "../components/company/CallEntry";
 import { ContactsCard } from "../components/company/ContactsCard";
 import { ContractsCard } from "../components/company/ContractsCard";
@@ -34,7 +35,7 @@ export function CompanyDetail() {
 
   if (detail.error) return <ErrorBox message={detail.error} onRetry={detail.reload} />;
   if (!detail.data) return <Loading />;
-  const { company, organization, contacts, contracts, sources, field_sources, siblings, summary_suggestion } = detail.data;
+  const { company, organization, contacts, contracts, associations, sources, field_sources, siblings, summary_suggestion } = detail.data;
   const status = statuses.find((s) => s.id === company.status_id);
   const editable = me.role !== "sales" || company.assigned_user_id == null || company.assigned_user_id === me.id;
   const keyContact = contacts[0];
@@ -212,6 +213,7 @@ export function CompanyDetail() {
             sources={field_sources}
             editable={editable}
             onSaved={detail.reload}
+            extraRows={<AssociationsRow companyId={company.id} selected={associations} editable={editable} onSaved={detail.reload} />}
           />
           {organization && (
             <Card title="法人">

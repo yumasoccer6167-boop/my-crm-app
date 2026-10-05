@@ -114,10 +114,15 @@ export type Contract = {
   contract_date: string;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
+  product_url: string | null;
+  appointment_user_name: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
 };
+
+/** 加盟協会（設定画面で管理者が管理するマスタ）。is_active=0 でも、施設に付いている間は表示する */
+export type Association = { id: number; name: string; is_active: number; sort_order?: number };
 
 /** 架電メモから抽出する項目（仕様書 11章＋つながりやすい時間・推奨ステータス） */
 export type CallExtraction = {
@@ -193,6 +198,7 @@ export type CompanyDetailData = {
   pending_suggestions: number;
   summary_suggestion: SummarySuggestion | null;
   contracts: Contract[];
+  associations: Association[];
 };
 
 /** 施設のAIサマリーの提案（ai_suggestions の suggestion_type = 'summary'） */

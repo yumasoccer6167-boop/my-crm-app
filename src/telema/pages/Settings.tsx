@@ -2,6 +2,7 @@ import { useState } from "react";
 import { STATUS_CATEGORIES } from "../shared/constants";
 import { AIUsageCard } from "../components/AIUsageCard";
 import { AssigneeMappingCard } from "../components/AssigneeMappingCard";
+import { AssociationsSettingsCard } from "../components/AssociationsSettingsCard";
 import { PrefectureStatsCard } from "../components/PrefectureStatsCard";
 import { Button, Card, CATEGORY_STYLE, ErrorBox, inputCls, selectCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
@@ -96,6 +97,8 @@ export function Settings() {
           </ul>
         </Card>
       </div>
+
+      <AssociationsSettingsCard />
 
       {isAdmin && <AssigneeMappingCard />}
     </div>

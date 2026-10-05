@@ -11,6 +11,9 @@ CONTRACT_BODY = {
     'product_name': Str(min=1, max=100),
     'contract_date': IsoDate(),
     'assigned_user_id': Int(nullable=True, optional=True),
+    # 商材の案内ページなどへのリンク。画面でそのままリンクにするので http(s) だけ受け付ける
+    'product_url': Str(max=1000, pattern=r'https?://\S+', pattern_msg='リンクは http:// または https:// から始まるURLで入力してください', nullable=True, optional=True),
+    'appointment_user_name': Str(max=100, nullable=True, optional=True),
 }
 
 
@@ -35,9 +38,10 @@ def create_contract(id):
     d = db()
     _check_assignee(d, user, b.get('assigned_user_id'))
     new_id = d.value(
-        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, assigned_user_id, created_by)
-           VALUES (%s, %s, %s, %s, %s) RETURNING id''',
-        (id, b['product_name'], b['contract_date'], b.get('assigned_user_id'), user['id']),
+        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, assigned_user_id, product_url, appointment_user_name, created_by)
+           VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        (id, b['product_name'], b['contract_date'], b.get('assigned_user_id'), b.get('product_url') or None,
+         b.get('appointment_user_name') or None, user['id']),
     )
     row = d.first(f'{CONTRACT_SELECT} WHERE ct.id = %s', (new_id,))
     audit(d, user['id'], 'create', 'contract', new_id, None, row)
@@ -59,6 +63,9 @@ def update_contract(id):
     if 'assigned_user_id' in b and b['assigned_user_id'] != before['assigned_user_id']:
         _check_assignee(d, user, b['assigned_user_id'])
     values = dict(b)
+    for key in ('product_url', 'appointment_user_name'):
+        if key in values and not values[key]:
+            values[key] = None
     if 'is_active' in values:
         values['is_active'] = int(values['is_active'])
     if not values:

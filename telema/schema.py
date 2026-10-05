@@ -392,6 +392,28 @@ CREATE TABLE telema_contracts (
 );
 CREATE INDEX telema_idx_contracts_company ON telema_contracts(company_id) WHERE is_active = 1;
 """,
+    # 5: 契約情報に「商材のリンク」「アポ担当者名」を追加。加盟協会（設定画面で管理するマスタ）と、施設ごとの加盟協会（複数）
+    r"""
+ALTER TABLE telema_contracts ADD COLUMN product_url TEXT;
+ALTER TABLE telema_contracts ADD COLUMN appointment_user_name TEXT;   -- アポを取った人の名前（メンバー以外も書けるよう自由入力）
+
+CREATE TABLE telema_associations (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  is_active   INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL DEFAULT telema_now(),
+  updated_at  TEXT NOT NULL DEFAULT telema_now()
+);
+
+CREATE TABLE telema_company_associations (
+  company_id      INTEGER NOT NULL REFERENCES telema_companies(id),
+  association_id  INTEGER NOT NULL REFERENCES telema_associations(id),
+  created_at      TEXT NOT NULL DEFAULT telema_now(),
+  PRIMARY KEY (company_id, association_id)
+);
+CREATE INDEX telema_idx_co_assoc_assoc ON telema_company_associations(association_id);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

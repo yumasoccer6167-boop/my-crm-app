@@ -6,7 +6,9 @@ import { useMasters } from "../../lib/masters";
 import { useApi } from "../../lib/useApi";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../ui";
 
-type Draft = { product_name: string; contract_date: string; assigned_user_id: number | null };
+type Draft = { product_name: string; contract_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string };
+
+const URL_RE = /^https?:\/\/\S+$/;
 
 /** 契約情報（商材・契約日・営業担当）。1施設に複数件登録できる */
 export function ContractsCard({
@@ -37,8 +39,20 @@ export function ContractsCard({
     setEditingId(c ? c.id : "new");
     setDraft(
       c
-        ? { product_name: c.product_name, contract_date: c.contract_date, assigned_user_id: c.assigned_user_id }
-        : { product_name: "", contract_date: todayJst(), assigned_user_id: me.role === "sales" ? me.id : (companyAssigneeId ?? me.id) },
+        ? {
+            product_name: c.product_name,
+            contract_date: c.contract_date,
+            assigned_user_id: c.assigned_user_id,
+            product_url: c.product_url ?? "",
+            appointment_user_name: c.appointment_user_name ?? "",
+          }
+        : {
+            product_name: "",
+            contract_date: todayJst(),
+            assigned_user_id: me.role === "sales" ? me.id : (companyAssigneeId ?? me.id),
+            product_url: "",
+            appointment_user_name: "",
+          },
     );
   }
 
@@ -53,7 +67,15 @@ export function ContractsCard({
     const product_name = draft.product_name.trim();
     if (!product_name) return setError("商材を入力してください");
     if (!draft.contract_date) return setError("契約日を入力してください");
-    const json = { product_name, contract_date: draft.contract_date, assigned_user_id: draft.assigned_user_id };
+    const product_url = draft.product_url.trim();
+    if (product_url && !URL_RE.test(product_url)) return setError("商材のリンクは http:// または https:// から始まるURLで入力してください");
+    const json = {
+      product_name,
+      contract_date: draft.contract_date,
+      assigned_user_id: draft.assigned_user_id,
+      product_url: product_url || null,
+      appointment_user_name: draft.appointment_user_name.trim() || null,
+    };
     setSaving(true);
     setError(null);
     try {
@@ -100,6 +122,16 @@ export function ContractsCard({
             ))}
           </datalist>
         </label>
+        <label className="col-span-2 block">
+          <div className="mb-1 text-xs text-slate-500">商材のリンク</div>
+          <input
+            className={inputCls}
+            type="url"
+            placeholder="https://…（任意）"
+            value={draft.product_url}
+            onChange={(e) => setDraft({ ...draft, product_url: e.target.value })}
+          />
+        </label>
         <label className="block">
           <div className="mb-1 text-xs text-slate-500">契約日</div>
           <input type="date" className={inputCls} value={draft.contract_date} onChange={(e) => setDraft({ ...draft, contract_date: e.target.value })} />
@@ -118,6 +150,21 @@ export function ContractsCard({
               </option>
             ))}
           </select>
+        </label>
+        <label className="col-span-2 block">
+          <div className="mb-1 text-xs text-slate-500">アポ担当者名</div>
+          <input
+            className={inputCls}
+            list="telema-appointment-users"
+            placeholder="アポを取った人の名前（任意）"
+            value={draft.appointment_user_name}
+            onChange={(e) => setDraft({ ...draft, appointment_user_name: e.target.value })}
+          />
+          <datalist id="telema-appointment-users">
+            {users.map((u) => (
+              <option key={u.id} value={u.name} />
+            ))}
+          </datalist>
         </label>
       </div>
       {error && <ErrorBox message={error} />}
@@ -152,7 +199,13 @@ export function ContractsCard({
           ) : (
             <div key={c.id} className="group text-sm">
               <div className="flex flex-wrap items-center gap-x-2">
-                <span className="font-medium text-slate-900">{c.product_name}</span>
+                {c.product_url && URL_RE.test(c.product_url) ? (
+                  <a href={c.product_url} target="_blank" rel="noreferrer noopener" title={c.product_url} className="font-medium text-indigo-700 hover:underline">
+                    {c.product_name}
+                  </a>
+                ) : (
+                  <span className="font-medium text-slate-900">{c.product_name}</span>
+                )}
                 <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">{fmtDate(c.contract_date)}</span>
                 {editable && editingId === null && (
                   <span className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
@@ -165,7 +218,10 @@ export function ContractsCard({
                   </span>
                 )}
               </div>
-              <div className="text-xs text-slate-500">営業担当：{c.assigned_user_name ?? "未設定"}</div>
+              <div className="text-xs text-slate-500">
+                営業担当：{c.assigned_user_name ?? "未設定"}
+                {c.appointment_user_name && <span className="ml-2">アポ担当：{c.appointment_user_name}</span>}
+              </div>
             </div>
           ),
         )}

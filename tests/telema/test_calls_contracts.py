@@ -176,3 +176,36 @@ def test_商材の候補はCRMの商材と契約済みの商材(client):
     client.api(f'/companies/{cid}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-02'})
     status, names = client.api('/products')
     assert status == 200 and names[:2] == ['SP-MEO', 'SP'] and '旧商材' in names and names.count('SP') == 1
+
+
+def test_契約情報に商材のリンクとアポ担当者名を登録でき直せる(client):
+    cid = make_company(client, 'リンクテスト園')
+    status, c = client.api(f'/companies/{cid}/contracts', {
+        'product_name': 'SP-MEO', 'contract_date': '2026-09-01',
+        'product_url': 'https://example.com/products/sp-meo?a=1', 'appointment_user_name': ' 佐藤 太郎 ',
+    })
+    assert status == 201
+    assert {'product_url': 'https://example.com/products/sp-meo?a=1', 'appointment_user_name': '佐藤 太郎'}.items() <= c.items()
+    assert client.api(f'/companies/{cid}')[1]['contracts'][0]['appointment_user_name'] == '佐藤 太郎'
+
+    # 空にすると NULL に戻る（空文字は残さない）
+    row = client.api(f'/contracts/{c["id"]}', {'appointment_user_name': '', 'product_url': None}, method='PATCH')[1]
+    assert row['appointment_user_name'] is None and row['product_url'] is None
+    row = client.api(f'/contracts/{c["id"]}', {'product_url': 'http://example.com/x'}, method='PATCH')[1]
+    assert row['product_url'] == 'http://example.com/x'
+
+    # 省略した契約は両方とも空
+    plain = client.api(f'/companies/{cid}/contracts', {'product_name': 'SP', 'contract_date': '2026-09-02'})[1]
+    assert plain['product_url'] is None and plain['appointment_user_name'] is None
+
+
+def test_商材のリンクはhttpかhttpsのURLだけ(client):
+    cid = make_company(client, 'リンク検証園')
+    url = f'/companies/{cid}/contracts'
+    for bad in ('javascript:alert(1)', 'ftp://example.com', 'example.com', 'https://', 'https://a b.com', 'data:text/html,x'):
+        status, body = client.api(url, {'product_name': 'SP', 'contract_date': '2026-09-01', 'product_url': bad})
+        assert status == 400, bad
+    assert 'http://' in body['error']['message']
+    assert client.api(url, {'product_name': 'SP', 'contract_date': '2026-09-01', 'product_url': 'https://' + 'a' * 1000})[0] == 400
+    assert client.api(url, {'product_name': 'SP', 'contract_date': '2026-09-01', 'appointment_user_name': 'あ' * 101})[0] == 400
+    assert client.api(f'/companies/{cid}')[1]['contracts'] == []

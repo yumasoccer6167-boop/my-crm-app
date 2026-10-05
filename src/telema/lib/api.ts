@@ -4,6 +4,7 @@
 
 import type {
   AIUsageData,
+  Association,
   AssigneeMappingItem,
   CallExtraction,
   CallLog,
@@ -37,6 +38,7 @@ type Api = {
   me: { $get: Call<CurrentUser> };
   statuses: { $get: Call<CallStatus[]>; $post: Call<CallStatus>; ":id": { $patch: Call<CallStatus> } };
   users: { $get: Call<UserRow[]> };
+  associations: { $get: Call<Association[]>; $post: Call<Association>; ":id": { $patch: Call<Association> } };
   "list-sources": { $get: Call<ListSource[]> };
   "visit-targets": { $get: Call<VisitTarget[]> };
   dashboard: { $get: Call<DashboardData>; "calls-monthly": { $get: Call<MonthlyCallsData> } };
@@ -53,6 +55,7 @@ type Api = {
       $patch: Call<Company>;
       contacts: { $post: Call<Contact> };
       contracts: { $post: Call<Contract> };
+      associations: { $patch: Call<Association[]> };
       calls: { $get: Call<CallLog[]>; $post: Call<CallLog> };
       relations: { $get: Call<RelationItem[]>; $post: Call<Record<string, unknown> & { id: number }> };
       summarize: { $post: Call<SummarySuggestion> };

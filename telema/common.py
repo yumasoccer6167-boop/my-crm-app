@@ -12,6 +12,12 @@ CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name
   FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id'''
 
 
+# 施設に付いている加盟協会（マスタ順）。無効にした協会でも付いている間は返す
+ASSOCIATIONS_OF_COMPANY = '''SELECT a.id, a.name, a.is_active
+  FROM telema_company_associations ca JOIN telema_associations a ON a.id = ca.association_id
+  WHERE ca.company_id = %s ORDER BY a.sort_order, a.id'''
+
+
 def audit(db, user_id, action, entity_type, entity_id, before=None, after=None):
     """操作ログ。本体の更新と同じトランザクションで書く"""
     db.run(

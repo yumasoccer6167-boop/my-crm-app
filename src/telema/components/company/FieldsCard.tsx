@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Company, FieldSource } from "../../types";
 import { COMPANY_FIELDS, SOURCE_LABELS, type CompanyField } from "../../shared/fields";
 import { api, unwrap } from "../../lib/api";
@@ -15,6 +15,7 @@ export function FieldsCard({
   sources,
   editable,
   onSaved,
+  extraRows,
 }: {
   title: string;
   fields: CompanyField[];
@@ -22,6 +23,8 @@ export function FieldsCard({
   sources: FieldSource[];
   editable: boolean;
   onSaved: () => void;
+  /** 項目の後ろに足す行（会社の列ではない項目。例：加盟協会）。<dt>/<dd> を持つ要素を渡す */
+  extraRows?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -116,6 +119,7 @@ export function FieldsCard({
             </div>
           );
         })}
+        {extraRows}
       </dl>
     </Card>
   );
