@@ -124,7 +124,9 @@ try {
     duplicate_rows: plans.filter((p) => p.kind === "merge" || p.kind === "skip").length,
     error_rows: plans.filter((p) => p.kind === "error").length,
   };
-  const label = (id: number) => (id < 0 ? "（同じファイル）" : `#${id}`);
+  // 同じファイル内で先に新規登録する施設は、まだ id が無いので行番号で示す
+  const rowOfTemp = new Map(newRows.map((p) => [p.id!, p.row.row_index]));
+  const label = (id: number) => (id < 0 ? `同じファイルの行${rowOfTemp.get(id)}` : `既存#${id}`);
   console.log("\n■ 解析結果");
   const mergedBy = (t: MatchType) => merged.filter((p) => p.matchType === t).length;
   console.log(`  総行数 ${summary.total_rows} / 新規 ${summary.new_rows} / 既存候補(電話一致・別登録) ${summary.candidate_rows} / 重複 ${summary.duplicate_rows}（うち統合 ${merged.length}・スキップ ${plans.filter((p) => p.kind === "skip").length}） / エラー ${summary.error_rows}`);
@@ -137,7 +139,7 @@ try {
   }
   const warnRows = rows.filter((r) => r.errors.length);
   if (warnRows.length) console.log("  要確認:", warnRows.map((r) => `行${r.row_index} ${r.company.company_name}: ${r.errors.join("、")}`).join(" / "));
-  for (const c of candidates.slice(0, 10)) console.log(`  電話一致: 行${c.row.row_index} ${c.row.company.company_name} ⇔ 既存#${c.phoneCandidate!.id} ${c.phoneCandidate!.company_name}`);
+  for (const c of candidates.slice(0, 10)) console.log(`  電話一致: 行${c.row.row_index} ${c.row.company.company_name} ⇔ ${label(c.phoneCandidate!.id)} ${c.phoneCandidate!.company_name}`);
 
   // 法人：同じ名前・郵便番号の法人は1件にまとめる
   type OrgPlan = { temp: number; org: NonNullable<TransformedRow["organization"]> };
