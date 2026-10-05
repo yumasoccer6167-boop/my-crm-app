@@ -71,6 +71,16 @@ def list_users():
     return jsonify([{'id': r['id'], 'name': r['name'], 'email': None, 'role': telema_role(r['role']), 'is_active': 1} for r in rows])
 
 
+# ---- 商材（契約情報の入力候補。CRM本体の「設定・管理」の商材をそのまま使う） ----
+@bp.get('/products')
+def list_products():
+    data = db().value('SELECT data FROM app_state WHERE id = 1') or {}
+    names = [p['name'] for p in (data.get('products') or []) if isinstance(p, dict) and p.get('name')]
+    # 商材マスタから外れた商材名でも、契約済みのものは選べるように残す
+    used = [r['product_name'] for r in db().all('SELECT DISTINCT product_name FROM telema_contracts WHERE is_active = 1 ORDER BY product_name')]
+    return jsonify(list(dict.fromkeys([*names, *used])))
+
+
 # ---- リスト取得元 ----
 @bp.get('/list-sources')
 def list_sources():

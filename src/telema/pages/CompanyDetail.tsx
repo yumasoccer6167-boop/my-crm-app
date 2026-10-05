@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { TEMPERATURES } from "../shared/constants";
 import { CallEntry } from "../components/company/CallEntry";
 import { ContactsCard } from "../components/company/ContactsCard";
+import { ContractsCard } from "../components/company/ContractsCard";
 import { FieldsCard } from "../components/company/FieldsCard";
 import { RelationsCard } from "../components/company/RelationsCard";
 import { SummaryCard } from "../components/company/SummaryCard";
@@ -33,7 +34,7 @@ export function CompanyDetail() {
 
   if (detail.error) return <ErrorBox message={detail.error} onRetry={detail.reload} />;
   if (!detail.data) return <Loading />;
-  const { company, organization, contacts, sources, field_sources, siblings, summary_suggestion } = detail.data;
+  const { company, organization, contacts, contracts, sources, field_sources, siblings, summary_suggestion } = detail.data;
   const status = statuses.find((s) => s.id === company.status_id);
   const editable = me.role !== "sales" || company.assigned_user_id == null || company.assigned_user_id === me.id;
   const keyContact = contacts[0];
@@ -182,7 +183,7 @@ export function CompanyDetail() {
           {calls.error ? (
             <ErrorBox message={calls.error} onRetry={calls.reload} />
           ) : (
-            <Timeline calls={calls.data ?? []} nextCallAt={nextCallAt} nextAction={(company.next_action as string | null) ?? null} onChanged={reloadAll} />
+            <Timeline calls={calls.data ?? []} contacts={contacts} nextCallAt={nextCallAt} nextAction={(company.next_action as string | null) ?? null} onChanged={reloadAll} />
           )}
         </div>
 
@@ -192,6 +193,13 @@ export function CompanyDetail() {
             fields={["interest", "pain_point", "decision_timing", "budget", "current_service", "competitor", "ng_reason", "next_action", "current_note"]}
             company={company}
             sources={field_sources}
+            editable={editable}
+            onSaved={detail.reload}
+          />
+          <ContractsCard
+            companyId={company.id}
+            contracts={contracts}
+            companyAssigneeId={company.assigned_user_id}
             editable={editable}
             onSaved={detail.reload}
           />

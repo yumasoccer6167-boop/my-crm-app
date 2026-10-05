@@ -12,6 +12,7 @@ import type {
   CompanyDetailData,
   CompanyListData,
   Contact,
+  Contract,
   CurrentUser,
   DuplicateCandidate,
   DashboardData,
@@ -51,6 +52,7 @@ type Api = {
       $get: Call<CompanyDetailData>;
       $patch: Call<Company>;
       contacts: { $post: Call<Contact> };
+      contracts: { $post: Call<Contract> };
       calls: { $get: Call<CallLog[]>; $post: Call<CallLog> };
       relations: { $get: Call<RelationItem[]>; $post: Call<Record<string, unknown> & { id: number }> };
       summarize: { $post: Call<SummarySuggestion> };
@@ -58,8 +60,11 @@ type Api = {
   };
   "ai-suggestions": { ":id": { decide: { $post: Call<{ ok: true; summary: string | null }> } } };
   contacts: { ":id": { $patch: Call<Contact> } };
+  contracts: { ":id": { $patch: Call<Contract> } };
+  products: { $get: Call<string[]> };
   calls: {
     ":id": {
+      $patch: Call<CallLog>;
       deactivate: { $post: Call<{ ok: true }> };
       analyze: { $post: Call<{ ok: true; extraction: CallExtraction; next_call_at: string | null }> };
     };

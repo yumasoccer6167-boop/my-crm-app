@@ -3,7 +3,7 @@ import json
 
 from flask import jsonify, request
 
-from .common import audit, can_edit_company, company_visibility, jst_day_range
+from .common import CONTRACT_SELECT, audit, can_edit_company, company_visibility, jst_day_range
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
@@ -275,6 +275,7 @@ def get_company(id):
                WHERE c.organization_id = %s AND c.id <> %s AND c.is_active = 1 ORDER BY c.company_name LIMIT 50''', (org_id, id)) if org_id else [],
         'pending_suggestions': d.value("SELECT COUNT(*) FROM telema_ai_suggestions WHERE company_id = %s AND status = 'pending'", (id,)),
         'summary_suggestion': _summary_draft(d, id),
+        'contracts': d.all(f'{CONTRACT_SELECT} WHERE ct.company_id = %s AND ct.is_active = 1 ORDER BY ct.contract_date DESC, ct.id DESC', (id,)),
     })
 
 

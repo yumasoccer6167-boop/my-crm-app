@@ -106,6 +106,19 @@ export type CallLog = {
   created_at: string;
 };
 
+/** 契約情報（商材・契約日・営業担当）。契約日は暦の日付 YYYY-MM-DD */
+export type Contract = {
+  id: number;
+  company_id: number;
+  product_name: string;
+  contract_date: string;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+};
+
 /** 架電メモから抽出する項目（仕様書 11章＋つながりやすい時間・推奨ステータス） */
 export type CallExtraction = {
   call_result: string | null;
@@ -179,6 +192,7 @@ export type CompanyDetailData = {
   siblings: { id: number; company_name: string; status_label: string | null }[];
   pending_suggestions: number;
   summary_suggestion: SummarySuggestion | null;
+  contracts: Contract[];
 };
 
 /** 施設のAIサマリーの提案（ai_suggestions の suggestion_type = 'summary'） */

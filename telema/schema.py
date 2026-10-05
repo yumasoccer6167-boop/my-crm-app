@@ -377,6 +377,21 @@ UPDATE telema_companies SET is_user = 1,
 UPDATE telema_call_statuses SET is_active = 0, updated_at = telema_now() WHERE label = 'ユーザー';
 CREATE INDEX telema_idx_co_is_user ON telema_companies(is_user) WHERE is_user = 1;
 """,
+    # 4: 契約情報（商材・契約日・営業担当）。1施設に複数件（商材ごと）持てる。履歴と同じく削除せず is_active=0 で無効化する
+    r"""
+CREATE TABLE telema_contracts (
+  id                SERIAL PRIMARY KEY,
+  company_id        INTEGER NOT NULL REFERENCES telema_companies(id),
+  product_name      TEXT NOT NULL,
+  contract_date     TEXT NOT NULL,              -- 暦の日付 YYYY-MM-DD（時刻・タイムゾーンを持たない）
+  assigned_user_id  INTEGER,                    -- 契約時の営業担当（users.id）
+  is_active         INTEGER NOT NULL DEFAULT 1,
+  created_by        INTEGER,
+  created_at        TEXT NOT NULL DEFAULT telema_now(),
+  updated_at        TEXT NOT NULL DEFAULT telema_now()
+);
+CREATE INDEX telema_idx_contracts_company ON telema_contracts(company_id) WHERE is_active = 1;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

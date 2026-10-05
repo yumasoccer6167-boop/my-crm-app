@@ -7,6 +7,11 @@ from .validate import iso_utc
 JST = timezone(timedelta(hours=9))
 
 
+# 契約情報の取得（営業担当の表示名つき）。会社詳細と契約APIで共有する
+CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name
+  FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id'''
+
+
 def audit(db, user_id, action, entity_type, entity_id, before=None, after=None):
     """操作ログ。本体の更新と同じトランザクションで書く"""
     db.run(

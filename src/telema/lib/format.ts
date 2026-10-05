@@ -30,6 +30,12 @@ function startOfJstDay(d: Date): number {
 
 export const isOverdue = (iso: string | null | undefined) => !!iso && new Date(iso).getTime() < Date.now();
 
+/** 今日の日付（JST）を YYYY-MM-DD で返す。<input type="date"> の初期値用 */
+export const todayJst = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+
+/** 暦の日付 YYYY-MM-DD を 2026/08/01 の形で表示する（タイムゾーン変換はしない） */
+export const fmtDate = (d: string | null | undefined) => (d ? d.replaceAll("-", "/") : "—");
+
 /** <input type="datetime-local"> 用（ブラウザのローカル時刻） */
 export function toLocalInput(iso: string | null | undefined): string {
   if (!iso) return "";

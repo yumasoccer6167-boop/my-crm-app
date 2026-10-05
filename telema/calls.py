@@ -3,7 +3,7 @@ from flask import jsonify
 
 from .common import audit, can_edit_company
 from .companies import load_visible_company
-from .context import body, current_user, db, forbidden, not_found
+from .context import ApiError, body, current_user, db, forbidden, not_found
 from .routes import bp
 from .validate import Int, IsoDatetime, Str, now_iso, parse, parse_id
 
@@ -73,6 +73,67 @@ def create_call(id):
     return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (call_id,))), 201
 
 
+CALL_PATCH = {
+    'raw_note': Str(max=5000, trim=False),
+    'called_at': IsoDatetime(),
+    'result_status_id': Int(nullable=True),
+    'contact_id': Int(nullable=True),
+}
+
+# メモを直したら、古いメモから作ったAI整理は内容と食い違うので消して再整理できる状態に戻す
+_AI_RESET = ('ai_error', 'ai_model', 'ai_summary', 'ai_extracted_json', 'ai_next_action', 'ai_next_call_at')
+
+
+def _recalc_company_calls(d, company_id):
+    """件数・最終架電日時を有効な履歴から再計算（無効化・日時の修正で使う）"""
+    d.run(
+        '''UPDATE telema_companies SET call_count = (SELECT COUNT(*) FROM telema_call_logs WHERE company_id = %(cid)s AND is_active = 1),
+             last_called_at = (SELECT MAX(called_at) FROM telema_call_logs WHERE company_id = %(cid)s AND is_active = 1),
+             updated_at = telema_now() WHERE id = %(cid)s''',
+        {'cid': company_id},
+    )
+
+
+@bp.patch('/calls/<id>')
+def update_call(id):
+    """過去の架電履歴を直す（日時・結果・話した相手・メモ）。無効化と同じく、sales は自分の架電だけ直せる。
+    会社の現在の状態（ステータス・次回架電など）は、直した履歴に合わせて勝手に書き換えない（最終架電日時と件数だけ再計算する）"""
+    id = parse_id(id)
+    b = parse(CALL_PATCH, body(), partial=True)
+    user = current_user()
+    d = db()
+    call = d.first('SELECT * FROM telema_call_logs WHERE id = %s AND is_active = 1', (id,))
+    if not call:
+        raise not_found('架電履歴')
+    company = load_visible_company(call['company_id'])
+    if user['role'] == 'sales' and call['user_id'] != user['id']:
+        raise forbidden()
+
+    if b.get('result_status_id') is not None and not d.first('SELECT 1 FROM telema_call_statuses WHERE id = %s', (b['result_status_id'],)):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（result_status_id: ステータスが見つかりません）')
+    if b.get('contact_id') is not None and not d.first(
+            'SELECT 1 FROM telema_contacts WHERE id = %s AND is_active = 1 AND (company_id = %s OR (company_id IS NULL AND organization_id = %s))',
+            (b['contact_id'], company['id'], company['organization_id'])):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（contact_id: この施設の担当者ではありません）')
+
+    changes = {k: v for k, v in b.items() if call[k] != v}
+    if not changes:
+        return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (id,)))
+
+    sets = dict(changes)
+    if 'raw_note' in changes:
+        sets['ai_status'] = 'pending' if changes['raw_note'].strip() else 'skipped'
+        sets.update({k: None for k in _AI_RESET})
+    d.run(
+        f'UPDATE telema_call_logs SET {", ".join(f"{k} = %s" for k in sets)}, updated_at = telema_now() WHERE id = %s',
+        [*sets.values(), id],
+    )
+    if 'called_at' in changes:
+        _recalc_company_calls(d, call['company_id'])
+    audit(d, user['id'], 'update', 'call_log', id, {k: call[k] for k in changes}, changes)
+    return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (id,)))
+
+
 @bp.post('/calls/<id>/deactivate')
 def deactivate_call(id):
     """架電履歴は削除せず無効化する"""
@@ -86,12 +147,6 @@ def deactivate_call(id):
     if user['role'] == 'sales' and call['user_id'] != user['id']:
         raise forbidden()
     d.run('UPDATE telema_call_logs SET is_active = 0, updated_at = telema_now() WHERE id = %s', (id,))
-    # 件数・最終架電日時を有効な履歴から再計算
-    d.run(
-        '''UPDATE telema_companies SET call_count = (SELECT COUNT(*) FROM telema_call_logs WHERE company_id = %(cid)s AND is_active = 1),
-             last_called_at = (SELECT MAX(called_at) FROM telema_call_logs WHERE company_id = %(cid)s AND is_active = 1),
-             updated_at = telema_now() WHERE id = %(cid)s''',
-        {'cid': call['company_id']},
-    )
+    _recalc_company_calls(d, call['company_id'])
     audit(d, user['id'], 'deactivate', 'call_log', id, call)
     return jsonify({'ok': True})

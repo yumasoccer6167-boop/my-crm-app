@@ -113,6 +113,19 @@ class IsoDatetime(Field):
         return iso_utc(d)
 
 
+class IsoDate(Field):
+    """暦の日付（YYYY-MM-DD）。契約日のようにタイムゾーンを持たない日付に使う"""
+
+    def check(self, v):
+        if not isinstance(v, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', v):
+            raise Invalid('日付の形式が正しくありません（YYYY-MM-DD）')
+        try:
+            datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise Invalid('存在しない日付です')
+        return v
+
+
 class IntList(Field):
     def __init__(self, min_len=0, max_len=None, positive=True, **kw):
         super().__init__(**kw)
