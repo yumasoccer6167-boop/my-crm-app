@@ -3,13 +3,14 @@ from datetime import datetime, timezone
 
 from flask import jsonify, request
 
-from .common import JST, company_visibility, jst_day_range, jst_month_range
+from .common import ASSOCIATION_NAMES_COLUMN, JST, company_visibility, jst_day_range, jst_month_range
 from .context import ApiError, current_user, db
 from .routes import bp
 
 LIST_COLUMNS = '''c.id, c.company_name, o.name AS organization_name, c.phone, c.city, c.industry,
   c.google_rating, c.google_review_count, c.status_id, s.label AS status_label, s.category AS status_category, c.is_user, c.temperature,
-  NULL AS contact_name, c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at'''
+  NULL AS contact_name, c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at,
+  ''' + ASSOCIATION_NAMES_COLUMN
 LIST_FROM = '''FROM telema_companies c
   LEFT JOIN telema_call_statuses s ON s.id = c.status_id
   LEFT JOIN telema_organizations o ON o.id = c.organization_id

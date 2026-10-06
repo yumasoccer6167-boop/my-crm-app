@@ -14,6 +14,20 @@ export function Rating({ rating, count }: { rating: number | null; count: number
   );
 }
 
+/** 加盟協会のチップ。協会名が長くても列が潰れないよう、折り返して並べる */
+function AssociationChips({ names }: { names: string[] }) {
+  if (names.length === 0) return <span className="text-slate-300">—</span>;
+  return (
+    <span className="flex flex-wrap gap-1">
+      {names.map((n) => (
+        <span key={n} className="break-words rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-800 ring-1 ring-inset ring-indigo-200">
+          {n}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function NextCall({ iso }: { iso: string | null }) {
   return <span className={isOverdue(iso) ? "font-semibold text-rose-600" : "text-slate-700"}>{fmtShort(iso)}</span>;
 }
@@ -67,6 +81,7 @@ export function CompanyTable({
               <th className="px-3 py-2 text-center font-medium">温度</th>
               <th className="px-3 py-2 font-medium">口コミ</th>
               <th className="px-3 py-2 font-medium">担当者</th>
+              <th className="px-3 py-2 font-medium">加盟協会</th>
               <th className="px-3 py-2 font-medium">次回架電</th>
               <th className="px-3 py-2 font-medium">最終架電</th>
               {showAssignee && <th className="px-3 py-2 font-medium">営業</th>}
@@ -114,6 +129,9 @@ export function CompanyTable({
                   <Rating rating={c.google_rating} count={c.google_review_count} />
                 </td>
                 <td className="max-w-32 truncate px-3 py-2 text-slate-700">{c.contact_name ?? <span className="text-slate-400">—</span>}</td>
+                <td className="min-w-28 max-w-56 px-3 py-2">
+                  <AssociationChips names={c.associations} />
+                </td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                   <NextCall iso={c.next_call_at} />
                 </td>
@@ -147,6 +165,11 @@ export function CompanyTable({
               <span>{[c.city, c.industry].filter(Boolean).join(" · ")}</span>
               {c.google_rating != null && <Rating rating={c.google_rating} count={c.google_review_count} />}
             </div>
+            {c.associations.length > 0 && (
+              <div className="mt-1">
+                <AssociationChips names={c.associations} />
+              </div>
+            )}
             <div className="mt-1.5 flex items-center justify-between text-sm">
               {c.phone ? (
                 <a href={`tel:${c.phone}`} className="tabular-nums text-slate-700 underline">

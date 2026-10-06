@@ -18,6 +18,11 @@ ASSOCIATIONS_OF_COMPANY = '''SELECT a.id, a.name, a.is_active
   WHERE ca.company_id = %s ORDER BY a.sort_order, a.id'''
 
 
+# 一覧の1行に載せる加盟協会の名前（マスタ順の配列）。施設一覧とダッシュボードで同じ列を返す
+ASSOCIATION_NAMES_COLUMN = '''COALESCE((SELECT json_agg(a.name ORDER BY a.sort_order, a.id) FROM telema_company_associations ca
+    JOIN telema_associations a ON a.id = ca.association_id WHERE ca.company_id = c.id), '[]'::json) AS associations'''
+
+
 def audit(db, user_id, action, entity_type, entity_id, before=None, after=None):
     """操作ログ。本体の更新と同じトランザクションで書く"""
     db.run(

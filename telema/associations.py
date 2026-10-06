@@ -5,7 +5,7 @@ from .common import ASSOCIATIONS_OF_COMPANY, audit, can_edit_company
 from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .routes import bp
-from .validate import Bool, Int, IntList, Str, parse, parse_id
+from .validate import Bool, Enum, Int, IntList, Str, parse, parse_id
 
 ASSOCIATION_BODY = {
     'name': Str(min=1, max=100),
@@ -82,3 +82,53 @@ def set_company_associations(id):
     after = d.all(ASSOCIATIONS_OF_COMPANY, (id,))
     audit(d, user['id'], 'update', 'company_associations', id, {'association_ids': before}, {'association_ids': [r['id'] for r in after]})
     return jsonify(after)
+
+
+@bp.post('/companies/bulk-associations')
+def bulk_associations():
+    """加盟協会の一括割り振り（営業担当の一括割当と同じく manager / admin のみ）。
+    mode: add＝今の加盟協会に追加 / remove＝その協会だけ外す / replace＝その協会だけにする（association_id=null なら全部外す）"""
+    require_role('manager', 'admin')
+    b = parse({
+        'company_ids': IntList(min_len=1, max_len=500),
+        'association_id': Int(min=1, nullable=True),
+        'mode': Enum(['add', 'remove', 'replace']),
+    }, body())
+    mode, target = b['mode'], b['association_id']
+    if target is None and mode != 'replace':
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（association_id: 加盟協会を指定してください）')
+    user = current_user()
+    d = db()
+    if target is not None:
+        assoc = d.first('SELECT id, is_active FROM telema_associations WHERE id = %s', (target,))
+        if not assoc:
+            raise not_found('加盟協会')
+        if mode != 'remove' and not assoc['is_active']:
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（association_id: 無効な加盟協会は割り当てられません）')
+
+    ids = list(dict.fromkeys(b['company_ids']))
+    companies = [r['id'] for r in d.all('SELECT id FROM telema_companies WHERE is_active = 1 AND id = ANY(%s)', (ids,))]
+    current = {}
+    for r in d.all('SELECT company_id, association_id FROM telema_company_associations WHERE company_id = ANY(%s)', (companies,)):
+        current.setdefault(r['company_id'], set()).add(r['association_id'])
+
+    updated = 0
+    for cid in companies:
+        before = current.get(cid, set())
+        if mode == 'add':
+            after = before | {target}
+        elif mode == 'remove':
+            after = before - {target}
+        else:
+            after = {target} if target is not None else set()
+        if after == before:
+            continue
+        removed, added = sorted(before - after), sorted(after - before)
+        if removed:
+            d.run('DELETE FROM telema_company_associations WHERE company_id = %s AND association_id = ANY(%s)', (cid, removed))
+        for assoc_id in added:
+            d.run('INSERT INTO telema_company_associations (company_id, association_id) VALUES (%s, %s) ON CONFLICT DO NOTHING', (cid, assoc_id))
+        d.run('UPDATE telema_companies SET updated_at = telema_now() WHERE id = %s', (cid,))
+        audit(d, user['id'], 'update', 'company_associations', cid, {'association_ids': sorted(before)}, {'association_ids': sorted(after)})
+        updated += 1
+    return jsonify({'updated': updated, 'unchanged': len(companies) - updated, 'not_found': len(ids) - len(companies)})

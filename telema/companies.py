@@ -3,7 +3,7 @@ import json
 
 from flask import jsonify, request
 
-from .common import ASSOCIATIONS_OF_COMPANY, CONTRACT_SELECT, audit, can_edit_company, company_visibility, jst_day_range
+from .common import ASSOCIATION_NAMES_COLUMN, ASSOCIATIONS_OF_COMPANY, CONTRACT_SELECT, audit, can_edit_company, company_visibility, jst_day_range
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
@@ -61,6 +61,8 @@ def _list_query():
         q[k] = (get(k) or '')[:mx] or None
     assigned = get('assigned')
     q['assigned'] = assigned if assigned in (None, 'me', 'none') else num('assigned', True)
+    association = get('association')  # 加盟協会の id、または 'none'（加盟協会が1つも付いていない施設）
+    q['association'] = association if association in (None, 'none') else num('association', True, lo=1)
     q['temperature'] = get('temperature')
     if q['temperature'] is not None and q['temperature'] not in TEMPERATURES:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（temperature: 選択肢にない値です）')
@@ -121,6 +123,11 @@ def list_companies():
     elif q['assigned'] is not None:
         where.append('c.assigned_user_id = %s')
         params.append(q['assigned'])
+    if q['association'] == 'none':
+        where.append('NOT EXISTS (SELECT 1 FROM telema_company_associations ca WHERE ca.company_id = c.id)')
+    elif q['association'] is not None:
+        where.append('EXISTS (SELECT 1 FROM telema_company_associations ca WHERE ca.company_id = c.id AND ca.association_id = %s)')
+        params.append(q['association'])
     if q['rating_min'] is not None:
         where.append('c.google_rating >= %s')
         params.append(q['rating_min'])
@@ -157,7 +164,8 @@ def list_companies():
               c.google_rating, c.google_review_count, c.status_id, s.label AS status_label, s.category AS status_category, c.is_user, c.temperature,
               (SELECT ct.name FROM telema_contacts ct WHERE ct.company_id = c.id AND ct.is_active = 1 AND ct.name IS NOT NULL
                  ORDER BY ct.is_decision_maker DESC, ct.updated_at DESC LIMIT 1) AS contact_name,
-              c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at
+              c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at,
+              {ASSOCIATION_NAMES_COLUMN}
             {frm} ORDER BY {order} LIMIT %s OFFSET %s''',
         [*params, q['per_page'], (q['page'] - 1) * q['per_page']],
     )

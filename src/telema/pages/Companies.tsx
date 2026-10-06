@@ -7,9 +7,10 @@ import { api, unwrap } from "../lib/api";
 import { lastOpened, saveListQuery } from "../lib/list-query";
 import { useMasters } from "../lib/masters";
 import { PREFECTURES } from "../shared/prefectures";
+import type { Association } from "../types";
 import { useApi } from "../lib/useApi";
 
-const FILTER_KEYS = ["q", "source_id", "user", "category", "status_id", "industry", "prefecture", "city", "assigned", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
+const FILTER_KEYS = ["q", "source_id", "user", "category", "status_id", "industry", "prefecture", "city", "assigned", "association", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
 
 const SORT_OPTIONS = [
   { value: "next_call_at:asc", label: "次回架電が近い順" },
@@ -23,7 +24,7 @@ const SORT_OPTIONS = [
 ];
 
 export function Companies() {
-  const { statuses, users, me } = useMasters();
+  const { statuses, users, associations, me } = useMasters();
   const [params, setParams] = useSearchParams();
   const query = Object.fromEntries(FILTER_KEYS.flatMap((k) => (params.get(k) ? [[k, params.get(k)!]] : []))) as Record<string, string>;
   const [q, setQ] = useState(query.q ?? "");
@@ -203,6 +204,16 @@ export function Companies() {
                   </option>
                 ))}
           </select>
+          <select {...sel("association")}>
+            <option value="">加盟協会</option>
+            <option value="none">未設定</option>
+            {associations.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+                {!a.is_active && "（無効）"}
+              </option>
+            ))}
+          </select>
           <select
             value={`${query.sort ?? "next_call_at"}:${query.order ?? "asc"}`}
             onChange={(e) => {
@@ -253,6 +264,7 @@ export function Companies() {
                 canAssign={canAssign}
                 count={selected.size}
                 users={users.filter((u) => u.is_active)}
+                associations={associations}
                 ids={[...selected]}
                 onDone={() => {
                   setSelected(new Set());
@@ -282,10 +294,18 @@ export function Companies() {
   );
 }
 
+type AssocMode = "add" | "remove" | "replace";
+const ASSOC_MODES: { value: AssocMode; label: string }[] = [
+  { value: "add", label: "加盟協会を追加" },
+  { value: "remove", label: "加盟協会を外す" },
+  { value: "replace", label: "加盟協会をこれだけにする" },
+];
+
 function BulkActionBar({
   canAssign,
   count,
   users,
+  associations,
   ids,
   onDone,
   onClear,
@@ -293,13 +313,49 @@ function BulkActionBar({
   canAssign: boolean;
   count: number;
   users: { id: number; name: string }[];
+  associations: Association[];
   ids: number[];
   onDone: () => void;
   onClear: () => void;
 }) {
   const [target, setTarget] = useState("");
+  const [assocMode, setAssocMode] = useState<AssocMode>("add");
+  const [assocTarget, setAssocTarget] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 追加・置き換えで選べるのは有効な協会だけ。外すときは、無効にした協会も選べる
+  const assocOptions = assocMode === "remove" ? associations : associations.filter((a) => a.is_active);
+
+  function changeAssocMode(mode: AssocMode) {
+    setAssocMode(mode);
+    setAssocTarget("");
+  }
+
+  async function assignAssociation() {
+    const association_id = assocTarget === "none" ? null : Number(assocTarget);
+    const name = associations.find((a) => a.id === association_id)?.name;
+    const message =
+      association_id == null
+        ? `選択した${count}件の加盟協会をすべて外します。`
+        : assocMode === "add"
+          ? `選択した${count}件に加盟協会「${name}」を追加します。すでに付いている加盟協会はそのまま残ります。`
+          : assocMode === "remove"
+            ? `選択した${count}件から加盟協会「${name}」を外します。`
+            : `選択した${count}件の加盟協会を「${name}」だけにします。ほかの加盟協会は外れます。`;
+    if (!confirm(`${message}よろしいですか？`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await unwrap(api.companies["bulk-associations"].$post({ json: { company_ids: ids, association_id, mode: assocMode } }));
+      setAssocTarget("");
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function assign() {
     const assigned_user_id = target === "none" ? null : Number(target);
@@ -349,6 +405,27 @@ function BulkActionBar({
           </select>
           <Button variant="primary" size="sm" disabled={!target || saving} onClick={assign}>
             {saving ? "処理中…" : "一括割当"}
+          </Button>
+          <span className="mx-1 hidden h-5 w-px bg-indigo-200 sm:inline-block" aria-hidden />
+          <select value={assocMode} onChange={(e) => changeAssocMode(e.target.value as AssocMode)} className={selectCls} aria-label="加盟協会の操作">
+            {ASSOC_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <select value={assocTarget} onChange={(e) => setAssocTarget(e.target.value)} className={selectCls} aria-label="割り振る加盟協会">
+            <option value="">加盟協会を選ぶ</option>
+            {assocOptions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+                {!a.is_active && "（無効）"}
+              </option>
+            ))}
+            {assocMode === "replace" && <option value="none">（加盟協会をすべて外す）</option>}
+          </select>
+          <Button variant="primary" size="sm" disabled={!assocTarget || saving} onClick={assignAssociation}>
+            {saving ? "処理中…" : "加盟協会を一括割当"}
           </Button>
         </>
       )}

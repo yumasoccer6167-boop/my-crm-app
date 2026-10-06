@@ -52,9 +52,11 @@ export type CompanyListItem = {
   assigned_user_id: number | null;
   assigned_user_name: string | null;
   updated_at: string;
+  /** 加盟協会の名前（マスタの並び順） */
+  associations: string[];
 };
 
-export type Company = Record<string, unknown> & {
+export type Company =Record<string, unknown> & {
   id: number;
   organization_id: number | null;
   company_name: string;
