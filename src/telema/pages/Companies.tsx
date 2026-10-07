@@ -7,10 +7,10 @@ import { api, unwrap } from "../lib/api";
 import { lastOpened, saveListQuery } from "../lib/list-query";
 import { useMasters } from "../lib/masters";
 import { PREFECTURES } from "../shared/prefectures";
-import type { Association } from "../types";
+import type { Association, ListType, Tag } from "../types";
 import { useApi } from "../lib/useApi";
 
-const FILTER_KEYS = ["q", "source_id", "user", "category", "status_id", "industry", "prefecture", "city", "assigned", "association", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
+const FILTER_KEYS = ["q", "source_id", "user", "category", "status_id", "industry", "prefecture", "city", "assigned", "list_type", "association", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
 
 const SORT_OPTIONS = [
   { value: "next_call_at:asc", label: "次回架電が近い順" },
@@ -24,7 +24,7 @@ const SORT_OPTIONS = [
 ];
 
 export function Companies() {
-  const { statuses, users, associations, me } = useMasters();
+  const { statuses, users, associations, listTypes, me } = useMasters();
   const [params, setParams] = useSearchParams();
   const query = Object.fromEntries(FILTER_KEYS.flatMap((k) => (params.get(k) ? [[k, params.get(k)!]] : []))) as Record<string, string>;
   const [q, setQ] = useState(query.q ?? "");
@@ -204,6 +204,16 @@ export function Companies() {
                   </option>
                 ))}
           </select>
+          <select {...sel("list_type")}>
+            <option value="">リスト種類</option>
+            <option value="none">未設定</option>
+            {listTypes.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+                {!t.is_active && "（無効）"}
+              </option>
+            ))}
+          </select>
           <select {...sel("association")}>
             <option value="">加盟協会</option>
             <option value="none">未設定</option>
@@ -265,6 +275,7 @@ export function Companies() {
                 count={selected.size}
                 users={users.filter((u) => u.is_active)}
                 associations={associations}
+                listTypes={listTypes}
                 ids={[...selected]}
                 onDone={() => {
                   setSelected(new Set());
@@ -294,18 +305,105 @@ export function Companies() {
   );
 }
 
-type AssocMode = "add" | "remove" | "replace";
-const ASSOC_MODES: { value: AssocMode; label: string }[] = [
-  { value: "add", label: "加盟協会を追加" },
-  { value: "remove", label: "加盟協会を外す" },
-  { value: "replace", label: "加盟協会をこれだけにする" },
-];
+type TagMode = "add" | "remove" | "replace";
+
+/**
+ * 加盟協会・リスト種類の一括割り振り。付けるものを選び、「追加／外す／これだけにする」のどれで反映するかを選ぶ。
+ * 追加・置き換えで選べるのは有効なものだけ。外すときは無効にしたものも選べる
+ */
+function BulkTagControl({
+  label,
+  master,
+  count,
+  disabled,
+  apply,
+  onError,
+  onDone,
+}: {
+  label: string;
+  master: Tag[];
+  count: number;
+  disabled: boolean;
+  apply: (id: number | null, mode: TagMode) => Promise<unknown>;
+  onError: (message: string | null) => void;
+  onDone: () => void;
+}) {
+  const [mode, setMode] = useState<TagMode>("add");
+  const [target, setTarget] = useState("");
+  const [saving, setSaving] = useState(false);
+  const options = mode === "remove" ? master : master.filter((t) => t.is_active);
+  const modes: { value: TagMode; label: string }[] = [
+    { value: "add", label: `${label}を追加` },
+    { value: "remove", label: `${label}を外す` },
+    { value: "replace", label: `${label}をこれだけにする` },
+  ];
+
+  async function run() {
+    const id = target === "none" ? null : Number(target);
+    const name = master.find((t) => t.id === id)?.name;
+    const message =
+      id == null
+        ? `選択した${count}件の${label}をすべて外します。`
+        : mode === "add"
+          ? `選択した${count}件に${label}「${name}」を追加します。すでに付いている${label}はそのまま残ります。`
+          : mode === "remove"
+            ? `選択した${count}件から${label}「${name}」を外します。`
+            : `選択した${count}件の${label}を「${name}」だけにします。ほかの${label}は外れます。`;
+    if (!confirm(`${message}よろしいですか？`)) return;
+    setSaving(true);
+    onError(null);
+    try {
+      await apply(id, mode);
+      setTarget("");
+      onDone();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <span className="mx-1 hidden h-5 w-px bg-indigo-200 sm:inline-block" aria-hidden />
+      <select
+        value={mode}
+        onChange={(e) => {
+          setMode(e.target.value as TagMode);
+          setTarget("");
+        }}
+        className={selectCls}
+        aria-label={`${label}の操作`}
+      >
+        {modes.map((m) => (
+          <option key={m.value} value={m.value}>
+            {m.label}
+          </option>
+        ))}
+      </select>
+      <select value={target} onChange={(e) => setTarget(e.target.value)} className={selectCls} aria-label={`割り振る${label}`}>
+        <option value="">{label}を選ぶ</option>
+        {options.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+            {!t.is_active && "（無効）"}
+          </option>
+        ))}
+        {mode === "replace" && <option value="none">（{label}をすべて外す）</option>}
+      </select>
+      <Button variant="primary" size="sm" disabled={!target || saving || disabled} onClick={run}>
+        {saving ? "処理中…" : `${label}を一括割当`}
+      </Button>
+    </>
+  );
+}
 
 function BulkActionBar({
   canAssign,
   count,
   users,
   associations,
+  listTypes,
   ids,
   onDone,
   onClear,
@@ -314,48 +412,14 @@ function BulkActionBar({
   count: number;
   users: { id: number; name: string }[];
   associations: Association[];
+  listTypes: ListType[];
   ids: number[];
   onDone: () => void;
   onClear: () => void;
 }) {
   const [target, setTarget] = useState("");
-  const [assocMode, setAssocMode] = useState<AssocMode>("add");
-  const [assocTarget, setAssocTarget] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // 追加・置き換えで選べるのは有効な協会だけ。外すときは、無効にした協会も選べる
-  const assocOptions = assocMode === "remove" ? associations : associations.filter((a) => a.is_active);
-
-  function changeAssocMode(mode: AssocMode) {
-    setAssocMode(mode);
-    setAssocTarget("");
-  }
-
-  async function assignAssociation() {
-    const association_id = assocTarget === "none" ? null : Number(assocTarget);
-    const name = associations.find((a) => a.id === association_id)?.name;
-    const message =
-      association_id == null
-        ? `選択した${count}件の加盟協会をすべて外します。`
-        : assocMode === "add"
-          ? `選択した${count}件に加盟協会「${name}」を追加します。すでに付いている加盟協会はそのまま残ります。`
-          : assocMode === "remove"
-            ? `選択した${count}件から加盟協会「${name}」を外します。`
-            : `選択した${count}件の加盟協会を「${name}」だけにします。ほかの加盟協会は外れます。`;
-    if (!confirm(`${message}よろしいですか？`)) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await unwrap(api.companies["bulk-associations"].$post({ json: { company_ids: ids, association_id, mode: assocMode } }));
-      setAssocTarget("");
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function assign() {
     const assigned_user_id = target === "none" ? null : Number(target);
@@ -406,27 +470,24 @@ function BulkActionBar({
           <Button variant="primary" size="sm" disabled={!target || saving} onClick={assign}>
             {saving ? "処理中…" : "一括割当"}
           </Button>
-          <span className="mx-1 hidden h-5 w-px bg-indigo-200 sm:inline-block" aria-hidden />
-          <select value={assocMode} onChange={(e) => changeAssocMode(e.target.value as AssocMode)} className={selectCls} aria-label="加盟協会の操作">
-            {ASSOC_MODES.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-          <select value={assocTarget} onChange={(e) => setAssocTarget(e.target.value)} className={selectCls} aria-label="割り振る加盟協会">
-            <option value="">加盟協会を選ぶ</option>
-            {assocOptions.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-                {!a.is_active && "（無効）"}
-              </option>
-            ))}
-            {assocMode === "replace" && <option value="none">（加盟協会をすべて外す）</option>}
-          </select>
-          <Button variant="primary" size="sm" disabled={!assocTarget || saving} onClick={assignAssociation}>
-            {saving ? "処理中…" : "加盟協会を一括割当"}
-          </Button>
+          <BulkTagControl
+            label="リスト種類"
+            master={listTypes}
+            count={count}
+            disabled={saving}
+            apply={(id, mode) => unwrap(api.companies["bulk-list-types"].$post({ json: { company_ids: ids, list_type_id: id, mode } }))}
+            onError={setError}
+            onDone={onDone}
+          />
+          <BulkTagControl
+            label="加盟協会"
+            master={associations}
+            count={count}
+            disabled={saving}
+            apply={(id, mode) => unwrap(api.companies["bulk-associations"].$post({ json: { company_ids: ids, association_id: id, mode } }))}
+            onError={setError}
+            onDone={onDone}
+          />
         </>
       )}
       <Button variant="danger" size="sm" disabled={saving} onClick={remove}>

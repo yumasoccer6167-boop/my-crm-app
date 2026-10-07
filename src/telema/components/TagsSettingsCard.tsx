@@ -1,11 +1,26 @@
 import { useState } from "react";
-import { api, unwrap } from "../lib/api";
+import type { Tag } from "../types";
 import { useMasters } from "../lib/masters";
 import { Button, Card, Empty, ErrorBox, inputCls } from "./ui";
 
-/** 加盟協会のマスタ管理（設定画面）。ここで追加した協会を、施設の基本情報で選べる。変更できるのは管理者のみ */
-export function AssociationsSettingsCard() {
-  const { me, associations, reload } = useMasters();
+/**
+ * 加盟協会・リスト種類のようなマスタの管理（設定画面）。ここで追加したものを、施設の基本情報や一覧の一括操作で選べる。
+ * 追加・名称変更・有効/無効の切り替えができるのは管理者のみ
+ */
+export function TagsSettingsCard({
+  title,
+  description,
+  items,
+  create,
+  update,
+}: {
+  title: string;
+  description: string;
+  items: Tag[];
+  create: (name: string) => Promise<unknown>;
+  update: (id: number, patch: { name?: string; is_active?: boolean }) => Promise<unknown>;
+}) {
+  const { me, reload } = useMasters();
   const isAdmin = me.role === "admin";
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -29,28 +44,28 @@ export function AssociationsSettingsCard() {
   async function add() {
     const value = name.trim();
     if (!value) return;
-    if (await run(() => unwrap(api.associations.$post({ json: { name: value } })))) setName("");
+    if (await run(() => create(value))) setName("");
   }
 
   function rename(id: number, current: string) {
-    const next = window.prompt("加盟協会の名称を変更します", current)?.trim();
+    const next = window.prompt(`${title}の名称を変更します`, current)?.trim();
     if (!next || next === current) return;
-    void run(() => unwrap(api.associations[":id"].$patch({ param: { id: String(id) }, json: { name: next } })));
+    void run(() => update(id, { name: next }));
   }
 
   return (
-    <Card title="加盟協会">
-      <p className="mb-2 text-xs text-slate-500">ここで追加した加盟協会を、施設の「基本情報」で複数選べます。無効にした協会は新しく選べなくなりますが、すでに付いている施設には残ります。</p>
+    <Card title={title}>
+      <p className="mb-2 text-xs text-slate-500">{description}</p>
       {error && (
         <div className="mb-2">
           <ErrorBox message={error} />
         </div>
       )}
-      {associations.length === 0 ? (
-        <Empty>加盟協会はまだ登録されていません</Empty>
+      {items.length === 0 ? (
+        <Empty>{title}はまだ登録されていません</Empty>
       ) : (
         <ul className="divide-y divide-slate-100 text-sm">
-          {associations.map((a) => (
+          {items.map((a) => (
             <li key={a.id} className={`flex items-center gap-2 py-1.5 ${a.is_active ? "" : "opacity-50"}`}>
               <span className="flex-1 break-words">
                 {a.name}
@@ -61,7 +76,7 @@ export function AssociationsSettingsCard() {
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => rename(a.id, a.name)}>
                     名称変更
                   </Button>
-                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => unwrap(api.associations[":id"].$patch({ param: { id: String(a.id) }, json: { is_active: !a.is_active } })))}>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => update(a.id, { is_active: !a.is_active }))}>
                     {a.is_active ? "無効化" : "有効化"}
                   </Button>
                 </>
@@ -78,7 +93,7 @@ export function AssociationsSettingsCard() {
             void add();
           }}
         >
-          <input className={inputCls} placeholder="新しい加盟協会名" maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={inputCls} placeholder={`新しい${title}名`} maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
           <Button type="submit" variant="primary" disabled={busy || !name.trim()}>
             追加
           </Button>

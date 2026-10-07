@@ -52,8 +52,9 @@ export type CompanyListItem = {
   assigned_user_id: number | null;
   assigned_user_name: string | null;
   updated_at: string;
-  /** 加盟協会の名前（マスタの並び順） */
+  /** 加盟協会・リスト種類の名前（マスタの並び順） */
   associations: string[];
+  list_types: string[];
 };
 
 export type Company =Record<string, unknown> & {
@@ -124,7 +125,10 @@ export type Contract = {
 };
 
 /** 加盟協会（設定画面で管理者が管理するマスタ）。is_active=0 でも、施設に付いている間は表示する */
-export type Association = { id: number; name: string; is_active: number; sort_order?: number };
+export type Tag = { id: number; name: string; is_active: number; sort_order?: number };
+export type Association = Tag;
+/** リスト種類（「繋がり」「群私幼」など。設定画面で管理者が増やせるマスタ） */
+export type ListType = Tag;
 
 /** 架電メモから抽出する項目（仕様書 11章＋つながりやすい時間・推奨ステータス） */
 export type CallExtraction = {
@@ -201,6 +205,7 @@ export type CompanyDetailData = {
   summary_suggestion: SummarySuggestion | null;
   contracts: Contract[];
   associations: Association[];
+  list_types: ListType[];
 };
 
 /** 施設のAIサマリーの提案（ai_suggestions の suggestion_type = 'summary'） */

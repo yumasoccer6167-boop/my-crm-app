@@ -22,6 +22,7 @@ import type {
   GraphEdge,
   GraphNode,
   ListSource,
+  ListType,
   PrefectureStat,
   RelationItem,
   SummarySuggestion,
@@ -39,6 +40,7 @@ type Api = {
   statuses: { $get: Call<CallStatus[]>; $post: Call<CallStatus>; ":id": { $patch: Call<CallStatus> } };
   users: { $get: Call<UserRow[]> };
   associations: { $get: Call<Association[]>; $post: Call<Association>; ":id": { $patch: Call<Association> } };
+  "list-types": { $get: Call<ListType[]>; $post: Call<ListType>; ":id": { $patch: Call<ListType> } };
   "list-sources": { $get: Call<ListSource[]> };
   "visit-targets": { $get: Call<VisitTarget[]> };
   dashboard: { $get: Call<DashboardData>; "calls-monthly": { $get: Call<MonthlyCallsData> } };
@@ -50,6 +52,7 @@ type Api = {
     facets: { $get: Call<{ industries: Facet[]; prefectures: Facet[]; cities: Facet[] }> };
     "bulk-assign": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
     "bulk-associations": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
+    "bulk-list-types": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
     "bulk-delete": { $post: Call<{ deleted: number; not_found: number }> };
     ":id": {
       $get: Call<CompanyDetailData>;
@@ -57,6 +60,7 @@ type Api = {
       contacts: { $post: Call<Contact> };
       contracts: { $post: Call<Contract> };
       associations: { $patch: Call<Association[]> };
+      "list-types": { $patch: Call<ListType[]> };
       calls: { $get: Call<CallLog[]>; $post: Call<CallLog> };
       relations: { $get: Call<RelationItem[]>; $post: Call<Record<string, unknown> & { id: number }> };
       summarize: { $post: Call<SummarySuggestion> };

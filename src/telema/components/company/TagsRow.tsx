@@ -1,20 +1,39 @@
 import { useState } from "react";
-import type { Association } from "../../types";
-import { api, unwrap } from "../../lib/api";
+import type { Tag } from "../../types";
 import { useMasters } from "../../lib/masters";
 import { Button, ErrorBox } from "../ui";
 
-/** 基本情報カードの「加盟協会」行。複数選択でき、この行だけで保存する（カード全体の「編集」とは別） */
-export function AssociationsRow({ companyId, selected, editable, onSaved }: { companyId: number; selected: Association[]; editable: boolean; onSaved: () => void }) {
-  const { me, associations } = useMasters();
+/**
+ * 基本情報カードの「加盟協会」「リスト種類」のような行。複数選択でき、この行だけで保存する（カード全体の「編集」とは別）。
+ * 選べるのは有効なマスタだけ。すでに付いているものは、無効になっていても外せるよう残す
+ */
+export function TagsRow({
+  label,
+  selected,
+  master,
+  editable,
+  save,
+  onSaved,
+  addHint,
+}: {
+  label: string;
+  selected: Tag[];
+  master: Tag[];
+  editable: boolean;
+  /** 選んだ id の一覧で保存する（サーバーに送る処理） */
+  save: (ids: number[]) => Promise<unknown>;
+  onSaved: () => void;
+  /** 選べるものが1つもないときの案内の続き（管理者かどうかで変える） */
+  addHint: (isAdmin: boolean) => string;
+}) {
+  const { me } = useMasters();
   const [editing, setEditing] = useState(false);
   const [ids, setIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 選べるのは有効な協会。すでに付いている協会は、無効になっていても外せるよう残す
   const keptInactive = selected.filter((a) => !a.is_active);
-  const options = [...associations.filter((a) => a.is_active), ...keptInactive.filter((a) => !associations.some((m) => m.id === a.id && m.is_active))];
+  const options = [...master.filter((a) => a.is_active), ...keptInactive.filter((a) => !master.some((m) => m.id === a.id && m.is_active))];
 
   function start() {
     setIds(selected.map((a) => a.id));
@@ -22,11 +41,11 @@ export function AssociationsRow({ companyId, selected, editable, onSaved }: { co
     setEditing(true);
   }
 
-  async function save() {
+  async function onSave() {
     setSaving(true);
     setError(null);
     try {
-      await unwrap(api.companies[":id"].associations.$patch({ param: { id: String(companyId) }, json: { association_ids: ids } }));
+      await save(ids);
       setEditing(false);
       onSaved();
     } catch (e) {
@@ -40,13 +59,13 @@ export function AssociationsRow({ companyId, selected, editable, onSaved }: { co
 
   return (
     <div className="contents">
-      <dt className="pt-1 text-xs text-slate-500">加盟協会</dt>
+      <dt className="pt-1 text-xs text-slate-500">{label}</dt>
       <dd className="min-w-0">
         {editing ? (
           <div className="space-y-2">
             {options.length === 0 ? (
               <p className="text-xs text-slate-500">
-                選べる加盟協会がありません。{me.role === "admin" ? "「設定」画面で追加できます。" : "管理者が「設定」画面で追加します。"}
+                選べる{label}がありません。{addHint(me.role === "admin")}
               </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
@@ -67,7 +86,7 @@ export function AssociationsRow({ companyId, selected, editable, onSaved }: { co
               <Button size="sm" variant="ghost" disabled={saving} onClick={() => setEditing(false)}>
                 取消
               </Button>
-              <Button size="sm" variant="primary" disabled={saving} onClick={save}>
+              <Button size="sm" variant="primary" disabled={saving} onClick={onSave}>
                 {saving ? "保存中…" : "保存"}
               </Button>
             </div>

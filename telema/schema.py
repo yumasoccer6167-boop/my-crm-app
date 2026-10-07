@@ -414,6 +414,28 @@ CREATE TABLE telema_company_associations (
 );
 CREATE INDEX telema_idx_co_assoc_assoc ON telema_company_associations(association_id);
 """,
+    # 6: リスト種類（「繋がりアプローチ」「群私幼」など、施設をどのリストで追うかの区分）。設定画面で管理者が増やせるマスタ。
+    #    1施設に複数付けられる。初期値は「繋がり」のみ
+    r"""
+CREATE TABLE telema_list_types (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  is_active   INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL DEFAULT telema_now(),
+  updated_at  TEXT NOT NULL DEFAULT telema_now()
+);
+
+CREATE TABLE telema_company_list_types (
+  company_id    INTEGER NOT NULL REFERENCES telema_companies(id),
+  list_type_id  INTEGER NOT NULL REFERENCES telema_list_types(id),
+  created_at    TEXT NOT NULL DEFAULT telema_now(),
+  PRIMARY KEY (company_id, list_type_id)
+);
+CREATE INDEX telema_idx_co_lt_lt ON telema_company_list_types(list_type_id);
+
+INSERT INTO telema_list_types (name, sort_order) VALUES ('繋がり', 10);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { STATUS_CATEGORIES } from "../shared/constants";
 import { AIUsageCard } from "../components/AIUsageCard";
 import { AssigneeMappingCard } from "../components/AssigneeMappingCard";
-import { AssociationsSettingsCard } from "../components/AssociationsSettingsCard";
+import { TagsSettingsCard } from "../components/TagsSettingsCard";
 import { PrefectureStatsCard } from "../components/PrefectureStatsCard";
 import { Button, Card, CATEGORY_STYLE, ErrorBox, inputCls, selectCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
@@ -11,7 +11,7 @@ import { useMasters } from "../lib/masters";
 const ROLE_LABEL = { admin: "管理者", manager: "マネージャー", sales: "営業" } as const;
 
 export function Settings() {
-  const { me, statuses, users, reload } = useMasters();
+  const { me, statuses, users, associations, listTypes, reload } = useMasters();
   const isAdmin = me.role === "admin";
   const [error, setError] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState({ label: "", category: "in_progress" });
@@ -98,7 +98,22 @@ export function Settings() {
         </Card>
       </div>
 
-      <AssociationsSettingsCard />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TagsSettingsCard
+          title="リスト種類"
+          description="施設をどのリストで追うかの区分です（例：繋がり、群私幼）。ここで追加した種類を、施設の「基本情報」や一覧の一括操作で選べます。無効にした種類は新しく選べなくなりますが、すでに付いている施設には残ります。"
+          items={listTypes}
+          create={(name) => unwrap(api["list-types"].$post({ json: { name } }))}
+          update={(id, patch) => unwrap(api["list-types"][":id"].$patch({ param: { id: String(id) }, json: patch }))}
+        />
+        <TagsSettingsCard
+          title="加盟協会"
+          description="ここで追加した加盟協会を、施設の「基本情報」で複数選べます。無効にした協会は新しく選べなくなりますが、すでに付いている施設には残ります。"
+          items={associations}
+          create={(name) => unwrap(api.associations.$post({ json: { name } }))}
+          update={(id, patch) => unwrap(api.associations[":id"].$patch({ param: { id: String(id) }, json: patch }))}
+        />
+      </div>
 
       {isAdmin && <AssigneeMappingCard />}
     </div>

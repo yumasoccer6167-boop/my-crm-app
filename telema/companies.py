@@ -3,7 +3,7 @@ import json
 
 from flask import jsonify, request
 
-from .common import ASSOCIATION_NAMES_COLUMN, ASSOCIATIONS_OF_COMPANY, CONTRACT_SELECT, audit, can_edit_company, company_visibility, jst_day_range
+from .common import CONTRACT_SELECT, TAG_KINDS, audit, can_edit_company, company_visibility, jst_day_range
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
@@ -61,8 +61,9 @@ def _list_query():
         q[k] = (get(k) or '')[:mx] or None
     assigned = get('assigned')
     q['assigned'] = assigned if assigned in (None, 'me', 'none') else num('assigned', True)
-    association = get('association')  # 加盟協会の id、または 'none'（加盟協会が1つも付いていない施設）
-    q['association'] = association if association in (None, 'none') else num('association', True, lo=1)
+    for kind in TAG_KINDS:  # 加盟協会・リスト種類の id、または 'none'（1つも付いていない施設）
+        tag = get(kind.key)
+        q[kind.key] = tag if tag in (None, 'none') else num(kind.key, True, lo=1)
     q['temperature'] = get('temperature')
     if q['temperature'] is not None and q['temperature'] not in TEMPERATURES:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（temperature: 選択肢にない値です）')
@@ -123,11 +124,12 @@ def list_companies():
     elif q['assigned'] is not None:
         where.append('c.assigned_user_id = %s')
         params.append(q['assigned'])
-    if q['association'] == 'none':
-        where.append('NOT EXISTS (SELECT 1 FROM telema_company_associations ca WHERE ca.company_id = c.id)')
-    elif q['association'] is not None:
-        where.append('EXISTS (SELECT 1 FROM telema_company_associations ca WHERE ca.company_id = c.id AND ca.association_id = %s)')
-        params.append(q['association'])
+    for kind in TAG_KINDS:
+        if q[kind.key] == 'none':
+            where.append(f'NOT EXISTS (SELECT 1 FROM {kind.link} l WHERE l.company_id = c.id)')
+        elif q[kind.key] is not None:
+            where.append(f'EXISTS (SELECT 1 FROM {kind.link} l WHERE l.company_id = c.id AND l.{kind.fk} = %s)')
+            params.append(q[kind.key])
     if q['rating_min'] is not None:
         where.append('c.google_rating >= %s')
         params.append(q['rating_min'])
@@ -165,7 +167,7 @@ def list_companies():
               (SELECT ct.name FROM telema_contacts ct WHERE ct.company_id = c.id AND ct.is_active = 1 AND ct.name IS NOT NULL
                  ORDER BY ct.is_decision_maker DESC, ct.updated_at DESC LIMIT 1) AS contact_name,
               c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at,
-              {ASSOCIATION_NAMES_COLUMN}
+              {', '.join(k.names_column for k in TAG_KINDS)}
             {frm} ORDER BY {order} LIMIT %s OFFSET %s''',
         [*params, q['per_page'], (q['page'] - 1) * q['per_page']],
     )
@@ -284,7 +286,7 @@ def get_company(id):
         'pending_suggestions': d.value("SELECT COUNT(*) FROM telema_ai_suggestions WHERE company_id = %s AND status = 'pending'", (id,)),
         'summary_suggestion': _summary_draft(d, id),
         'contracts': d.all(f'{CONTRACT_SELECT} WHERE ct.company_id = %s AND ct.is_active = 1 ORDER BY ct.contract_date DESC, ct.id DESC', (id,)),
-        'associations': d.all(ASSOCIATIONS_OF_COMPANY, (id,)),
+        **{kind.field: d.all(kind.of_company, (id,)) for kind in TAG_KINDS},
     })
 
 

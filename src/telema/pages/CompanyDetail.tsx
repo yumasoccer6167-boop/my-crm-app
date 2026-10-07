@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { TEMPERATURES } from "../shared/constants";
-import { AssociationsRow } from "../components/company/AssociationsRow";
 import { CallEntry } from "../components/company/CallEntry";
 import { ContactsCard } from "../components/company/ContactsCard";
 import { ContractsCard } from "../components/company/ContractsCard";
 import { FieldsCard } from "../components/company/FieldsCard";
 import { RelationsCard } from "../components/company/RelationsCard";
 import { SummaryCard } from "../components/company/SummaryCard";
+import { TagsRow } from "../components/company/TagsRow";
 import { Timeline } from "../components/company/Timeline";
 import { Button, Card, ErrorBox, Loading, selectCls, StatusBadge } from "../components/ui";
 import { api, unwrap } from "../lib/api";
@@ -18,7 +18,7 @@ import { useApi } from "../lib/useApi";
 
 export function CompanyDetail() {
   const { id = "" } = useParams();
-  const { me, statuses, users, aiAvailable } = useMasters();
+  const { me, statuses, users, aiAvailable, associations: associationMaster, listTypes: listTypeMaster } = useMasters();
   const nav = useNavigate();
   const detail = useApi(() => unwrap(api.companies[":id"].$get({ param: { id } })), [id]);
   const calls = useApi(() => unwrap(api.companies[":id"].calls.$get({ param: { id } })), [id]);
@@ -35,7 +35,7 @@ export function CompanyDetail() {
 
   if (detail.error) return <ErrorBox message={detail.error} onRetry={detail.reload} />;
   if (!detail.data) return <Loading />;
-  const { company, organization, contacts, contracts, associations, sources, field_sources, siblings, summary_suggestion } = detail.data;
+  const { company, organization, contacts, contracts, associations, list_types, sources, field_sources, siblings, summary_suggestion } = detail.data;
   const status = statuses.find((s) => s.id === company.status_id);
   const editable = me.role !== "sales" || company.assigned_user_id == null || company.assigned_user_id === me.id;
   const keyContact = contacts[0];
@@ -213,7 +213,28 @@ export function CompanyDetail() {
             sources={field_sources}
             editable={editable}
             onSaved={detail.reload}
-            extraRows={<AssociationsRow companyId={company.id} selected={associations} editable={editable} onSaved={detail.reload} />}
+            extraRows={
+              <>
+                <TagsRow
+                  label="リスト種類"
+                  selected={list_types}
+                  master={listTypeMaster}
+                  editable={editable}
+                  save={(ids) => unwrap(api.companies[":id"]["list-types"].$patch({ param: { id: String(company.id) }, json: { list_type_ids: ids } }))}
+                  onSaved={detail.reload}
+                  addHint={(isAdmin) => (isAdmin ? "「設定」画面で追加できます。" : "管理者が「設定」画面で追加します。")}
+                />
+                <TagsRow
+                  label="加盟協会"
+                  selected={associations}
+                  master={associationMaster}
+                  editable={editable}
+                  save={(ids) => unwrap(api.companies[":id"].associations.$patch({ param: { id: String(company.id) }, json: { association_ids: ids } }))}
+                  onSaved={detail.reload}
+                  addHint={(isAdmin) => (isAdmin ? "「設定」画面で追加できます。" : "管理者が「設定」画面で追加します。")}
+                />
+              </>
+            }
           />
           {organization && (
             <Card title="法人">

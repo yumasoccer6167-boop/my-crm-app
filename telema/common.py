@@ -1,4 +1,5 @@
 """機能をまたいで使う小さな部品（操作ログ・閲覧範囲・JSTの日付計算）。"""
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from .context import dumps
@@ -12,15 +13,34 @@ CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name
   FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id'''
 
 
-# 施設に付いている加盟協会（マスタ順）。無効にした協会でも付いている間は返す
-ASSOCIATIONS_OF_COMPANY = '''SELECT a.id, a.name, a.is_active
-  FROM telema_company_associations ca JOIN telema_associations a ON a.id = ca.association_id
-  WHERE ca.company_id = %s ORDER BY a.sort_order, a.id'''
+@dataclass(frozen=True)
+class TagKind:
+    """施設に複数付けられるラベルの種類（加盟協会・リスト種類）。マスタは設定画面で管理者が管理する。
+    API・一覧の列・絞り込みの名前はすべてここから決まる（実際の処理は tags.py）"""
+    key: str      # 絞り込みのパラメータ名・APIの項目名の元（association_ids / association_id）
+    slug: str     # URL（/associations, /companies/<id>/associations, /companies/bulk-associations）
+    field: str    # 施設詳細・一覧の項目名（詳細は {id,name,is_active} の配列、一覧は名前の配列）
+    label: str    # 画面に出す名前（エラーメッセージ用）
+    master: str   # マスタのテーブル
+    link: str     # 施設との紐付けテーブル
+    fk: str       # 紐付けテーブルのマスタ側の列
+
+    @property
+    def of_company(self):
+        """施設に付いているラベル（マスタ順）。無効にしたものでも付いている間は返す"""
+        return (f'SELECT m.id, m.name, m.is_active FROM {self.link} l JOIN {self.master} m ON m.id = l.{self.fk} '
+                'WHERE l.company_id = %s ORDER BY m.sort_order, m.id')
+
+    @property
+    def names_column(self):
+        """一覧の1行に載せるラベルの名前（マスタ順の配列）。施設一覧とダッシュボードで同じ列を返す"""
+        return (f"COALESCE((SELECT json_agg(m.name ORDER BY m.sort_order, m.id) FROM {self.link} l JOIN {self.master} m ON m.id = l.{self.fk} "
+                f"WHERE l.company_id = c.id), '[]'::json) AS {self.field}")
 
 
-# 一覧の1行に載せる加盟協会の名前（マスタ順の配列）。施設一覧とダッシュボードで同じ列を返す
-ASSOCIATION_NAMES_COLUMN = '''COALESCE((SELECT json_agg(a.name ORDER BY a.sort_order, a.id) FROM telema_company_associations ca
-    JOIN telema_associations a ON a.id = ca.association_id WHERE ca.company_id = c.id), '[]'::json) AS associations'''
+ASSOCIATION = TagKind('association', 'associations', 'associations', '加盟協会', 'telema_associations', 'telema_company_associations', 'association_id')
+LIST_TYPE = TagKind('list_type', 'list-types', 'list_types', 'リスト種類', 'telema_list_types', 'telema_company_list_types', 'list_type_id')
+TAG_KINDS = (ASSOCIATION, LIST_TYPE)
 
 
 def audit(db, user_id, action, entity_type, entity_id, before=None, after=None):
