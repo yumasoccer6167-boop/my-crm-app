@@ -5,7 +5,7 @@ from .common import audit, can_edit_company
 from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found
 from .routes import bp
-from .validate import Int, IsoDatetime, Str, now_iso, parse, parse_id
+from .validate import Enum, Int, IsoDatetime, Str, now_iso, parse, parse_id
 
 CALL_BODY = {
     'raw_note': Str(max=5000, trim=False, default=''),
@@ -18,7 +18,13 @@ CALL_BODY = {
     'next_action': Str(max=500, nullable=True, optional=True),
     # どの部署の記録か（営業部・制作部・CS など。ユーザーの施設でタイムラインを部署別に見るため）。省略・null は未分類
     'section_id': Int(nullable=True, optional=True),
+    # 記録の種類。省略は架電。訪問（visit）のときは方法（visit＝訪問／zoom）が必須
+    'record_type': Enum(['call', 'visit'], default='call'),
+    'visit_method': Enum(['visit', 'zoom'], nullable=True, optional=True),
 }
+
+# 訪問の記録に付けられない項目（架電の結果・次回架電・電話番号は架電のためのもの）
+_CALL_ONLY = {'result_status_id': '結果', 'next_call_at': '次回架電', 'next_action': '次回アクション', 'phone_number': '電話番号'}
 
 CALL_SELECT = '''SELECT cl.*, ct.name AS contact_name, u.display_name AS user_name, s.label AS result_label, s.category AS result_category,
     sec.name AS section_name
@@ -58,15 +64,30 @@ def create_call(id):
         raise forbidden()
 
     _check_section(d, b.get('section_id'))
+    is_visit = b['record_type'] == 'visit'
+    if is_visit:
+        if not b.get('visit_method'):
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 訪問かZoomを選んでください）')
+        sent = [label for k, label in _CALL_ONLY.items() if b.get(k) is not None]
+        if sent:
+            raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（訪問の記録には{"・".join(sent)}は付けられません）')
+    elif b.get('visit_method') is not None:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 架電の記録には付けられません）')
     called_at = b.get('called_at') or now_iso()
     call_id = d.value(
-        '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
-        (id, b.get('contact_id'), user['id'], called_at, b.get('phone_number') or company['phone'], b.get('result_status_id'),
-         b['raw_note'], 'pending' if b['raw_note'].strip() else 'skipped', b.get('section_id')),
+        '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id,
+                                          record_type, visit_method)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        (id, b.get('contact_id'), user['id'], called_at, None if is_visit else (b.get('phone_number') or company['phone']), b.get('result_status_id'),
+         b['raw_note'], 'pending' if b['raw_note'].strip() and not is_visit else 'skipped', b.get('section_id'),
+         b['record_type'], b.get('visit_method')),
     )
     # 履歴を先に確定させる（この後の会社更新で失敗しても架電メモは残す）
     d.commit()
+    if is_visit:
+        # 訪問は施設の「現在の状態」（ステータス・次回架電・架電件数・最終架電日時・担当）を変えない
+        audit(d, user['id'], 'create', 'call_log', call_id, None, {'company_id': id, **b})
+        return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (call_id,))), 201
 
     # 会社の「現在の状態」を更新（利用者が入力した値のみ）
     sets = [
@@ -95,6 +116,7 @@ CALL_PATCH = {
     'result_status_id': Int(nullable=True),
     'contact_id': Int(nullable=True),
     'section_id': Int(nullable=True),
+    'visit_method': Enum(['visit', 'zoom']),
 }
 
 # メモを直したら、古いメモから作ったAI整理は内容と食い違うので消して再整理できる状態に戻す
@@ -102,10 +124,10 @@ _AI_RESET = ('ai_error', 'ai_model', 'ai_summary', 'ai_extracted_json', 'ai_next
 
 
 def _recalc_company_calls(d, company_id):
-    """件数・最終架電日時を有効な履歴から再計算（無効化・日時の修正で使う）"""
+    """件数・最終架電日時を有効な架電履歴から再計算（無効化・日時の修正で使う。訪問は数えない）"""
     d.run(
-        '''UPDATE telema_companies SET call_count = (SELECT COUNT(*) FROM telema_call_logs WHERE company_id = %(cid)s AND is_active = 1),
-             last_called_at = (SELECT MAX(called_at) FROM telema_call_logs WHERE company_id = %(cid)s AND is_active = 1),
+        '''UPDATE telema_companies SET call_count = (SELECT COUNT(*) FROM telema_call_logs WHERE company_id = %(cid)s AND is_active = 1 AND record_type = 'call'),
+             last_called_at = (SELECT MAX(called_at) FROM telema_call_logs WHERE company_id = %(cid)s AND is_active = 1 AND record_type = 'call'),
              updated_at = telema_now() WHERE id = %(cid)s''',
         {'cid': company_id},
     )
@@ -134,6 +156,11 @@ def update_call(id):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（contact_id: この施設の担当者ではありません）')
     if 'section_id' in b:
         _check_section(d, b['section_id'], call['section_id'])
+    # 記録の種類は変えられない。方法（訪問／Zoom）は訪問だけ、結果は架電だけ
+    if call['record_type'] == 'visit' and b.get('result_status_id') is not None:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には結果は付けられません）')
+    if call['record_type'] == 'call' and 'visit_method' in b:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 架電の記録には付けられません）')
 
     changes = {k: v for k, v in b.items() if call[k] != v}
     if not changes:
@@ -147,7 +174,7 @@ def update_call(id):
         f'UPDATE telema_call_logs SET {", ".join(f"{k} = %s" for k in sets)}, updated_at = telema_now() WHERE id = %s',
         [*sets.values(), id],
     )
-    if 'called_at' in changes:
+    if 'called_at' in changes and call['record_type'] == 'call':
         _recalc_company_calls(d, call['company_id'])
     audit(d, user['id'], 'update', 'call_log', id, {k: call[k] for k in changes}, changes)
     return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (id,)))
@@ -166,6 +193,7 @@ def deactivate_call(id):
     if user['role'] == 'sales' and call['user_id'] != user['id']:
         raise forbidden()
     d.run('UPDATE telema_call_logs SET is_active = 0, updated_at = telema_now() WHERE id = %s', (id,))
-    _recalc_company_calls(d, call['company_id'])
+    if call['record_type'] == 'call':
+        _recalc_company_calls(d, call['company_id'])
     audit(d, user['id'], 'deactivate', 'call_log', id, call)
     return jsonify({'ok': True})

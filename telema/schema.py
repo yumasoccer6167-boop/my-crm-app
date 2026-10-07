@@ -452,6 +452,13 @@ INSERT INTO telema_sections (name, sort_order) VALUES ('営業部', 10), ('制�
 ALTER TABLE telema_call_logs ADD COLUMN section_id INTEGER REFERENCES telema_sections(id);
 CREATE INDEX telema_idx_calls_section ON telema_call_logs(company_id, section_id) WHERE is_active = 1;
 """,
+    # 8: 記録の種類。架電（call）と訪問（visit）を同じタイムラインで扱う。訪問は方法（訪問 visit／zoom）を持つ。
+    #    既存の記録はすべて架電のまま。訪問は架電の件数・最終架電日時・施設のステータスには影響しない
+    r"""
+ALTER TABLE telema_call_logs ADD COLUMN record_type TEXT NOT NULL DEFAULT 'call' CHECK (record_type IN ('call', 'visit'));
+ALTER TABLE telema_call_logs ADD COLUMN visit_method TEXT CHECK (visit_method IN ('visit', 'zoom'));
+ALTER TABLE telema_call_logs ADD CONSTRAINT telema_calls_visit_method CHECK ((record_type = 'visit') = (visit_method IS NOT NULL));
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

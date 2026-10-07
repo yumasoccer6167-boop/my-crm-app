@@ -65,7 +65,7 @@ def get_dashboard():
     )
     calls = d.first(
         '''SELECT COUNT(*) AS calls_today, COUNT(DISTINCT cl.company_id) AS companies_called
-           FROM telema_call_logs cl WHERE cl.is_active = 1 AND cl.called_at >= %s AND cl.called_at < %s AND cl.user_id = %s''',
+           FROM telema_call_logs cl WHERE cl.is_active = 1 AND cl.record_type = 'call' AND cl.called_at >= %s AND cl.called_at < %s AND cl.user_id = %s''',
         (today_start, today_end, user['id']),
     )
     return jsonify({
@@ -103,7 +103,7 @@ def get_calls_monthly():
            FROM telema_call_logs cl
            LEFT JOIN telema_call_statuses s ON s.id = cl.result_status_id
            LEFT JOIN users u ON u.id = cl.user_id
-           WHERE cl.is_active = 1 AND cl.called_at >= %s AND (%s OR cl.user_id = %s)
+           WHERE cl.is_active = 1 AND cl.record_type = 'call' AND cl.called_at >= %s AND (%s OR cl.user_id = %s)
            GROUP BY 1, cl.user_id, u.display_name
            ORDER BY 1, u.display_name''',
         (jst_month_range(months[0])[1], user['role'] != 'sales', user['id']),

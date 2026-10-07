@@ -170,13 +170,13 @@ export function CompanyDetail() {
           {editable ? (
             <CallEntry companyId={company.id} phone={phone} contacts={contacts} isUser={!!company.is_user} onSaved={reloadAll} />
           ) : (
-            <div className="rounded-md bg-slate-100 p-3 text-sm text-slate-600">他の営業担当の企業のため、架電登録はできません</div>
+            <div className="rounded-md bg-slate-100 p-3 text-sm text-slate-600">他の営業担当の企業のため、架電・訪問の登録はできません</div>
           )}
           <SummaryCard
             companyId={company.id}
             summary={(company.summary as string | null) ?? null}
             draft={summary_suggestion}
-            callCount={calls.data?.length ?? 0}
+            callCount={calls.data?.filter((c) => c.record_type === "call").length ?? 0}
             editable={editable}
             aiAvailable={aiAvailable}
             onChanged={() => void detail.reload()}

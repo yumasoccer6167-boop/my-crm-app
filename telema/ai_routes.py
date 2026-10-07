@@ -25,9 +25,11 @@ def analyze(id):
     id = parse_id(id)
     user = current_user()
     d = db()
-    call = d.first('SELECT id, company_id, raw_note, called_at, user_id FROM telema_call_logs WHERE id = %s AND is_active = 1', (id,))
+    call = d.first('SELECT id, company_id, raw_note, called_at, user_id, record_type FROM telema_call_logs WHERE id = %s AND is_active = 1', (id,))
     if not call:
         raise not_found('架電履歴')
+    if call['record_type'] != 'call':
+        raise ApiError(400, 'validation_error', '訪問の記録はAIで整理できません')
     vis_sql, vis_params = company_visibility(user)
     company = d.first(
         f'SELECT c.id, c.company_name, c.assigned_user_id FROM telema_companies c WHERE c.id = %s AND c.is_active = 1 AND {vis_sql}',
@@ -41,7 +43,7 @@ def analyze(id):
 
     history = d.all(
         '''SELECT called_at, ai_summary AS summary, raw_note FROM telema_call_logs
-           WHERE company_id = %s AND id <> %s AND is_active = 1 ORDER BY called_at DESC LIMIT 5''', (call['company_id'], id))
+           WHERE company_id = %s AND id <> %s AND is_active = 1 AND record_type = 'call' ORDER BY called_at DESC LIMIT 5''', (call['company_id'], id))
     labels = [r['label'] for r in d.all(
         "SELECT label FROM telema_call_statuses WHERE is_active = 1 AND category <> 'not_started' ORDER BY sort_order")]
 
@@ -91,7 +93,7 @@ def summarize(id):
     calls = d.all(
         '''SELECT cl.called_at, u.display_name AS user_name, s.label AS result_label, cl.ai_summary AS summary, cl.raw_note
            FROM telema_call_logs cl LEFT JOIN users u ON u.id = cl.user_id LEFT JOIN telema_call_statuses s ON s.id = cl.result_status_id
-           WHERE cl.company_id = %s AND cl.is_active = 1 AND (cl.raw_note <> '' OR cl.ai_summary IS NOT NULL)
+           WHERE cl.company_id = %s AND cl.is_active = 1 AND cl.record_type = 'call' AND (cl.raw_note <> '' OR cl.ai_summary IS NOT NULL)
            ORDER BY cl.called_at DESC, cl.id DESC LIMIT %s''', (id, SUMMARY_CALL_LIMIT))[::-1]
     if not calls:
         raise ApiError(400, 'validation_error', '架電履歴がまだ無いため要約できません')

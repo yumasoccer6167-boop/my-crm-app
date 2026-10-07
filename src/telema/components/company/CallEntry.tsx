@@ -1,10 +1,11 @@
 import { useState } from "react";
-import type { Contact } from "../../types";
+import type { Contact, RecordType, VisitMethod } from "../../types";
 import type { CallExtraction } from "../../types";
 import { AIResult } from "./AIResult";
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
+import { VISIT_METHODS } from "../../lib/record-kind";
 import { defaultSection, saveLastSection } from "../../lib/section-pref";
 import { Button, Card, CATEGORY_STYLE, ErrorBox, inputCls } from "../ui";
 
@@ -16,9 +17,15 @@ const QUICK = [
   { kind: "month", label: "1か月後" },
 ] as const;
 
+const KINDS: { value: RecordType; label: string }[] = [
+  { value: "call", label: "架電結果" },
+  { value: "visit", label: "訪問記録" },
+];
+
 /**
- * 架電結果の入力。メモだけでも保存できる。
+ * 架電結果・訪問記録の入力。メモだけでも保存できる。
  * 保存はAIの成否と無関係に先に行う（AI整理はSTEP 10で保存後に実行）。
+ * 訪問記録は「訪問／Zoom」の方法と日時を記録する。施設のステータス・次回架電・架電件数は変えない。
  */
 export function CallEntry({
   companyId,
@@ -36,6 +43,9 @@ export function CallEntry({
 }) {
   const { statuses, sections, aiAvailable } = useMasters();
   const [sectionId, setSectionId] = useState<number | null>(() => defaultSection(sections));
+  const [kind, setKind] = useState<RecordType>("call");
+  const [visitMethod, setVisitMethod] = useState<VisitMethod>("visit");
+  const [visitedAt, setVisitedAt] = useState(() => toLocalInput(new Date().toISOString()));
   const [note, setNote] = useState("");
   const [statusId, setStatusId] = useState<number | null>(null);
   const [nextCall, setNextCall] = useState("");
@@ -57,36 +67,38 @@ export function CallEntry({
   }
 
   const active = statuses.filter((s) => s.is_active && s.category !== "not_started");
-  const canSave = note.trim() !== "" || statusId !== null;
+  const isVisit = kind === "visit";
+  const canSave = isVisit ? note.trim() !== "" && !!fromLocalInput(visitedAt) : note.trim() !== "" || statusId !== null;
 
   async function save(withAI = false) {
     setSaving(true);
     setError(null);
     setAiState(null);
     try {
+      const common = {
+        raw_note: note,
+        contact_id: contactId,
+        // 部署はユーザーの施設だけ。それ以外は未分類のまま（後で施設がユーザーになったとき、未分類として見られる）
+        section_id: isUser ? sectionId : undefined,
+      };
       const saved = await unwrap(
         api.companies[":id"].calls.$post({
           param: { id: String(companyId) },
-          json: {
-            raw_note: note,
-            result_status_id: statusId ?? undefined,
-            contact_id: contactId,
-            phone_number: phone,
-            next_call_at: nextCall ? fromLocalInput(nextCall) : undefined,
-            // 部署はユーザーの施設だけ。それ以外は未分類のまま（後で施設がユーザーになったとき、未分類として見られる）
-            section_id: isUser ? sectionId : undefined,
-          },
+          json: isVisit
+            ? { ...common, record_type: "visit", visit_method: visitMethod, called_at: fromLocalInput(visitedAt) ?? undefined }
+            : { ...common, result_status_id: statusId ?? undefined, phone_number: phone, next_call_at: nextCall ? fromLocalInput(nextCall) : undefined },
         }),
       );
       if (isUser) saveLastSection(sectionId);
       setNote("");
       setStatusId(null);
       setNextCall("");
+      setVisitedAt(toLocalInput(new Date().toISOString()));
       setSavedMsg("保存しました");
       setTimeout(() => setSavedMsg(null), 2500);
       onSaved();
       // 保存が確定してからAIを呼ぶ（AIが失敗しても履歴は残る）
-      if (withAI && note.trim()) void runAI(saved.id);
+      if (withAI && !isVisit && note.trim()) void runAI(saved.id);
     } catch (e) {
       // 入力内容は消さずに残す
       setError(e instanceof Error ? e.message : String(e));
@@ -96,13 +108,28 @@ export function CallEntry({
   }
 
   return (
-    <Card title="架電結果を入力">
+    <Card title={isVisit ? "訪問記録を入力" : "架電結果を入力"}>
       <div className="space-y-3">
+        <div role="tablist" aria-label="記録の種類" className="inline-flex rounded-md bg-slate-100 p-0.5">
+          {KINDS.map((k) => (
+            <button
+              key={k.value}
+              type="button"
+              role="tab"
+              aria-selected={kind === k.value}
+              onClick={() => setKind(k.value)}
+              className={`rounded px-3 py-1 text-sm font-medium ${kind === k.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={4}
-          placeholder="例）担当者不在。受付の方から15時以降ならつながりやすいと言われた。"
+          placeholder={isVisit ? "例）園長と面談。来月のイベントでの活用を提案した。" : "例）担当者不在。受付の方から15時以降ならつながりやすいと言われた。"}
           className={`${inputCls} resize-y leading-relaxed`}
         />
 
@@ -127,6 +154,31 @@ export function CallEntry({
           </div>
         )}
 
+        {isVisit && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="mb-1 text-xs text-slate-500">訪問の方法</div>
+              <div className="flex gap-1.5">
+                {VISIT_METHODS.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setVisitMethod(m.value)}
+                    className={`rounded px-3 py-1 text-sm font-medium ring-1 ring-inset ${visitMethod === m.value ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-500">訪問日時</div>
+              <input type="datetime-local" value={visitedAt} onChange={(e) => setVisitedAt(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+        )}
+
+        {!isVisit && (
         <div>
           <div className="mb-1 text-xs text-slate-500">結果</div>
           <div className="flex flex-wrap gap-1.5">
@@ -142,8 +194,10 @@ export function CallEntry({
             ))}
           </div>
         </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
+          {!isVisit && (
           <div>
             <div className="mb-1 text-xs text-slate-500">次回架電</div>
             <div className="mb-1.5 flex flex-wrap gap-1">
@@ -155,6 +209,7 @@ export function CallEntry({
             </div>
             <input type="datetime-local" value={nextCall} onChange={(e) => setNextCall(e.target.value)} className={inputCls} />
           </div>
+          )}
           {contacts.length > 0 && (
             <div>
               <div className="mb-1 text-xs text-slate-500">話した相手</div>
@@ -174,17 +229,25 @@ export function CallEntry({
 
         <div className="flex items-center justify-end gap-2">
           {savedMsg && <span className="text-sm text-emerald-700">{savedMsg}</span>}
-          <Button disabled={!canSave || saving} onClick={() => save(false)}>
-            保存のみ
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!note.trim() || saving || !aiAvailable}
-            title={aiAvailable ? undefined : "AIが設定されていません（管理者がAPIキーを登録すると使えます）"}
-            onClick={() => save(true)}
-          >
-            {saving ? "保存中…" : "保存してAIで整理"}
-          </Button>
+          {isVisit ? (
+            <Button variant="primary" disabled={!canSave || saving} onClick={() => save(false)}>
+              {saving ? "保存中…" : "訪問を保存"}
+            </Button>
+          ) : (
+            <>
+              <Button disabled={!canSave || saving} onClick={() => save(false)}>
+                保存のみ
+              </Button>
+              <Button
+                variant="primary"
+                disabled={!note.trim() || saving || !aiAvailable}
+                title={aiAvailable ? undefined : "AIが設定されていません（管理者がAPIキーを登録すると使えます）"}
+                onClick={() => save(true)}
+              >
+                {saving ? "保存中…" : "保存してAIで整理"}
+              </Button>
+            </>
+          )}
         </div>
 
         {aiState?.running && <div className="text-sm text-indigo-700">AIで整理しています…（メモは保存済みです）</div>}

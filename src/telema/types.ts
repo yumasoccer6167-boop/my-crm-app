@@ -85,8 +85,15 @@ export type Contact = {
 
 export type FieldSource = { field: string; source: string; source_ref: string | null; confidence: number | null; updated_at: string };
 
+/** 記録の種類。架電（call）か訪問（visit）。訪問は方法（visit＝訪問／zoom）を持つ */
+export type RecordType = "call" | "visit";
+export type VisitMethod = "visit" | "zoom";
+
+/** 架電または訪問の記録（タイムラインの1件）。訪問は結果・次回架電・AI整理を持たない */
 export type CallLog = {
   id: number;
+  record_type: RecordType;
+  visit_method: VisitMethod | null;
   company_id: number;
   contact_id: number | null;
   contact_name: string | null;
