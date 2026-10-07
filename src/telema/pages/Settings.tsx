@@ -11,7 +11,7 @@ import { useMasters } from "../lib/masters";
 const ROLE_LABEL = { admin: "管理者", manager: "マネージャー", sales: "営業" } as const;
 
 export function Settings() {
-  const { me, statuses, users, associations, listTypes, reload } = useMasters();
+  const { me, statuses, users, associations, listTypes, sections, reload } = useMasters();
   const isAdmin = me.role === "admin";
   const [error, setError] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState({ label: "", category: "in_progress" });
@@ -114,6 +114,14 @@ export function Settings() {
           update={(id, patch) => unwrap(api.associations[":id"].$patch({ param: { id: String(id) }, json: patch }))}
         />
       </div>
+
+      <TagsSettingsCard
+        title="部署"
+        description="タイムラインの記録に付ける部署です（例：営業部、制作部、CS）。ユーザーの施設では、タイムラインを部署ごとに切り替えて見られます。無効にした部署は新しく選べなくなりますが、すでに付いている記録には残ります。"
+        items={sections}
+        create={(name) => unwrap(api.sections.$post({ json: { name } }))}
+        update={(id, patch) => unwrap(api.sections[":id"].$patch({ param: { id: String(id) }, json: patch }))}
+      />
 
       {isAdmin && <AssigneeMappingCard />}
     </div>

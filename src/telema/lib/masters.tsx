@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { Association, CallStatus, ListType, UserRow } from "../types";
+import type { Association, CallStatus, ListType, Section, UserRow } from "../types";
 import type { CurrentUser } from "../types";
 import { api, unwrap } from "./api";
 import { useApi } from "./useApi";
@@ -11,6 +11,7 @@ type Masters = {
   users: UserRow[];
   associations: Association[];
   listTypes: ListType[];
+  sections: Section[];
   aiAvailable: boolean;
   reload: () => void;
 };
@@ -26,6 +27,7 @@ export function MastersProvider({ children }: { children: ReactNode }) {
         unwrap(api.ai.status.$get()),
         unwrap(api.associations.$get()),
         unwrap(api["list-types"].$get()),
+        unwrap(api.sections.$get()),
       ]),
     [],
   );
@@ -37,8 +39,8 @@ export function MastersProvider({ children }: { children: ReactNode }) {
     );
   }
   if (!data) return <Loading />;
-  const [me, statuses, users, ai, associations, listTypes] = data;
-  return <Ctx.Provider value={{ me, statuses, users, associations, listTypes, aiAvailable: ai.available, reload }}>{children}</Ctx.Provider>;
+  const [me, statuses, users, ai, associations, listTypes, sections] = data;
+  return <Ctx.Provider value={{ me, statuses, users, associations, listTypes, sections, aiAvailable: ai.available, reload }}>{children}</Ctx.Provider>;
 }
 
 export function useMasters(): Masters {

@@ -1,8 +1,9 @@
-"""施設に複数付けられるラベル（加盟協会・リスト種類）のAPI。
-マスタ（設定画面で管理者が追加・名称変更・無効化）／施設ごとの付け外し／一括割り振りを、種類ごと（common.TAG_KINDS）に同じ形で作る。"""
+"""設定画面で管理者が増やせるマスタ（加盟協会・リスト種類・部署）のAPI。
+ * マスタ（追加・名称変更・有効/無効）は種類ごと（common.MASTER_KINDS）に同じ形で作る
+ * 施設に複数付けられるラベル（加盟協会・リスト種類。common.TAG_KINDS）は、さらに施設ごとの付け外しと一括割り振りも持つ"""
 from flask import jsonify
 
-from .common import TAG_KINDS, TagKind, audit, can_edit_company
+from .common import MASTER_KINDS, TAG_KINDS, MasterKind, TagKind, audit, can_edit_company
 from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .routes import bp
@@ -15,12 +16,9 @@ MASTER_BODY = {
 }
 
 
-def register(kind: TagKind):
-    ids_key, id_key = f'{kind.key}_ids', f'{kind.key}_id'
-    label, master, link, fk = kind.label, kind.master, kind.link, kind.fk
-    audit_master, audit_link = kind.key, f'company_{kind.slug.replace("-", "_")}'
+def register_master(kind: MasterKind):
+    label, master, audit_master = kind.label, kind.master, kind.key
 
-    # ---- マスタ ----
     def list_master():
         return jsonify(db().all(f'SELECT * FROM {master} ORDER BY sort_order, id'))
 
@@ -56,7 +54,18 @@ def register(kind: TagKind):
         audit(d, current_user()['id'], 'update', audit_master, id, before, row)
         return jsonify(row)
 
-    # ---- 施設ごと ----
+    k = kind.key
+    bp.add_url_rule(f'/{kind.slug}', f'{k}_master_list', list_master, methods=['GET'])
+    bp.add_url_rule(f'/{kind.slug}', f'{k}_master_create', create_master, methods=['POST'])
+    bp.add_url_rule(f'/{kind.slug}/<id>', f'{k}_master_update', update_master, methods=['PATCH'])
+
+
+def register(kind: TagKind):
+    """施設ごとの付け外し・一括割り振り（マスタ本体は register_master）"""
+    ids_key, id_key = f'{kind.key}_ids', f'{kind.key}_id'
+    label, master, link, fk = kind.label, kind.master, kind.link, kind.fk
+    audit_link = f'company_{kind.slug.replace("-", "_")}'
+
     def set_for_company(id):
         """施設のラベルを、送られた一覧に置き換える。無効にしたものでも、すでに付いているものは外すまで残る
         （新しく付けられるのは有効なものだけ）"""
@@ -131,12 +140,11 @@ def register(kind: TagKind):
         return jsonify({'updated': updated, 'unchanged': len(companies) - updated, 'not_found': len(ids) - len(companies)})
 
     k = kind.key
-    bp.add_url_rule(f'/{kind.slug}', f'{k}_master_list', list_master, methods=['GET'])
-    bp.add_url_rule(f'/{kind.slug}', f'{k}_master_create', create_master, methods=['POST'])
-    bp.add_url_rule(f'/{kind.slug}/<id>', f'{k}_master_update', update_master, methods=['PATCH'])
     bp.add_url_rule(f'/companies/<id>/{kind.slug}', f'{k}_set_for_company', set_for_company, methods=['PATCH'])
     bp.add_url_rule(f'/companies/bulk-{kind.slug}', f'{k}_bulk', bulk, methods=['POST'])
 
 
+for _kind in MASTER_KINDS:
+    register_master(_kind)
 for _kind in TAG_KINDS:
     register(_kind)

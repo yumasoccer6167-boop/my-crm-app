@@ -97,6 +97,9 @@ export type CallLog = {
   result_status_id: number | null;
   result_label: string | null;
   result_category: string | null;
+  /** どの部署の記録か（営業部・制作部・CS など）。null は未分類 */
+  section_id: number | null;
+  section_name: string | null;
   raw_note: string;
   input_method: string;
   ai_status: string;
@@ -129,6 +132,8 @@ export type Tag = { id: number; name: string; is_active: number; sort_order?: nu
 export type Association = Tag;
 /** リスト種類（「繋がり」「群私幼」など。設定画面で管理者が増やせるマスタ） */
 export type ListType = Tag;
+/** 部署（営業部・制作部・CS など。設定画面で管理者が増やせるマスタ。タイムラインの記録ごとに付ける） */
+export type Section = Tag;
 
 /** 架電メモから抽出する項目（仕様書 11章＋つながりやすい時間・推奨ステータス） */
 export type CallExtraction = {

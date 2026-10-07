@@ -4,9 +4,9 @@ import {
   Home, Users, PenTool, Plus, Search, Edit, X, Phone, MapPin, Save,
   Trash2, Package, Settings, CheckCircle, Filter, Mail, Globe,
   ChevronDown, Star, Camera, Upload, Download, Copy, BarChart,
-  Bot, Sparkles, Send, FileText, ClipboardList, CalendarDays,
+  Sparkles, FileText, ClipboardList, CalendarDays,
   ChevronLeft, ChevronRight, CheckSquare, Square, Mic, LayoutGrid, List,
-  Heart, Video, MessageCircle, BookOpen, Briefcase, AlertTriangle, PieChart, User, Link2, Target, XCircle, PhoneCall
+  Heart, Briefcase, AlertTriangle, PieChart, User, Link2, Target, XCircle, PhoneCall
 } from 'lucide-react';
 
 // 育てるテレマリスト（src/telema）。開いたときだけ読み込む
@@ -20,15 +20,6 @@ const initialProducts = [{ id: 1, name: 'SP-MEO' }, { id: 2, name: 'SP' }];
 const initialAssociationTypes = [];
 const initialIndustryTypes = [
   { id: 1, name: '幼稚園' }, { id: 2, name: 'こども園' }, { id: 3, name: '保育園' }, { id: 4, name: '介護' }, { id: 5, name: '福祉' },
-];
-const initialCaseStudies = [];
-const initialKnowledgeArticles = [];
-const initialKnowledgeTags = [
-  { id: 1, name: 'テレアポ' },
-  { id: 2, name: '営業' },
-  { id: 3, name: '契約後の流れ' },
-  { id: 4, name: '商材' },
-  { id: 5, name: '制度・ルール' },
 ];
 const initialDepartments = [
   { id: 1, name: 'WEB営業　東京　１課' },
@@ -3750,89 +3741,6 @@ function CalendarView({ records, customers, members, departments, currentUser, i
   );
 }
 
-// ---------- AIアシスタント（ローカル集計ベース） ----------
-function answerLocally(question, customers, records) {
-  const q = question.trim();
-  const qLower = q.toLowerCase();
-
-  // 特定の顧客名にヒットするか
-  const hit = customers.find(c => q.includes(c.enName) || (c.gakuenName && q.includes(c.gakuenName)));
-  if (hit) {
-    const hist = records.filter(r => r.customerId === hit.id).slice().reverse();
-    if (hist.length === 0) return `${hit.enName || hit.gakuenName} の活動記録はまだありません。`;
-    const latest = hist[0];
-    return `${hit.enName || hit.gakuenName} の最新の状況:\n・${latest.date} ${latest.type}${latest.flag ? `（${latest.flag}）` : ''}\n・これまでの記録件数: ${hist.length}件\n${latest.memo ? `・メモ: ${latest.memo}` : ''}`;
-  }
-
-  const today = new Date().toISOString().substring(0, 10);
-  if (q.includes('再コール')) {
-    const overdue = countOverdueRecalls(records);
-    const pending = records.filter(r => r.flag === '再コール' && !r.recallDone).length;
-    return `再コールの状況:\n・未対応: ${pending}件\n・うち時間超過: ${overdue}件\n左メニューの「再コール」から一覧を確認できます。`;
-  }
-
-  if (q.includes('今日')) {
-    const todays = records.filter(r => r.date === today);
-    if (todays.length === 0) return '本日の活動記録はまだありません。';
-    return `本日の活動（${todays.length}件）:\n` + todays.map(r => `・${r.customerName || '不明'}：${r.type}${r.flag ? `（${r.flag}）` : ''}`).join('\n');
-  }
-
-  if (q.includes('今月') || q.includes('実績')) {
-    const month = today.substring(0, 7);
-    const monthly = records.filter(r => r.date?.startsWith(month));
-    const byType = {};
-    monthly.forEach(r => { byType[r.type] = (byType[r.type] || 0) + 1; });
-    if (monthly.length === 0) return '今月はまだ記録がありません。';
-    return `今月の実績（${month}）:\n` + Object.entries(byType).map(([t, n]) => `・${t}: ${n}件`).join('\n');
-  }
-
-  if (q.includes('受注')) {
-    const orders = records.filter(r => r.flag === '受注' || r.flag === 'ユーザー');
-    if (orders.length === 0) return 'まだ受注記録がありません。';
-    return `受注件数: ${orders.length}件\n直近の受注:\n` + orders.slice(-5).reverse().map(r => `・${r.customerName || '不明'}（${r.date}）`).join('\n');
-  }
-
-  return 'ローカル集計アシスタントです。「〇〇園の状況は？」「今日の活動を要約して」「今月の実績は？」「受注状況は？」「再コールは？」のように聞いてみてください。\n※本格的なAI（文章生成など）を使うには、APIキーを安全に扱うための簡単なバックエンドを別途追加する必要があります。ご希望であれば実装をお手伝いします。';
-}
-
-function AIAssistantView({ customers, records }) {
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: 'こんにちは。顧客データや活動記録について質問してください（例：「〇〇園の状況は？」「今月の実績は？」）。' },
-  ]);
-  const [input, setInput] = useState('');
-
-  const send = () => {
-    if (!input.trim()) return;
-    const question = input.trim();
-    const answer = answerLocally(question, customers, records);
-    setMessages(prev => [...prev, { role: 'user', text: question }, { role: 'ai', text: answer }]);
-    setInput('');
-  };
-
-  return (
-    <div className="max-w-2xl flex flex-col h-[70vh] bg-white rounded-xl border border-slate-100 shadow-sm">
-      <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
-        <Bot className="w-5 h-5 text-indigo-600" />
-        <p className="text-sm font-bold text-slate-700">ローカル集計アシスタント</p>
-      </div>
-      <div className="flex-1 overflow-y-auto p-5 space-y-3">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap ${
-              m.role === 'user' ? 'bg-teal-600 text-white rounded-br-sm' : 'bg-slate-100 text-slate-700 rounded-bl-sm'
-            }`}>{m.text}</div>
-          </div>
-        ))}
-      </div>
-      <div className="p-3 border-t border-slate-100 flex gap-2">
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()}
-          placeholder="質問を入力..." className="flex-1 px-3 py-2.5 border border-slate-200 rounded-lg text-sm" />
-        <button onClick={send} className="p-2.5 bg-teal-600 text-white rounded-lg"><Send className="w-4 h-4" /></button>
-      </div>
-    </div>
-  );
-}
-
 // ---------- Googleカレンダー連携状況 ----------
 function GoogleCalendarStatusCard({ token }) {
   const [status, setStatus] = useState(null); // null=読み込み中, true/false
@@ -3882,15 +3790,13 @@ const PERMISSION_DEFS = [
   { key: 'viewSettings', label: '設定・管理ページの閲覧' },
   { key: 'deleteCustomer', label: '顧客・記録の削除' },
   { key: 'bulkEdit', label: '顧客の一括編集' },
-  { key: 'editCaseStudies', label: 'ユーザー管理（導入事例）の編集' },
-  { key: 'editKnowledge', label: '営業ノウハウの編集' },
 ];
 const initialRolePermissions = {
-  executive: { viewSettings: true, deleteCustomer: true, bulkEdit: true, editCaseStudies: true, editKnowledge: true },
-  emgr: { viewSettings: false, deleteCustomer: true, bulkEdit: true, editCaseStudies: true, editKnowledge: true },
-  mgr: { viewSettings: false, deleteCustomer: true, bulkEdit: false, editCaseStudies: true, editKnowledge: true },
-  smgr: { viewSettings: false, deleteCustomer: false, bulkEdit: false, editCaseStudies: false, editKnowledge: false },
-  general: { viewSettings: false, deleteCustomer: false, bulkEdit: false, editCaseStudies: false, editKnowledge: false },
+  executive: { viewSettings: true, deleteCustomer: true, bulkEdit: true },
+  emgr: { viewSettings: false, deleteCustomer: true, bulkEdit: true },
+  mgr: { viewSettings: false, deleteCustomer: true, bulkEdit: false },
+  smgr: { viewSettings: false, deleteCustomer: false, bulkEdit: false },
+  general: { viewSettings: false, deleteCustomer: false, bulkEdit: false },
 };
 function hasPermission(role, key, rolePermissions) {
   if (role === 'owner') return true;
@@ -4047,641 +3953,6 @@ function MembersManagement({ token, currentUser, departments, showAlert, showCon
   );
 }
 
-// ---------- ユーザー管理（受注顧客一覧・表形式） ----------
-// 顧客リストで受注（受注／ユーザー／過去受注記録あり）になった顧客を自動で表に並べる。
-const ORDER_FLAGS = ['受注', 'ユーザー', '過去受注記録あり'];
-
-// 住所から地区（◯区／◯市）をざっくり抽出する
-function extractDistrict(address) {
-  if (!address) return '';
-  const kuMatch = address.match(/([一-龥ぁ-んァ-ヶ]{1,8}区)/);
-  if (kuMatch) return kuMatch[1];
-  const shiMatch = address.match(/([一-龥ぁ-んァ-ヶ]{1,8}市)(?![一-龥]*区)/);
-  if (shiMatch) return shiMatch[1];
-  return '';
-}
-
-function CaseCommentModal({ customer, comments, onAdd, onDelete, currentUser, onClose }) {
-  const [text, setText] = useState('');
-  const list = comments || [];
-  return (
-    <Modal title={`コメント：${customer.enName || customer.gakuenName || ''}`} onClose={onClose}>
-      <div className="space-y-3 max-h-72 overflow-y-auto mb-3">
-        {list.length === 0 ? (
-          <p className="text-xs text-slate-400">まだコメントはありません。</p>
-        ) : list.map(cm => (
-          <div key={cm.id} className="bg-slate-50 rounded-lg p-3">
-            <div className="flex justify-between items-start gap-2">
-              <p className="text-sm text-slate-700 whitespace-pre-wrap flex-1">{cm.text}</p>
-              {(currentUser?.displayName === cm.author) && (
-                <button onClick={() => onDelete(cm.id)} className="text-slate-300 hover:text-red-500 shrink-0"><Trash2 className="w-4 h-4" /></button>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">{cm.author} ・ {cm.at}</p>
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-col gap-2">
-        <textarea value={text} onChange={e => setText(e.target.value)} rows={3} placeholder="コメントを入力" className="px-3 py-2 border border-slate-200 rounded-lg text-sm resize-y" />
-        <button onClick={() => { if (text.trim()) { onAdd(text.trim()); setText(''); } }} className="py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">コメントを追加</button>
-      </div>
-    </Modal>
-  );
-}
-
-// クリックでその場編集できるセル。type: 'text' | 'textarea' | 'select'
-function EditableCell({ value, onSave, className, type = 'text', options, style, placeholder, canEdit = true, render }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value ?? '');
-  useEffect(() => { setDraft(value ?? ''); }, [value]);
-
-  if (!canEdit) {
-    return <td className={className} style={style}>{render ? render(value) : (value || '')}</td>;
-  }
-
-  const commit = () => { setEditing(false); if ((draft ?? '') !== (value ?? '')) onSave(draft); };
-
-  if (editing) {
-    if (type === 'select') {
-      return (
-        <td className={className} style={style}>
-          <select autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
-            className="w-full px-1.5 py-1 border border-teal-300 rounded text-xs bg-white">
-            <option value=""></option>
-            {(options || []).map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </td>
-      );
-    }
-    if (type === 'textarea') {
-      return (
-        <td className={className} style={style}>
-          <textarea autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} rows={4}
-            className="w-full px-1.5 py-1 border border-teal-300 rounded text-xs resize-y" />
-        </td>
-      );
-    }
-    return (
-      <td className={className} style={style}>
-        <input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
-          onKeyDown={e => { if (e.key === 'Enter' && type !== 'textarea') { e.preventDefault(); commit(); } }}
-          className="w-full px-1.5 py-1 border border-teal-300 rounded text-xs" />
-      </td>
-    );
-  }
-
-  return (
-    <td className={className + ' cursor-text hover:bg-teal-50/60'} style={style} onClick={() => setEditing(true)} title="クリックで編集">
-      {render ? render(value) : (value || <span className="text-slate-300">{placeholder || '—'}</span>)}
-    </td>
-  );
-}
-
-function CaseFilterField({ label, children }) {
-  return (
-    <div className="flex flex-col gap-1 min-w-[160px]">
-      <span className="text-[11px] font-semibold text-slate-400">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function CaseActions({ customer, comments, onOpenCustomer, onComment, className }) {
-  return (
-    <div className={className}>
-      <button onClick={() => onOpenCustomer(customer.id)} className="px-2.5 py-1.5 bg-teal-600 text-white rounded-lg text-[11px] font-bold hover:bg-teal-700">カードを開く</button>
-      <button onClick={() => onComment(customer)} className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-[11px] font-bold hover:bg-slate-50 flex items-center gap-1 justify-center">
-        <MessageCircle className="w-3 h-3" />コメント{comments.length > 0 ? `（${comments.length}）` : ''}
-      </button>
-    </div>
-  );
-}
-
-function CaseStudiesView({ customers, setCustomers, records, setRecords, caseComments, setCaseComments, industryTypes, products, members, currentUser, isOwner, canEdit, onOpenCustomer }) {
-  const [search, setSearch] = useState('');
-  const [districtFilter, setDistrictFilter] = useState('');
-  const [industryFilter, setIndustryFilter] = useState('');
-  const [productFilter, setProductFilter] = useState('');
-  const [commentFor, setCommentFor] = useState(null); // customer object
-  const [viewMode, setViewMode] = useState('card'); // 'card' | 'list'
-
-  // ログイン中アカウントの担当で初期絞り込み（オーナーは切替可）
-  const [assigneeFilter, setAssigneeFilter] = useState(currentUser?.displayName || '');
-
-  // 顧客ごとに、受注記録（最新）をひとつ代表として取り出す
-  const rows = (() => {
-    const byCustomer = {};
-    (records || []).forEach(r => {
-      if (!ORDER_FLAGS.includes(r.flag)) return;
-      if (r.customerId == null) return;
-      const prev = byCustomer[r.customerId];
-      if (!prev || (r.date || '') > (prev.date || '')) byCustomer[r.customerId] = r;
-    });
-    const out = [];
-    (customers || []).forEach(c => {
-      const orderRec = byCustomer[c.id];
-      if (!orderRec) return;
-      out.push({ customer: c, order: orderRec });
-    });
-    // 受注日の新しい順
-    out.sort((a, b) => (b.order.date || '').localeCompare(a.order.date || ''));
-    return out;
-  })();
-
-  const districtOptions = [...new Set(rows.map(r => extractDistrict(r.customer.address)).filter(Boolean))];
-  const industryOptions = [...new Set([...(industryTypes || []).map(t => t.name), ...rows.map(r => r.customer.industry).filter(Boolean)])];
-  const productOptions = [...new Set([...(products || []).map(p => p.name), ...rows.map(r => r.order.productName).filter(Boolean)])];
-
-  const filtered = rows.filter(({ customer, order }) => {
-    const q = search.trim().toLowerCase();
-    const matchesSearch = !q || [customer.gakuenName, customer.enName, customer.enNameKana, customer.chairman, customer.principal, order.productName].some(v => (v || '').toLowerCase().includes(q));
-    const matchesDistrict = !districtFilter || extractDistrict(customer.address) === districtFilter;
-    const matchesIndustry = !industryFilter || customer.industry === industryFilter;
-    const matchesProduct = !productFilter || order.productName === productFilter;
-    const matchesAssignee = !assigneeFilter || customer.assignedTo === assigneeFilter;
-    return matchesSearch && matchesDistrict && matchesIndustry && matchesProduct && matchesAssignee;
-  });
-
-  const hasActiveFilters = !!(search || districtFilter || industryFilter || productFilter || (isOwner && assigneeFilter));
-  const resetFilters = () => {
-    setSearch(''); setDistrictFilter(''); setIndustryFilter(''); setProductFilter('');
-    if (isOwner) setAssigneeFilter('');
-  };
-
-  // 顧客カードのフィールドを更新
-  const updateCustomer = (customerId, field, value) => {
-    setCustomers(prev => prev.map(c => c.id === customerId ? { ...c, [field]: value } : c));
-  };
-  // 受注記録のフィールドを更新（この顧客の代表受注レコードを対象）
-  const updateOrder = (orderId, field, value) => {
-    setRecords(prev => prev.map(r => r.id === orderId ? { ...r, [field]: value } : r));
-  };
-
-  const addComment = (customerId, text) => {
-    const entry = { id: Date.now(), text, author: currentUser?.displayName || '', at: new Date().toISOString().substring(0, 16).replace('T', ' ') };
-    setCaseComments(prev => ({ ...(prev || {}), [customerId]: [...((prev || {})[customerId] || []), entry] }));
-  };
-  const deleteComment = (customerId, commentId) => {
-    setCaseComments(prev => ({ ...(prev || {}), [customerId]: ((prev || {})[customerId] || []).filter(cm => cm.id !== commentId) }));
-  };
-
-  const th = "px-3 py-2 text-left text-[11px] font-bold text-slate-500 border border-slate-200 bg-slate-50 whitespace-nowrap";
-  const td = "px-3 py-2 text-xs text-slate-700 border border-slate-200 align-top";
-  const filterSelectClass = "px-3 py-2 rounded-lg text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500";
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-bold text-slate-700">インスパイアのお客さん</h2>
-        <p className="text-xs text-slate-400 mt-0.5">顧客リストで受注（受注・ユーザー・過去受注記録あり）になった先が自動で表示されます。</p>
-      </div>
-
-      <div className="bg-slate-800 rounded-2xl p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <CaseFilterField label="法人名・園名">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="キーワードで検索"
-                className="pl-9 pr-3 py-2 rounded-lg text-sm bg-white w-56 focus:outline-none focus:ring-2 focus:ring-teal-500" />
-            </div>
-          </CaseFilterField>
-          <CaseFilterField label="市区町村">
-            <select value={districtFilter} onChange={e => setDistrictFilter(e.target.value)} className={filterSelectClass}>
-              <option value="">すべて</option>
-              {districtOptions.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </CaseFilterField>
-          <CaseFilterField label="業種">
-            <select value={industryFilter} onChange={e => setIndustryFilter(e.target.value)} className={filterSelectClass}>
-              <option value="">すべて</option>
-              {industryOptions.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </CaseFilterField>
-          <CaseFilterField label="契約商材">
-            <select value={productFilter} onChange={e => setProductFilter(e.target.value)} className={filterSelectClass}>
-              <option value="">すべて</option>
-              {productOptions.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </CaseFilterField>
-          {isOwner && (
-            <CaseFilterField label="営業担当">
-              <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className={filterSelectClass}>
-                <option value="">すべて</option>
-                {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-              </select>
-            </CaseFilterField>
-          )}
-          <div className="flex items-center gap-3 ml-auto">
-            {hasActiveFilters && (
-              <button onClick={resetFilters} className="text-xs text-teal-300 hover:text-teal-200 font-semibold">
-                フィルタをリセット
-              </button>
-            )}
-            <span className="text-xs text-slate-300 whitespace-nowrap">{filtered.length}件表示</span>
-            <div className="flex border border-slate-600 rounded-lg overflow-hidden shrink-0">
-              <button onClick={() => setViewMode('card')} className={`p-2 ${viewMode === 'card' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`} title="カード表示">
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button onClick={() => setViewMode('list')} className={`p-2 ${viewMode === 'list' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`} title="リスト表示">
-                <List className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {filtered.length === 0 ? (
-        <p className="text-sm text-slate-400">該当する受注顧客がいません。</p>
-      ) : viewMode === 'card' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(({ customer: c, order }) => {
-            const comments = (caseComments || {})[c.id] || [];
-            return (
-              <div key={c.id} className="bg-white rounded-xl shadow-sm border border-slate-100 hover:border-teal-200 hover:shadow-md transition p-4 flex flex-col gap-2">
-                <div>
-                  <p className="text-xs text-slate-400">{c.gakuenName}</p>
-                  <p className="font-bold text-slate-800">{c.enName || '（園名未登録）'}</p>
-                </div>
-                <div className="text-xs text-slate-500 space-y-1">
-                  <p className="flex items-center gap-1.5"><Package className="w-3 h-3 shrink-0" />契約商材: {order.productName || '—'}</p>
-                  <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3 shrink-0" />{extractDistrict(c.address) || '—'}</p>
-                  <p className="flex items-center gap-1.5"><Users className="w-3 h-3 shrink-0" />営業担当: {c.assignedTo || '—'}</p>
-                </div>
-                <CaseActions customer={c} comments={comments} onOpenCustomer={onOpenCustomer} onComment={setCommentFor} className="mt-2 flex items-center gap-2" />
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="overflow-x-auto bg-white rounded-xl border border-slate-100 shadow-sm">
-          <table className="border-collapse min-w-max w-full">
-            <thead>
-              <tr>
-                <th className={th}>法人名</th>
-                <th className={th}>園名</th>
-                <th className={th}>契約商材</th>
-                <th className={th}>市区町村</th>
-                <th className={th}>営業担当</th>
-                <th className={th}>操作・コメント</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(({ customer: c, order }) => {
-                const comments = (caseComments || {})[c.id] || [];
-                return (
-                  <tr key={c.id} className="hover:bg-slate-50">
-                    <EditableCell className={td + ' font-semibold'} value={c.gakuenName} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'gakuenName', v)} />
-                    <EditableCell className={td} value={c.enName} canEdit={canEdit} onSave={v => updateCustomer(c.id, 'enName', v)} />
-                    <EditableCell className={td + ' whitespace-nowrap'} value={order.productName} canEdit={canEdit} onSave={v => updateOrder(order.id, 'productName', v)} />
-                    <td className={td + ' whitespace-nowrap'}>{extractDistrict(c.address)}</td>
-                    <EditableCell className={td + ' whitespace-nowrap'} value={c.assignedTo} canEdit={canEdit} type="select" options={members.map(m => m.displayName)} onSave={v => updateCustomer(c.id, 'assignedTo', v)} />
-                    <td className={td + ' whitespace-nowrap'}>
-                      <CaseActions customer={c} comments={comments} onOpenCustomer={onOpenCustomer} onComment={setCommentFor} className="flex items-center gap-1.5" />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {commentFor && (
-        <CaseCommentModal
-          customer={commentFor}
-          comments={(caseComments || {})[commentFor.id] || []}
-          onAdd={(text) => addComment(commentFor.id, text)}
-          onDelete={(cid) => deleteComment(commentFor.id, cid)}
-          currentUser={currentUser}
-          onClose={() => setCommentFor(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-
-// ---------- 営業ノウハウページ ----------
-function KnowledgeBaseView({ articles, setArticles, knowledgeTags, members, currentUser, showConfirm, showAlert, canEdit }) {
-  const [search, setSearch] = useState('');
-  const [tagFilter, setTagFilter] = useState('');
-  const [selected, setSelected] = useState(null); // article being viewed
-  const [editing, setEditing] = useState(null); // article being edited/created
-
-  const filtered = articles.filter(a => {
-    const matchesSearch = !search || a.title.toLowerCase().includes(search.toLowerCase());
-    const matchesTag = !tagFilter || (a.tags || []).includes(tagFilter);
-    return matchesSearch && matchesTag;
-  });
-
-  const save = () => {
-    setArticles(prev => {
-      const exists = prev.some(a => a.id === editing.id);
-      const clean = { ...editing, id: editing.id || Date.now(), updatedAt: new Date().toISOString().substring(0, 10), updatedBy: currentUser?.displayName || '' };
-      return exists ? prev.map(a => a.id === editing.id ? clean : a) : [...prev, clean];
-    });
-    setSelected(null);
-    setEditing(null);
-  };
-
-  const remove = (id) => {
-    showConfirm('この記事を削除しますか？', () => {
-      setArticles(prev => prev.filter(a => a.id !== id));
-      setSelected(null);
-    });
-  };
-
-  const toggleTag = (tagName) => {
-    setEditing(prev => {
-      const tags = prev.tags || [];
-      return { ...prev, tags: tags.includes(tagName) ? tags.filter(t => t !== tagName) : [...tags, tagName] };
-    });
-  };
-
-  // ---- 手順表（表形式）の行操作 ----
-  const addRow = () => {
-    setEditing(prev => ({
-      ...prev,
-      rows: [...(prev.rows || []), { id: Date.now(), category: '', step: '', link: '', note: '', warn: false }],
-    }));
-  };
-  const updateRow = (rowId, key, value) => {
-    setEditing(prev => ({
-      ...prev,
-      rows: (prev.rows || []).map(r => r.id === rowId ? { ...r, [key]: value } : r),
-    }));
-  };
-  const removeRow = (rowId) => {
-    setEditing(prev => ({ ...prev, rows: (prev.rows || []).filter(r => r.id !== rowId) }));
-  };
-  const moveRow = (rowId, dir) => {
-    setEditing(prev => {
-      const rows = [...(prev.rows || [])];
-      const i = rows.findIndex(r => r.id === rowId);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= rows.length) return prev;
-      [rows[i], rows[j]] = [rows[j], rows[i]];
-      return { ...prev, rows };
-    });
-  };
-
-  const handleFileAdd = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // データベースに保存するため、大きすぎるファイルは制限する
-    if (file.size > 3 * 1024 * 1024) {
-      showAlert('ファイルサイズが大きすぎます（3MB以下にしてください）。大きい資料はGoogleドライブ等のリンクを本文に貼る方法をおすすめします。');
-      e.target.value = '';
-      return;
-    }
-    const dataUrl = await readFileAsDataUrl(file);
-    setEditing(prev => ({ ...prev, files: [...(prev.files || []), { id: Date.now(), name: file.name, data: dataUrl }] }));
-    e.target.value = '';
-  };
-
-  const removeFile = (fileId) => {
-    setEditing(prev => ({ ...prev, files: (prev.files || []).filter(f => f.id !== fileId) }));
-  };
-
-  if (editing) {
-    return (
-      <div className="max-w-2xl space-y-4">
-        <FormField label="タイトル" value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} />
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">フラグ（複数選択可）</label>
-          <div className="flex flex-wrap gap-2">
-            {knowledgeTags.map(t => {
-              const active = (editing.tags || []).includes(t.name);
-              return (
-                <button key={t.id} onClick={() => toggleTag(t.name)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${active ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
-                  {t.name}
-                </button>
-              );
-            })}
-            {knowledgeTags.length === 0 && <p className="text-xs text-slate-400">フラグが未登録です。「設定・管理」から追加できます。</p>}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">担当者</label>
-          <select value={editing.assignedTo || ''} onChange={e => setEditing({ ...editing, assignedTo: e.target.value })}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-            <option value="">未設定</option>
-            {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-          </select>
-        </div>
-
-        <FormField label="YouTubeリンク（任意）" value={editing.ytLink || ''} onChange={e => setEditing({ ...editing, ytLink: e.target.value })} placeholder="https://www.youtube.com/watch?v=..." />
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">資料（PDFなど・1ファイル3MBまで）</label>
-          {(editing.files || []).length > 0 && (
-            <ul className="space-y-1.5 mb-2">
-              {(editing.files || []).map(f => (
-                <li key={f.id} className="flex justify-between items-center px-3 py-2 bg-slate-50 rounded-lg text-xs">
-                  <span className="flex items-center gap-1.5 truncate"><FileText className="w-3.5 h-3.5 shrink-0" />{f.name}</span>
-                  <button onClick={() => removeFile(f.id)} className="text-slate-300 hover:text-red-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold cursor-pointer self-start">
-            <Upload className="w-3.5 h-3.5" />資料を追加
-            <input type="file" onChange={handleFileAdd} className="hidden" />
-          </label>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-500">手順表（任意）</label>
-            <button onClick={addRow} className="flex items-center gap-1 text-xs text-teal-600 font-bold"><Plus className="w-3.5 h-3.5" />行を追加</button>
-          </div>
-          {(editing.rows || []).length === 0 ? (
-            <p className="text-xs text-slate-400">「行を追加」で、大分類・手順・リンク・注意点を表形式で登録できます。</p>
-          ) : (
-            <div className="space-y-2">
-              {(editing.rows || []).map((row, idx) => (
-                <div key={row.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-400">{idx + 1}行目</span>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => moveRow(row.id, -1)} disabled={idx === 0} className="p-1 text-slate-400 hover:text-teal-600 disabled:opacity-30">↑</button>
-                      <button onClick={() => moveRow(row.id, 1)} disabled={idx === (editing.rows || []).length - 1} className="p-1 text-slate-400 hover:text-teal-600 disabled:opacity-30">↓</button>
-                      <button onClick={() => removeRow(row.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <input value={row.category} onChange={e => updateRow(row.id, 'category', e.target.value)} placeholder="大分類（例：SP-MEO）"
-                      className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
-                    <input value={row.link} onChange={e => updateRow(row.id, 'link', e.target.value)} placeholder="リンク（URL・任意）"
-                      className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
-                  </div>
-                  <textarea value={row.step} onChange={e => updateRow(row.id, 'step', e.target.value)} rows={2} placeholder="手順（例：①受注）"
-                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
-                  <textarea value={row.note} onChange={e => updateRow(row.id, 'note', e.target.value)} rows={2} placeholder="注意点（任意）"
-                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
-                  <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
-                    <input type="checkbox" checked={!!row.warn} onChange={e => updateRow(row.id, 'warn', e.target.checked)} className="accent-red-600" />
-                    注意点を赤字で強調する
-                  </label>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500">内容（補足メモ・任意）</label>
-          <textarea value={editing.body} onChange={e => setEditing({ ...editing, body: e.target.value })} rows={10}
-            className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm font-mono" />
-        </div>
-        <div className="flex gap-2">
-          <button onClick={save} className="px-5 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">保存する</button>
-          <button onClick={() => setEditing(null)} className="px-5 py-2.5 border border-slate-200 rounded-lg text-sm font-medium">キャンセル</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (selected) {
-    return (
-      <div className="max-w-2xl space-y-4">
-        <button onClick={() => setSelected(null)} className="text-sm text-teal-600 font-semibold flex items-center gap-1"><ChevronLeft className="w-4 h-4" />一覧に戻る</button>
-        <div className="bg-white rounded-xl border border-slate-100 p-6">
-          <div className="flex justify-between items-start mb-3">
-            <h3 className="text-lg font-bold text-slate-800">{selected.title}</h3>
-            {canEdit && (
-              <div className="flex gap-1 shrink-0">
-                <button onClick={() => setEditing(selected)} className="p-1.5 text-slate-300 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
-                <button onClick={() => remove(selected.id)} className="p-1.5 text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-              </div>
-            )}
-          </div>
-          {(selected.tags || []).length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {(selected.tags || []).map(t => (
-                <span key={t} className="px-2.5 py-1 bg-teal-50 text-teal-700 rounded-full text-[11px] font-bold">{t}</span>
-              ))}
-            </div>
-          )}
-          <p className="text-xs text-slate-400 mb-4">
-            最終更新: {selected.updatedAt}（{selected.updatedBy}）
-            {selected.assignedTo ? ` ・ 担当: ${selected.assignedTo}` : ''}
-          </p>
-          {selected.ytLink && (
-            <a href={selected.ytLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 mb-4 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100">
-              <Video className="w-4 h-4" />YouTubeで動画を見る
-            </a>
-          )}
-          {(selected.files || []).length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs font-bold text-slate-500 mb-2">添付資料</p>
-              <ul className="space-y-1.5">
-                {(selected.files || []).map(f => (
-                  <li key={f.id}>
-                    <a href={f.data} download={f.name} className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-semibold hover:bg-indigo-100">
-                      <FileText className="w-3.5 h-3.5" />{f.name}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {(selected.rows || []).length > 0 && (
-            <div className="mb-5 overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 text-left text-xs text-slate-500">
-                    <th className="border border-slate-200 px-3 py-2 w-28">大分類</th>
-                    <th className="border border-slate-200 px-3 py-2">手順</th>
-                    <th className="border border-slate-200 px-3 py-2 w-32">リンク</th>
-                    <th className="border border-slate-200 px-3 py-2 w-56">注意点</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(selected.rows || []).map(row => (
-                    <tr key={row.id} className="align-top">
-                      <td className="border border-slate-200 px-3 py-2 font-bold text-slate-700">{row.category}</td>
-                      <td className="border border-slate-200 px-3 py-2 text-slate-700 whitespace-pre-wrap">{row.step}</td>
-                      <td className="border border-slate-200 px-3 py-2">
-                        {row.link && (
-                          <a href={row.link} target="_blank" rel="noreferrer" className="text-indigo-600 underline break-all text-xs">開く</a>
-                        )}
-                      </td>
-                      <td className={`border border-slate-200 px-3 py-2 whitespace-pre-wrap text-xs ${row.warn ? 'text-red-600 font-bold' : 'text-slate-600'}`}>{row.note}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{selected.body}</div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 flex-1">
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="タイトルで検索"
-              className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white" />
-          </div>
-          <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
-            <option value="">すべてのフラグ</option>
-            {knowledgeTags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-          </select>
-        </div>
-        {canEdit && (
-          <button onClick={() => setEditing({ id: null, title: '', body: '', ytLink: '', tags: [], files: [], rows: [], assignedTo: '' })} className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">
-            <Plus className="w-4 h-4" />新しい記事
-          </button>
-        )}
-      </div>
-
-      {knowledgeTags.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setTagFilter('')} className={`px-3 py-1.5 rounded-full text-xs font-bold border ${!tagFilter ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-500 border-slate-200'}`}>すべて</button>
-          {knowledgeTags.map(t => (
-            <button key={t.id} onClick={() => setTagFilter(t.name)} className={`px-3 py-1.5 rounded-full text-xs font-bold border ${tagFilter === t.name ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
-              {t.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {filtered.length === 0 ? (
-        <p className="text-sm text-slate-400 text-center py-10">該当する記事がありません。</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {filtered.map(a => (
-            <button key={a.id} onClick={() => setSelected(a)} className="text-left bg-white rounded-xl border border-slate-100 p-4 hover:shadow-md hover:border-teal-200 transition">
-              <p className="font-bold text-slate-800 flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-teal-600" />{a.title}
-                {a.ytLink && <Video className="w-3.5 h-3.5 text-red-500 shrink-0" />}
-                {(a.files || []).length > 0 && <FileText className="w-3.5 h-3.5 text-indigo-500 shrink-0" />}
-                {(a.rows || []).length > 0 && <List className="w-3.5 h-3.5 text-teal-600 shrink-0" />}
-              </p>
-              {(a.tags || []).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {(a.tags || []).map(t => <span key={t} className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded-full text-[10px] font-bold">{t}</span>)}
-                </div>
-              )}
-              <p className="text-xs text-slate-400 mt-1.5">{a.updatedAt}（{a.updatedBy}）{a.assignedTo ? ` ・ 担当: ${a.assignedTo}` : ''}</p>
-              <p className="text-xs text-slate-500 mt-2 line-clamp-2">{a.body}</p>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---------- 権限管理（役職ごとの公開設定） ----------
 function RolePermissionsView({ rolePermissions, setRolePermissions }) {
   const toggle = (role, key) => {
@@ -4730,7 +4001,7 @@ function RolePermissionsView({ rolePermissions, setRolePermissions }) {
 function SettingsView({
   reportTemplates, setReportTemplates, dailyReportTemplates, setDailyReportTemplates,
   products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, industryTypes, setIndustryTypes,
-  knowledgeTags, setKnowledgeTags, departments, setDepartments,
+  departments, setDepartments,
   rolePermissions, setRolePermissions, isOwner,
   token, currentUser, showAlert, showConfirm,
 }) {
@@ -4810,7 +4081,7 @@ function SettingsView({
       )}
 
       {innerTab === 'products' && (
-        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} associationTypes={associationTypes} setAssociationTypes={setAssociationTypes} industryTypes={industryTypes} setIndustryTypes={setIndustryTypes} knowledgeTags={knowledgeTags} setKnowledgeTags={setKnowledgeTags} departments={departments} setDepartments={setDepartments} showConfirm={showConfirm} />
+        <ProductsAndFlagsView products={products} setProducts={setProducts} activityTypes={activityTypes} setActivityTypes={setActivityTypes} associationTypes={associationTypes} setAssociationTypes={setAssociationTypes} industryTypes={industryTypes} setIndustryTypes={setIndustryTypes} departments={departments} setDepartments={setDepartments} showConfirm={showConfirm} />
       )}
 
       {innerTab === 'members' && (
@@ -4856,13 +4127,12 @@ function SettingsView({
 }
 
 // ---------- 商品・フラグ管理 ----------
-function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, industryTypes, setIndustryTypes, knowledgeTags, setKnowledgeTags, departments, setDepartments, showConfirm }) {
+function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, industryTypes, setIndustryTypes, departments, setDepartments, showConfirm }) {
   const [newProduct, setNewProduct] = useState('');
   const [newType, setNewType] = useState('');
   const [flagDraft, setFlagDraft] = useState({});
   const [newAssociationType, setNewAssociationType] = useState('');
   const [newIndustry, setNewIndustry] = useState('');
-  const [newKnowledgeTag, setNewKnowledgeTag] = useState('');
   const [newDepartment, setNewDepartment] = useState('');
 
   const addProduct = () => {
@@ -4906,11 +4176,6 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
     setNewIndustry('');
   };
 
-  const addKnowledgeTag = () => {
-    if (!newKnowledgeTag.trim()) return;
-    setKnowledgeTags([...(knowledgeTags || []), { id: Date.now(), name: newKnowledgeTag.trim() }]);
-    setNewKnowledgeTag('');
-  };
 
   const addDepartment = () => {
     if (!newDepartment.trim()) return;
@@ -4989,25 +4254,6 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
             </span>
           ))}
           {(departments || []).length === 0 && <p className="text-xs text-slate-400">課が未登録です。</p>}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
-        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><BookOpen className="w-4 h-4" />営業ノウハウのフラグ管理</h3>
-        <p className="text-xs text-slate-400 mb-3">ここで登録したフラグが、営業ノウハウページの記事に付けられるようになります。</p>
-        <div className="flex gap-2 mb-4">
-          <input value={newKnowledgeTag} onChange={e => setNewKnowledgeTag(e.target.value)} placeholder="例：テレアポ" autoComplete="off"
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-          <button onClick={addKnowledgeTag} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(knowledgeTags || []).map(t => (
-            <span key={t.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-full text-sm">
-              {t.name}
-              <button onClick={() => setKnowledgeTags((knowledgeTags || []).filter(x => x.id !== t.id))} className="text-slate-300 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
-            </span>
-          ))}
-          {(knowledgeTags || []).length === 0 && <p className="text-xs text-slate-400">フラグが未登録です。</p>}
         </div>
       </div>
 
@@ -5385,20 +4631,17 @@ export default function App() {
     customers: [], records: [], products: initialProducts, activityTypes: initialActivityTypes,
     goals: initialGoals, emailTemplates: initialEmailTemplates, reportTemplates: initialReportTemplates,
     dailyReportTemplates: initialDailyReportTemplates, associationTypes: initialAssociationTypes, dailyReportLogs: [],
-    caseStudies: initialCaseStudies, caseComments: {}, knowledgeArticles: initialKnowledgeArticles,
-    knowledgeTags: initialKnowledgeTags, departments: initialDepartments,
+    departments: initialDepartments,
     rolePermissions: initialRolePermissions,
     industryTypes: initialIndustryTypes,
     teleGoals: {},
     personalSettings: {},
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, caseStudies, caseComments, knowledgeArticles, rolePermissions, knowledgeTags, departments, industryTypes, teleGoals, personalSettings } = data;
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, rolePermissions, departments, industryTypes, teleGoals, personalSettings } = data;
   const canViewSettings = isOwner || hasPermission(user?.role, 'viewSettings', rolePermissions);
   const canDeleteCustomer = isOwner || hasPermission(user?.role, 'deleteCustomer', rolePermissions);
   const canBulkEdit = isOwner || hasPermission(user?.role, 'bulkEdit', rolePermissions);
-  const canEditCaseStudies = isOwner || hasPermission(user?.role, 'editCaseStudies', rolePermissions);
-  const canEditKnowledge = isOwner || hasPermission(user?.role, 'editKnowledge', rolePermissions);
   const setCustomers = makeSetter('customers');
   const setRecords = makeSetter('records');
   const setProducts = makeSetter('products');
@@ -5409,11 +4652,7 @@ export default function App() {
   const setDailyReportTemplates = makeSetter('dailyReportTemplates');
   const setAssociationTypes = makeSetter('associationTypes');
   const setDailyReportLogs = makeSetter('dailyReportLogs');
-  const setCaseStudies = makeSetter('caseStudies');
-  const setCaseComments = makeSetter('caseComments');
-  const setKnowledgeArticles = makeSetter('knowledgeArticles');
   const setRolePermissions = makeSetter('rolePermissions');
-  const setKnowledgeTags = makeSetter('knowledgeTags');
   const setDepartments = makeSetter('departments');
   const setIndustryTypes = makeSetter('industryTypes');
   const setTeleGoals = makeSetter('teleGoals');
@@ -5496,16 +4735,13 @@ export default function App() {
     { id: 'teleappt_stats', icon: <BarChart className="w-4 h-4" />, label: 'テレアポ集計' },
     { id: 'daily_report', icon: <FileText className="w-4 h-4" />, label: '日報' },
     { id: 'email', icon: <Mail className="w-4 h-4" />, label: 'メール制作' },
-    { id: 'case_studies', icon: <Briefcase className="w-4 h-4" />, label: 'ユーザー管理' },
-    { id: 'knowledge', icon: <BookOpen className="w-4 h-4" />, label: '営業ノウハウ' },
-    { id: 'ai', icon: <Sparkles className="w-4 h-4" />, label: 'AIアシスタント' },
     { id: 'mypage', icon: <User className="w-4 h-4" />, label: 'マイページ' },
     ...(canViewSettings ? [{ id: 'settings', icon: <Settings className="w-4 h-4" />, label: '設定・管理' }] : []),
   ];
 
   const titles = {
     home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', recall: '再コール管理', telema: 'テレマリスト', teleappt_stats: 'テレアポ集計', daily_report: '日報',
-    email: 'メール制作', case_studies: 'ユーザー管理（導入事例）', knowledge: '営業ノウハウ', ai: 'AIアシスタント', mypage: 'マイページ', settings: '設定・管理',
+    email: 'メール制作', mypage: 'マイページ', settings: '設定・管理',
   };
 
   // 未ログイン
@@ -5627,13 +4863,6 @@ export default function App() {
         {activeTab === 'email' && (
           <EmailBuilderView customers={customers} emailTemplates={emailTemplates} setEmailTemplates={setEmailTemplates} extraTemplates={personalEmailTemplatesLabeled} showAlert={showAlert} showConfirm={showConfirm} />
         )}
-        {activeTab === 'case_studies' && (
-          <CaseStudiesView customers={customers} setCustomers={setCustomers} records={records} setRecords={setRecords} caseComments={caseComments || {}} setCaseComments={setCaseComments} industryTypes={industryTypes || []} products={products} members={members} currentUser={user} isOwner={isOwner} canEdit={canEditCaseStudies} onOpenCustomer={openCustomerFromHome} />
-        )}
-        {activeTab === 'knowledge' && (
-          <KnowledgeBaseView articles={knowledgeArticles} setArticles={setKnowledgeArticles} knowledgeTags={knowledgeTags || []} members={members} currentUser={user} showConfirm={showConfirm} showAlert={showAlert} canEdit={canEditKnowledge} />
-        )}
-        {activeTab === 'ai' && <AIAssistantView customers={customers} records={records} />}
 
         {activeTab === 'mypage' && (
           <MyPageView user={user} token={token} onLogout={logout} updateUser={updateUser}
@@ -5649,7 +4878,6 @@ export default function App() {
             associationTypes={associationTypes} setAssociationTypes={setAssociationTypes}
             industryTypes={industryTypes || []} setIndustryTypes={setIndustryTypes}
             rolePermissions={rolePermissions} setRolePermissions={setRolePermissions} isOwner={isOwner}
-            knowledgeTags={knowledgeTags || []} setKnowledgeTags={setKnowledgeTags}
             departments={departments || []} setDepartments={setDepartments}
             token={token} currentUser={user}
             showAlert={showAlert} showConfirm={showConfirm}

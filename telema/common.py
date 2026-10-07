@@ -14,14 +14,18 @@ CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name
 
 
 @dataclass(frozen=True)
-class TagKind:
-    """施設に複数付けられるラベルの種類（加盟協会・リスト種類）。マスタは設定画面で管理者が管理する。
-    API・一覧の列・絞り込みの名前はすべてここから決まる（実際の処理は tags.py）"""
-    key: str      # 絞り込みのパラメータ名・APIの項目名の元（association_ids / association_id）
-    slug: str     # URL（/associations, /companies/<id>/associations, /companies/bulk-associations）
-    field: str    # 施設詳細・一覧の項目名（詳細は {id,name,is_active} の配列、一覧は名前の配列）
+class MasterKind:
+    """設定画面で管理者が追加・名称変更・有効/無効を切り替えるマスタ（名前の一覧）。実際の処理は tags.py"""
+    key: str      # 監査ログ・APIの項目名の元
+    slug: str     # URL（/associations, /sections …）
     label: str    # 画面に出す名前（エラーメッセージ用）
     master: str   # マスタのテーブル
+
+
+@dataclass(frozen=True)
+class TagKind(MasterKind):
+    """施設に複数付けられるラベルの種類（加盟協会・リスト種類）。API・一覧の列・絞り込みの名前はすべてここから決まる"""
+    field: str    # 施設詳細・一覧の項目名（詳細は {id,name,is_active} の配列、一覧は名前の配列）
     link: str     # 施設との紐付けテーブル
     fk: str       # 紐付けテーブルのマスタ側の列
 
@@ -38,9 +42,15 @@ class TagKind:
                 f"WHERE l.company_id = c.id), '[]'::json) AS {self.field}")
 
 
-ASSOCIATION = TagKind('association', 'associations', 'associations', '加盟協会', 'telema_associations', 'telema_company_associations', 'association_id')
-LIST_TYPE = TagKind('list_type', 'list-types', 'list_types', 'リスト種類', 'telema_list_types', 'telema_company_list_types', 'list_type_id')
+ASSOCIATION = TagKind(key='association', slug='associations', label='加盟協会', master='telema_associations',
+                      field='associations', link='telema_company_associations', fk='association_id')
+LIST_TYPE = TagKind(key='list_type', slug='list-types', label='リスト種類', master='telema_list_types',
+                    field='list_types', link='telema_company_list_types', fk='list_type_id')
 TAG_KINDS = (ASSOCIATION, LIST_TYPE)
+
+# 部署（営業部・制作部・CS など）。タイムラインの記録ごとに1つ付ける（施設への紐付けではなく、架電履歴の列 section_id）
+SECTION = MasterKind(key='section', slug='sections', label='部署', master='telema_sections')
+MASTER_KINDS = (*TAG_KINDS, SECTION)
 
 
 def audit(db, user_id, action, entity_type, entity_id, before=None, after=None):

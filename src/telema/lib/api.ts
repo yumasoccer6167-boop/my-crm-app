@@ -24,6 +24,7 @@ import type {
   ListSource,
   ListType,
   PrefectureStat,
+  Section,
   RelationItem,
   SummarySuggestion,
   UserRow,
@@ -41,6 +42,7 @@ type Api = {
   users: { $get: Call<UserRow[]> };
   associations: { $get: Call<Association[]>; $post: Call<Association>; ":id": { $patch: Call<Association> } };
   "list-types": { $get: Call<ListType[]>; $post: Call<ListType>; ":id": { $patch: Call<ListType> } };
+  sections: { $get: Call<Section[]>; $post: Call<Section>; ":id": { $patch: Call<Section> } };
   "list-sources": { $get: Call<ListSource[]> };
   "visit-targets": { $get: Call<VisitTarget[]> };
   dashboard: { $get: Call<DashboardData>; "calls-monthly": { $get: Call<MonthlyCallsData> } };

@@ -3,14 +3,28 @@ import type { CallLog, Contact } from "../../types";
 import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput, isOverdue, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
+import { ALL_TAB, callsInTab, timelineTabs } from "../../lib/timeline-tabs";
 import { Button, Card, CATEGORY_STYLE, Empty, ErrorBox, inputCls, StatusBadge } from "../ui";
 
 /** 過去の架電履歴を直すフォーム。会社の現在のステータス・次回架電は、ここでは変わらない */
-function CallEditForm({ call, contacts, onSaved, onCancel }: { call: CallLog; contacts: Contact[]; onSaved: () => void; onCancel: () => void }) {
-  const { statuses } = useMasters();
+function CallEditForm({
+  call,
+  contacts,
+  isUser,
+  onSaved,
+  onCancel,
+}: {
+  call: CallLog;
+  contacts: Contact[];
+  isUser: boolean;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const { statuses, sections } = useMasters();
   const [calledAt, setCalledAt] = useState(toLocalInput(call.called_at));
   const [statusId, setStatusId] = useState<number | null>(call.result_status_id);
   const [contactId, setContactId] = useState<number | null>(call.contact_id);
+  const [sectionId, setSectionId] = useState<number | null>(call.section_id);
   const [note, setNote] = useState(call.raw_note);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +46,7 @@ function CallEditForm({ call, contacts, onSaved, onCancel }: { call: CallLog; co
       await unwrap(
         api.calls[":id"].$patch({
           param: { id: String(call.id) },
-          json: { raw_note: note, called_at: iso, result_status_id: statusId, contact_id: contactId },
+          json: { raw_note: note, called_at: iso, result_status_id: statusId, contact_id: contactId, ...(isUser ? { section_id: sectionId } : {}) },
         }),
       );
       onSaved();
@@ -62,6 +76,28 @@ function CallEditForm({ call, contacts, onSaved, onCancel }: { call: CallLog; co
           </select>
         </div>
       </div>
+
+      {isUser && (
+        <div>
+          <div className="mb-1 text-xs text-slate-500">部署</div>
+          <div className="flex flex-wrap gap-1.5">
+            {sections
+              // 無効にした部署でも、この記録が今その部署なら選択肢に残す
+              .filter((s) => s.is_active || s.id === call.section_id)
+              .map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSectionId(sectionId === s.id ? null : s.id)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${sectionId === s.id ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                >
+                  {s.name}
+                  {!s.is_active && "（無効）"}
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="mb-1 text-xs text-slate-500">結果</div>
@@ -104,17 +140,27 @@ export function Timeline({
   contacts,
   nextCallAt,
   nextAction,
+  isUser,
   onChanged,
 }: {
   calls: CallLog[];
   contacts: Contact[];
   nextCallAt: string | null;
   nextAction: string | null;
+  /** ユーザー（導入済み）の施設なら、タイムラインを部署別（営業部・制作部・CS など）に切り替えて見られる */
+  isUser: boolean;
   onChanged: () => void;
 }) {
-  const { me, aiAvailable } = useMasters();
+  const { me, aiAvailable, sections } = useMasters();
   const [running, setRunning] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [tab, setTab] = useState(ALL_TAB);
+
+  // 部署のタブはユーザーの施設だけ。選んだタブは、保存や編集で一覧を読み直しても維持する
+  // （タブが無くなったとき＝部署の記録が無くなった・無効になった等は「全体」に戻す）
+  const tabs = isUser ? timelineTabs(calls, sections) : [];
+  const activeTab = tabs.some((t) => t.key === tab) ? tab : ALL_TAB;
+  const shown = isUser ? callsInTab(calls, activeTab) : calls;
 
   async function analyze(id: number) {
     setRunning(id);
@@ -140,8 +186,26 @@ export function Timeline({
 
   return (
     <Card title={`タイムライン（${calls.length}件）`}>
+      {isUser && tabs.length > 1 && (
+        <div role="tablist" aria-label="部署で切り替え" className="-mt-1 mb-4 flex flex-wrap gap-1.5">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={t.key === activeTab}
+              onClick={() => setTab(t.key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${t.key === activeTab ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+            >
+              {t.label}
+              <span className={`ml-1 tabular-nums ${t.key === activeTab ? "text-slate-300" : "text-slate-400"}`}>{t.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <ol className="relative space-y-5 border-l-2 border-slate-200 pl-5">
-        {nextCallAt && (
+        {/* 次回架電予定は施設全体の予定で、部署には属さないので「全体」だけに出す */}
+        {nextCallAt && (!isUser || activeTab === ALL_TAB) && (
           <li className="relative">
             <span className={`absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4 ring-white ${isOverdue(nextCallAt) ? "bg-rose-500" : "bg-indigo-500"}`} />
             <div className="text-sm font-semibold text-indigo-800">
@@ -150,7 +214,7 @@ export function Timeline({
             {nextAction && <p className="mt-0.5 text-sm text-slate-700">{nextAction}</p>}
           </li>
         )}
-        {calls.map((cl) => {
+        {shown.map((cl) => {
           const canModify = me.role !== "sales" || cl.user_id === me.id;
           return (
             <li key={cl.id} className="group relative">
@@ -158,6 +222,10 @@ export function Timeline({
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium tabular-nums text-slate-800">{fmtDateTime(cl.called_at)}</span>
                 {cl.result_label && <StatusBadge label={cl.result_label} category={cl.result_category} />}
+                {/* 「全体」では、どの部署の記録かが分かるよう部署名を出す（部署のタブの中では、タブで分かるので出さない） */}
+                {isUser && activeTab === ALL_TAB && cl.section_name && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 ring-1 ring-inset ring-slate-200">{cl.section_name}</span>
+                )}
                 <span className="text-xs text-slate-500">
                   {cl.user_name ?? "—"}
                   {cl.contact_name && ` → ${cl.contact_name}`}
@@ -177,6 +245,7 @@ export function Timeline({
                 <CallEditForm
                   call={cl}
                   contacts={contacts}
+                  isUser={isUser}
                   onCancel={() => setEditingId(null)}
                   onSaved={() => {
                     setEditingId(null);
@@ -198,9 +267,9 @@ export function Timeline({
             </li>
           );
         })}
-        {calls.length === 0 && !nextCallAt && (
+        {shown.length === 0 && !(nextCallAt && (!isUser || activeTab === ALL_TAB)) && (
           <li>
-            <Empty>まだ架電履歴がありません</Empty>
+            <Empty>{activeTab === ALL_TAB ? "まだ架電履歴がありません" : "この部署の記録はまだありません"}</Empty>
           </li>
         )}
       </ol>

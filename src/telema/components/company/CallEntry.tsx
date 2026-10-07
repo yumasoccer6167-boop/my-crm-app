@@ -5,6 +5,7 @@ import { AIResult } from "./AIResult";
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
+import { defaultSection, saveLastSection } from "../../lib/section-pref";
 import { Button, Card, CATEGORY_STYLE, ErrorBox, inputCls } from "../ui";
 
 const QUICK = [
@@ -19,8 +20,22 @@ const QUICK = [
  * 架電結果の入力。メモだけでも保存できる。
  * 保存はAIの成否と無関係に先に行う（AI整理はSTEP 10で保存後に実行）。
  */
-export function CallEntry({ companyId, phone, contacts, onSaved }: { companyId: number; phone: string | null; contacts: Contact[]; onSaved: () => void }) {
-  const { statuses, aiAvailable } = useMasters();
+export function CallEntry({
+  companyId,
+  phone,
+  contacts,
+  isUser,
+  onSaved,
+}: {
+  companyId: number;
+  phone: string | null;
+  contacts: Contact[];
+  /** ユーザー（導入済み）の施設なら、記録に部署（営業部・制作部・CS など）を付けられる */
+  isUser: boolean;
+  onSaved: () => void;
+}) {
+  const { statuses, sections, aiAvailable } = useMasters();
+  const [sectionId, setSectionId] = useState<number | null>(() => defaultSection(sections));
   const [note, setNote] = useState("");
   const [statusId, setStatusId] = useState<number | null>(null);
   const [nextCall, setNextCall] = useState("");
@@ -58,9 +73,12 @@ export function CallEntry({ companyId, phone, contacts, onSaved }: { companyId: 
             contact_id: contactId,
             phone_number: phone,
             next_call_at: nextCall ? fromLocalInput(nextCall) : undefined,
+            // 部署はユーザーの施設だけ。それ以外は未分類のまま（後で施設がユーザーになったとき、未分類として見られる）
+            section_id: isUser ? sectionId : undefined,
           },
         }),
       );
+      if (isUser) saveLastSection(sectionId);
       setNote("");
       setStatusId(null);
       setNextCall("");
@@ -87,6 +105,27 @@ export function CallEntry({ companyId, phone, contacts, onSaved }: { companyId: 
           placeholder="例）担当者不在。受付の方から15時以降ならつながりやすいと言われた。"
           className={`${inputCls} resize-y leading-relaxed`}
         />
+
+        {isUser && (
+          <div>
+            <div className="mb-1 text-xs text-slate-500">部署（この記録をどの部署として残すか）</div>
+            <div className="flex flex-wrap gap-1.5">
+              {sections
+                .filter((s) => s.is_active)
+                .map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSectionId(sectionId === s.id ? null : s.id)}
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${sectionId === s.id ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+              {sections.every((s) => !s.is_active) && <span className="text-xs text-slate-400">部署が未登録です（「設定」で追加できます）</span>}
+            </div>
+          </div>
+        )}
 
         <div>
           <div className="mb-1 text-xs text-slate-500">結果</div>

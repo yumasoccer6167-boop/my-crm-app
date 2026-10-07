@@ -436,6 +436,22 @@ CREATE INDEX telema_idx_co_lt_lt ON telema_company_list_types(list_type_id);
 
 INSERT INTO telema_list_types (name, sort_order) VALUES ('繋がり', 10);
 """,
+    # 7: 部署（営業部・制作部・CS など）。タイムラインの記録（架電履歴）ごとに1つ付け、ユーザーの施設では部署別に表示を切り替える。
+    #    マスタは設定画面で管理者が増やせる。既存の記録は部署なし（NULL＝未分類）のまま
+    r"""
+CREATE TABLE telema_sections (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  is_active   INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL DEFAULT telema_now(),
+  updated_at  TEXT NOT NULL DEFAULT telema_now()
+);
+INSERT INTO telema_sections (name, sort_order) VALUES ('営業部', 10), ('制作部', 20), ('CS', 30);
+
+ALTER TABLE telema_call_logs ADD COLUMN section_id INTEGER REFERENCES telema_sections(id);
+CREATE INDEX telema_idx_calls_section ON telema_call_logs(company_id, section_id) WHERE is_active = 1;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

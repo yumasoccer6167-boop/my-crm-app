@@ -16,13 +16,28 @@ CALL_BODY = {
     # 利用者が画面で明示的に決めた次回予定（AI提案の自動反映ではない）
     'next_call_at': IsoDatetime(nullable=True, optional=True),
     'next_action': Str(max=500, nullable=True, optional=True),
+    # どの部署の記録か（営業部・制作部・CS など。ユーザーの施設でタイムラインを部署別に見るため）。省略・null は未分類
+    'section_id': Int(nullable=True, optional=True),
 }
 
-CALL_SELECT = '''SELECT cl.*, ct.name AS contact_name, u.display_name AS user_name, s.label AS result_label, s.category AS result_category
+CALL_SELECT = '''SELECT cl.*, ct.name AS contact_name, u.display_name AS user_name, s.label AS result_label, s.category AS result_category,
+    sec.name AS section_name
   FROM telema_call_logs cl
   LEFT JOIN telema_contacts ct ON ct.id = cl.contact_id
   LEFT JOIN users u ON u.id = cl.user_id
-  LEFT JOIN telema_call_statuses s ON s.id = cl.result_status_id'''
+  LEFT JOIN telema_call_statuses s ON s.id = cl.result_status_id
+  LEFT JOIN telema_sections sec ON sec.id = cl.section_id'''
+
+
+def _check_section(d, section_id, current_section_id=None):
+    """部署は実在するものだけ。無効にした部署を新しく付けることはできない（その記録にすでに付いている部署なら、そのまま残せる）"""
+    if section_id is None or section_id == current_section_id:
+        return
+    sec = d.first('SELECT is_active FROM telema_sections WHERE id = %s', (section_id,))
+    if not sec:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（section_id: 部署が見つかりません）')
+    if not sec['is_active']:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（section_id: 無効な部署は選べません）')
 
 
 @bp.get('/companies/<id>/calls')
@@ -42,12 +57,13 @@ def create_call(id):
     if not can_edit_company(user, company['assigned_user_id']):
         raise forbidden()
 
+    _check_section(d, b.get('section_id'))
     called_at = b.get('called_at') or now_iso()
     call_id = d.value(
-        '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b.get('contact_id'), user['id'], called_at, b.get('phone_number') or company['phone'], b.get('result_status_id'),
-         b['raw_note'], 'pending' if b['raw_note'].strip() else 'skipped'),
+         b['raw_note'], 'pending' if b['raw_note'].strip() else 'skipped', b.get('section_id')),
     )
     # 履歴を先に確定させる（この後の会社更新で失敗しても架電メモは残す）
     d.commit()
@@ -78,6 +94,7 @@ CALL_PATCH = {
     'called_at': IsoDatetime(),
     'result_status_id': Int(nullable=True),
     'contact_id': Int(nullable=True),
+    'section_id': Int(nullable=True),
 }
 
 # メモを直したら、古いメモから作ったAI整理は内容と食い違うので消して再整理できる状態に戻す
@@ -96,7 +113,7 @@ def _recalc_company_calls(d, company_id):
 
 @bp.patch('/calls/<id>')
 def update_call(id):
-    """過去の架電履歴を直す（日時・結果・話した相手・メモ）。無効化と同じく、sales は自分の架電だけ直せる。
+    """過去の架電履歴を直す（日時・結果・話した相手・メモ・部署）。無効化と同じく、sales は自分の架電だけ直せる。
     会社の現在の状態（ステータス・次回架電など）は、直した履歴に合わせて勝手に書き換えない（最終架電日時と件数だけ再計算する）"""
     id = parse_id(id)
     b = parse(CALL_PATCH, body(), partial=True)
@@ -115,6 +132,8 @@ def update_call(id):
             'SELECT 1 FROM telema_contacts WHERE id = %s AND is_active = 1 AND (company_id = %s OR (company_id IS NULL AND organization_id = %s))',
             (b['contact_id'], company['id'], company['organization_id'])):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（contact_id: この施設の担当者ではありません）')
+    if 'section_id' in b:
+        _check_section(d, b['section_id'], call['section_id'])
 
     changes = {k: v for k, v in b.items() if call[k] != v}
     if not changes:
