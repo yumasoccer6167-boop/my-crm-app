@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { RELEASE_NOTES, unseenReleaseNotes, publishedReleaseNotes } from './releaseNotes.js';
 import {
   Home, Users, PenTool, Plus, Search, Edit, X, Phone, MapPin, Save,
   Trash2, Package, Settings, CheckCircle, Filter, Mail, Globe,
@@ -10,6 +11,9 @@ import {
 
 // 育てるテレマリスト（src/telema）。開いたときだけ読み込む
 const TelemaApp = lazy(() => import('./telema/TelemaApp'));
+
+// アプリ更新のお知らせ（内容と更新日時は src/releaseNotes.js）。開いたときだけ読み込む
+const ReleaseNotesModal = lazy(() => import('./ReleaseNotesModal.jsx'));
 
 // ---------- 初期データ ----------
 const initialProducts = [{ id: 1, name: 'SP-MEO' }, { id: 2, name: 'SP' }];
@@ -5420,6 +5424,13 @@ export default function App() {
   const myPersonal = (personalSettings || {})[myKey] || {};
   const updatePersonal = (patch) => setPersonalSettings(prev => ({ ...(prev || {}), [myKey]: { ...((prev || {})[myKey] || {}), ...patch } }));
 
+  // ---- アップデートのお知らせ ----
+  // 更新後に最初に開いたとき、前回確認した更新日時より新しいお知らせがあれば表示する（データの読み込みが終わってから判定）。
+  // 閉じたときに「確認した更新日時」を個人設定に保存するので、同じお知らせは出ない（別の端末でも同じ）
+  const [showReleaseHistory, setShowReleaseHistory] = useState(false);
+  const unseenNotes = dataLoaded && user && myKey ? unseenReleaseNotes(RELEASE_NOTES, myPersonal.releaseNotesSeenAt) : [];
+  const closeReleaseNotice = () => updatePersonal({ releaseNotesSeenAt: unseenNotes[0].releasedAt });
+
   // 個人設定をマージした「実効」フラグ・フォーマット（自分の画面だけに反映される）
   const effectiveActivityTypes = useMemo(() => mergeActivityTypes(activityTypes, myPersonal.activityTypes || []), [activityTypes, myPersonal.activityTypes]);
   const effectiveReportTemplates = useMemo(() => [
@@ -5542,6 +5553,7 @@ export default function App() {
             <button onClick={() => setMenuOpen(false)} className="absolute top-3 right-3 text-white"><X className="w-5 h-5" /></button>
             <div className="px-5 py-3 text-white font-bold border-b border-slate-700 mb-2">CRMシステム</div>
             {menuItems.map(m => <NavItem key={m.id} {...m} isActive={activeTab === m.id} onClick={() => { setActiveTab(m.id); setMenuOpen(false); }} />)}
+            <button onClick={() => { setMenuOpen(false); setShowReleaseHistory(true); }} className="mx-5 my-3 text-left text-xs text-slate-400 hover:text-white underline underline-offset-2">更新情報</button>
           </div>
         </div>
       )}
@@ -5562,6 +5574,7 @@ export default function App() {
         <div className="px-5 pb-4 text-[10px] flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${syncError ? 'bg-red-400' : 'bg-teal-400'}`} />
           <span className={syncError ? 'text-red-300' : 'text-slate-500'}>{syncError ? '保存に失敗しました（通信を確認してください）' : 'サーバーと同期中'}</span>
+          <button onClick={() => setShowReleaseHistory(true)} className="ml-auto text-slate-400 hover:text-white underline underline-offset-2">更新情報</button>
         </div>
       </aside>
 
@@ -5643,6 +5656,16 @@ export default function App() {
           />
         )}
       </main>
+
+      {(unseenNotes.length > 0 || showReleaseHistory) && (
+        <Suspense fallback={null}>
+          {unseenNotes.length > 0 ? (
+            <ReleaseNotesModal notes={unseenNotes} isNew onClose={closeReleaseNotice} />
+          ) : (
+            <ReleaseNotesModal notes={publishedReleaseNotes(RELEASE_NOTES)} onClose={() => setShowReleaseHistory(false)} />
+          )}
+        </Suspense>
+      )}
 
       {alertMsg && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4">
