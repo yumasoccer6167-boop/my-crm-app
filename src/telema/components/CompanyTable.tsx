@@ -14,18 +14,16 @@ export function Rating({ rating, count }: { rating: number | null; count: number
   );
 }
 
-/** 加盟協会・リスト種類のチップ。名前が長くても列が潰れないよう、折り返して並べる。種類の見分けがつくよう色を変える */
-const CHIP_TONE = {
-  association: "bg-indigo-50 text-indigo-800 ring-indigo-200",
-  listType: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-} as const;
-
-function TagChips({ names, tone }: { names: string[]; tone: keyof typeof CHIP_TONE }) {
+/**
+ * リスト種類のチップ。名前が長くても列が潰れないよう、折り返して並べる。
+ * 加盟協会は1施設に何件も付いて行が縦に伸びるので、一覧には出さない（絞り込み・一括割り振りと、施設詳細の基本情報で扱う）
+ */
+function ListTypeChips({ names }: { names: string[] }) {
   if (names.length === 0) return <span className="text-slate-300">—</span>;
   return (
     <span className="flex flex-wrap gap-1">
       {names.map((n) => (
-        <span key={n} className={`break-words rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset ${CHIP_TONE[tone]}`}>
+        <span key={n} className="break-words rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800 ring-1 ring-inset ring-emerald-200">
           {n}
         </span>
       ))}
@@ -87,7 +85,6 @@ export function CompanyTable({
               <th className="px-3 py-2 font-medium">口コミ</th>
               <th className="px-3 py-2 font-medium">担当者</th>
               <th className="px-3 py-2 font-medium">リスト種類</th>
-              <th className="px-3 py-2 font-medium">加盟協会</th>
               <th className="px-3 py-2 font-medium">次回架電</th>
               <th className="px-3 py-2 font-medium">最終架電</th>
               {showAssignee && <th className="px-3 py-2 font-medium">営業</th>}
@@ -136,10 +133,7 @@ export function CompanyTable({
                 </td>
                 <td className="max-w-32 truncate px-3 py-2 text-slate-700">{c.contact_name ?? <span className="text-slate-400">—</span>}</td>
                 <td className="min-w-24 max-w-40 px-3 py-2">
-                  <TagChips names={c.list_types} tone="listType" />
-                </td>
-                <td className="min-w-28 max-w-56 px-3 py-2">
-                  <TagChips names={c.associations} tone="association" />
+                  <ListTypeChips names={c.list_types} />
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                   <NextCall iso={c.next_call_at} />
@@ -174,10 +168,9 @@ export function CompanyTable({
               <span>{[c.city, c.industry].filter(Boolean).join(" · ")}</span>
               {c.google_rating != null && <Rating rating={c.google_rating} count={c.google_review_count} />}
             </div>
-            {(c.list_types.length > 0 || c.associations.length > 0) && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {c.list_types.length > 0 && <TagChips names={c.list_types} tone="listType" />}
-                {c.associations.length > 0 && <TagChips names={c.associations} tone="association" />}
+            {c.list_types.length > 0 && (
+              <div className="mt-1">
+                <ListTypeChips names={c.list_types} />
               </div>
             )}
             <div className="mt-1.5 flex items-center justify-between text-sm">
