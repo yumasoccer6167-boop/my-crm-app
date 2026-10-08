@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Contact, RecordType, VisitMethod } from "../../types";
 import type { CallExtraction } from "../../types";
 import { AIResult } from "./AIResult";
@@ -45,7 +45,9 @@ export function CallEntry({
   const [sectionId, setSectionId] = useState<number | null>(() => defaultSection(sections));
   const [kind, setKind] = useState<RecordType>("call");
   const [visitMethod, setVisitMethod] = useState<VisitMethod>("visit");
-  const [visitedAt, setVisitedAt] = useState(() => toLocalInput(new Date().toISOString()));
+  // 記録の日時。基本は「この記録を書いている時間」で、自分で変えるまでは現在時刻に追従し、保存するときも保存時点の時刻にする
+  const [recordedAt, setRecordedAt] = useState(() => toLocalInput(new Date().toISOString()));
+  const [atEdited, setAtEdited] = useState(false);
   const [note, setNote] = useState("");
   const [statusId, setStatusId] = useState<number | null>(null);
   const [nextCall, setNextCall] = useState("");
@@ -66,9 +68,16 @@ export function CallEntry({
     onSaved();
   }
 
+  useEffect(() => {
+    if (atEdited) return;
+    const t = setInterval(() => setRecordedAt(toLocalInput(new Date().toISOString())), 30_000);
+    return () => clearInterval(t);
+  }, [atEdited]);
+
   const active = statuses.filter((s) => s.is_active && s.category !== "not_started");
   const isVisit = kind === "visit";
-  const canSave = isVisit ? note.trim() !== "" && !!fromLocalInput(visitedAt) : note.trim() !== "" || statusId !== null;
+  const atValid = !!fromLocalInput(recordedAt) && (!atEdited || new Date(recordedAt).getTime() <= Date.now() + 60_000);   // 未来の日時は記録できない
+  const canSave = atValid && (isVisit ? note.trim() !== "" : note.trim() !== "" || statusId !== null);
 
   async function save(withAI = false) {
     setSaving(true);
@@ -77,6 +86,7 @@ export function CallEntry({
     try {
       const common = {
         raw_note: note,
+        called_at: atEdited ? (fromLocalInput(recordedAt) ?? undefined) : new Date().toISOString(),
         contact_id: contactId,
         // 部署はユーザーの施設だけ。それ以外は未分類のまま（後で施設がユーザーになったとき、未分類として見られる）
         section_id: isUser ? sectionId : undefined,
@@ -85,7 +95,7 @@ export function CallEntry({
         api.companies[":id"].calls.$post({
           param: { id: String(companyId) },
           json: isVisit
-            ? { ...common, record_type: "visit", visit_method: visitMethod, called_at: fromLocalInput(visitedAt) ?? undefined }
+            ? { ...common, record_type: "visit", visit_method: visitMethod }
             : { ...common, result_status_id: statusId ?? undefined, phone_number: phone, next_call_at: nextCall ? fromLocalInput(nextCall) : undefined },
         }),
       );
@@ -93,7 +103,8 @@ export function CallEntry({
       setNote("");
       setStatusId(null);
       setNextCall("");
-      setVisitedAt(toLocalInput(new Date().toISOString()));
+      setRecordedAt(toLocalInput(new Date().toISOString()));
+      setAtEdited(false);
       setSavedMsg("保存しました");
       setTimeout(() => setSavedMsg(null), 2500);
       onSaved();
@@ -106,6 +117,38 @@ export function CallEntry({
       setSaving(false);
     }
   }
+
+  const recordedAtField = (
+    <div>
+      <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
+        {isVisit ? "訪問日時" : "架電日時"}
+        {atEdited ? (
+          <button
+            type="button"
+            className="text-indigo-600 hover:underline"
+            onClick={() => {
+              setAtEdited(false);
+              setRecordedAt(toLocalInput(new Date().toISOString()));
+            }}
+          >
+            現在時刻に戻す
+          </button>
+        ) : (
+          <span className="text-slate-400">（保存した時刻。変更もできます）</span>
+        )}
+      </div>
+      <input
+        type="datetime-local"
+        value={recordedAt}
+        onChange={(e) => {
+          setRecordedAt(e.target.value);
+          setAtEdited(true);
+        }}
+        className={inputCls}
+      />
+      {atEdited && !atValid && <p className="mt-1 text-xs text-rose-600">未来の日時は記録できません</p>}
+    </div>
+  );
 
   return (
     <Card title={isVisit ? "訪問記録を入力" : "架電結果を入力"}>
@@ -171,11 +214,12 @@ export function CallEntry({
                 ))}
               </div>
             </div>
-            <div>
-              <div className="mb-1 text-xs text-slate-500">訪問日時</div>
-              <input type="datetime-local" value={visitedAt} onChange={(e) => setVisitedAt(e.target.value)} className={inputCls} />
-            </div>
+            {recordedAtField}
           </div>
+        )}
+
+        {!isVisit && (
+          <div className="max-w-xs">{recordedAtField}</div>
         )}
 
         {!isVisit && (
