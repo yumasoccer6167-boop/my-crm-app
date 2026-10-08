@@ -184,7 +184,11 @@ function CallEditForm({
         {noteChanged && hasAI && !isVisit && <p className="mt-1 text-xs text-amber-700">メモを変えると、この履歴のAI要約は消えます（保存後に「AIで整理」し直せます）。</p>}
       </div>
 
-      <p className="text-xs text-slate-500">ここで直しても、施設のステータス・次回架電はそのままです（最終架電日時だけ再計算されます）。</p>
+      <p className="text-xs text-slate-500">
+        {isVisit
+          ? "訪問の記録は、施設のステータス・次回架電には影響しません。"
+          : "結果の付いた記録で一番新しいものの結果を直すと、施設のステータスもその結果に変わります（古い記録なら変わりません）。次回架電はそのままです。"}
+      </p>
       {error && <ErrorBox message={`保存できませんでした：${error}`} />}
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" disabled={saving} onClick={onCancel}>

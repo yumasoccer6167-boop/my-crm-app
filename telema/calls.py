@@ -147,10 +147,28 @@ def _recalc_company_calls(d, company_id):
     )
 
 
+def _sync_company_status(d, user, call, changes):
+    """結果（フラグ）を直したのが、結果の付いた架電のうち一番新しい記録なら、施設のステータスもその結果にそろえる。
+    古い記録を直しても、今のステータスは変えない（今のステータスは最新の結果で決まるため）。結果を外したときも変えない"""
+    new_status = changes.get('result_status_id')
+    if call['record_type'] != 'call' or new_status is None:
+        return
+    latest = d.value(
+        '''SELECT id FROM telema_call_logs WHERE company_id = %s AND is_active = 1 AND record_type = 'call' AND result_status_id IS NOT NULL
+           ORDER BY called_at DESC, id DESC LIMIT 1''', (call['company_id'],))
+    if latest != call['id']:
+        return
+    current = d.value('SELECT status_id FROM telema_companies WHERE id = %s', (call['company_id'],))
+    if current == new_status:
+        return
+    d.run('UPDATE telema_companies SET status_id = %s, updated_at = telema_now() WHERE id = %s', (new_status, call['company_id']))
+    audit(d, user['id'], 'update', 'company', call['company_id'], {'status_id': current}, {'status_id': new_status})
+
+
 @bp.patch('/calls/<id>')
 def update_call(id):
     """過去の架電履歴を直す（日時・結果・話した相手・メモ・部署・訪問日時・事前確認日時）。無効化と同じく、sales は自分の架電だけ直せる。
-    会社の現在の状態（ステータス・次回架電など）は、直した履歴に合わせて勝手に書き換えない（最終架電日時と件数だけ再計算する）"""
+    結果を直したのが最新の結果の記録なら、施設のステータスもその結果にそろえる（古い記録なら変えない）。次回架電などは書き換えない。最終架電日時と件数は再計算する"""
     id = parse_id(id)
     b = parse(CALL_PATCH, body(), partial=True)
     user = current_user()
@@ -199,6 +217,7 @@ def update_call(id):
     )
     if 'called_at' in changes and call['record_type'] == 'call':
         _recalc_company_calls(d, call['company_id'])
+    _sync_company_status(d, user, call, changes)
     audit(d, user['id'], 'update', 'call_log', id, {k: call[k] for k in changes}, changes)
     return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (id,)))
 

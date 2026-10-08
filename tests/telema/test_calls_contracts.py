@@ -29,8 +29,8 @@ def test_架電履歴のメモ_日時_結果_相手を直せて最終架電日�
     # 日時を新しい方へ直したので、最終架電日時が追従する。件数は変わらない
     c = company(client, cid)
     assert c['last_called_at'] == '2026-09-25T01:00:00.000Z' and c['call_count'] == 2
-    # 会社の現在の状態（ステータス・次回架電）は履歴の修正では動かさない
-    assert c['status_id'] == recall and c['next_call_at'] == '2026-10-05T01:00:00.000Z'
+    # 結果を直したこの記録が、結果の付いた記録で一番新しくなったので、ステータスはその結果にそろう。次回架電は動かさない
+    assert c['status_id'] == appo and c['next_call_at'] == '2026-10-05T01:00:00.000Z'
     # 履歴は新しい順に並ぶ
     assert [x['id'] for x in client.api(f'/companies/{cid}/calls')[1]] == [old['id'], new['id']]
     log = client.sql("SELECT action, before_json, after_json FROM telema_audit_logs WHERE entity_type = 'call_log' AND entity_id = %s", (old['id'],))
@@ -209,3 +209,43 @@ def test_商材のリンクはhttpかhttpsのURLだけ(client):
     assert client.api(url, {'product_name': 'SP', 'contract_date': '2026-09-01', 'product_url': 'https://' + 'a' * 1000})[0] == 400
     assert client.api(url, {'product_name': 'SP', 'contract_date': '2026-09-01', 'appointment_user_name': 'あ' * 101})[0] == 400
     assert client.api(f'/companies/{cid}')[1]['contracts'] == []
+
+
+def test_最新の結果を直すと施設のステータスも変わり_古い記録を直しても変わらない(client):
+    cid = make_company(client, 'ステータス連動園')
+    recall, appo, ng = client.status_id('再コール'), client.status_id('時間設定成立'), client.status_id('受注不成立')
+    first = client.api(f'/companies/{cid}/calls', {'raw_note': '1回目', 'called_at': '2026-09-01T01:00:00Z', 'result_status_id': recall})[1]
+    last = client.api(f'/companies/{cid}/calls', {'raw_note': '2回目', 'called_at': '2026-09-10T01:00:00Z', 'result_status_id': recall,
+                                                 'next_call_at': '2026-10-05T01:00:00Z'})[1]
+    note_only = client.api(f'/companies/{cid}/calls', {'raw_note': '結果なしのメモ', 'called_at': '2026-09-20T01:00:00Z'})[1]
+    assert company(client, cid)['status_id'] == recall
+
+    # 古い記録の結果を直しても、今のステータスは変わらない
+    assert client.api(f'/calls/{first["id"]}', {'result_status_id': ng}, method='PATCH')[0] == 200
+    assert company(client, cid)['status_id'] == recall
+
+    # 結果の付いた一番新しい記録（メモだけの記録は数えない）を直すと、ステータスも変わる。次回架電はそのまま
+    assert client.api(f'/calls/{last["id"]}', {'result_status_id': appo}, method='PATCH')[0] == 200
+    c = company(client, cid)
+    assert c['status_id'] == appo and c['next_call_at'] == '2026-10-05T01:00:00.000Z'
+    log = client.sql("SELECT before_json, after_json FROM telema_audit_logs WHERE entity_type = 'company' AND entity_id = %s ORDER BY id DESC LIMIT 1", (cid,))[0]
+    assert str(recall) in log['before_json'] and str(appo) in log['after_json']
+
+    # 結果を外してもステータスは変えない。メモだけの記録に結果を付ければ、それが最新になりステータスが変わる
+    assert client.api(f'/calls/{last["id"]}', {'result_status_id': None}, method='PATCH')[0] == 200
+    assert company(client, cid)['status_id'] == appo
+    assert client.api(f'/calls/{note_only["id"]}', {'result_status_id': ng}, method='PATCH')[0] == 200
+    assert company(client, cid)['status_id'] == ng
+    # 結果が変わらない編集（メモだけ）では動かさない
+    client.sql('UPDATE telema_companies SET status_id = %s WHERE id = %s', (recall, cid))
+    assert client.api(f'/calls/{note_only["id"]}', {'raw_note': 'メモを直した'}, method='PATCH')[0] == 200
+    assert company(client, cid)['status_id'] == recall
+
+
+def test_訪問記録は施設のステータスに関わらない(client):
+    cid = make_company(client, '訪問連動なし園')
+    recall = client.status_id('再コール')
+    client.api(f'/companies/{cid}/calls', {'raw_note': '架電', 'result_status_id': recall})
+    v = client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '訪問'})[1]
+    client.api(f'/calls/{v["id"]}', {'raw_note': '直した', 'visit_method': 'zoom'}, method='PATCH')
+    assert company(client, cid)['status_id'] == recall
