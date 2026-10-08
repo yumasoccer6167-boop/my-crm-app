@@ -64,7 +64,7 @@ export function VisitRoute() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-bold text-slate-900">初回訪問ルート</h1>
+        <h1 className="text-lg font-semibold text-slate-900">初回訪問ルート</h1>
         <p className="text-sm text-slate-500">
           ユーザーの施設を都道府県ごとに、1日数件ずつ回れるように自動で組みます。訪問した施設は「✓
           訪問済み」でルートから外れます。移動時間は直線距離からの目安なので、出発前に「経路」のリンクで確認してください。
@@ -77,7 +77,7 @@ export function VisitRoute() {
             key={p}
             type="button"
             onClick={() => setPref(p)}
-            className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${p === cur ? "bg-teal-600 text-white ring-teal-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+            className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${p === cur ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
           >
             {p} {pendingCount(list)}
             {pendingCount(list) < list.length && <span className="ml-1 opacity-70">／済{list.length - pendingCount(list)}</span>}
@@ -132,7 +132,7 @@ export function VisitRoute() {
               <ul className="space-y-1 text-sm">
                 {unlocated.map((t) => (
                   <li key={t.id}>
-                    <Link to={`/companies/${t.id}`} className="text-teal-700 hover:underline">
+                    <Link to={`/companies/${t.id}`} className="text-indigo-700 hover:underline">
                       {t.company_name}
                     </Link>
                     <span className="ml-1 text-xs text-slate-500">{t.address ?? t.city ?? "住所なし"}</span>
@@ -148,7 +148,7 @@ export function VisitRoute() {
                 {visited.map((t) => (
                   <li key={t.id} className="flex items-center gap-2">
                     <span className="w-12 shrink-0 text-xs tabular-nums text-slate-500">{fmtDay(t.visited_at!)}</span>
-                    <Link to={`/companies/${t.id}`} className="min-w-0 flex-1 truncate text-teal-700 hover:underline">
+                    <Link to={`/companies/${t.id}`} className="min-w-0 flex-1 truncate text-indigo-700 hover:underline">
                       {t.company_name}
                     </Link>
                     <Button size="sm" variant="ghost" disabled={saving} onClick={() => markVisited([t.id], false)}>
@@ -165,7 +165,7 @@ export function VisitRoute() {
           {days.map((d, i) => (
             <section key={d.stops[0]!.main.id} className="rounded-lg bg-white p-4 ring-1 ring-slate-200">
               <header className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h2 className="flex items-center gap-2 font-bold text-slate-900">
+                <h2 className="flex items-center gap-2 font-semibold text-slate-900">
                   <span className="inline-block h-3 w-3 rounded-full" style={{ background: color(i) }} />
                   {i + 1}日目
                 </h2>
@@ -173,7 +173,7 @@ export function VisitRoute() {
                   {count(d)}件・移動 約{d.travel}分・終了 {fmtTime(d.end)}頃
                 </span>
                 {count(d) <= 2 && <span className="rounded-full bg-amber-50 px-2 text-xs text-amber-700 ring-1 ring-amber-200">件数少なめ</span>}
-                <a href={dayUrl(d)} target="_blank" rel="noopener noreferrer" className="ml-auto text-xs text-teal-700 hover:underline">
+                <a href={dayUrl(d)} target="_blank" rel="noopener noreferrer" className="ml-auto text-xs text-indigo-700 hover:underline">
                   この日の行程を Google マップで開く
                 </a>
               </header>
@@ -185,7 +185,7 @@ export function VisitRoute() {
                         <span className="ml-5 border-l-2 border-dashed border-slate-200" />
                         <span>
                           {d.legs[j - 1]!.how} 約{d.legs[j - 1]!.min}分（直線 {d.legs[j - 1]!.km.toFixed(1)}km）・
-                          <a href={legUrl(d.stops[j - 1]!, s)} target="_blank" rel="noopener noreferrer" className="text-teal-700 hover:underline">
+                          <a href={legUrl(d.stops[j - 1]!, s)} target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline">
                             経路を見る
                           </a>
                         </span>
@@ -208,7 +208,7 @@ export function VisitRoute() {
                         >
                           ✓ 訪問済み
                         </Button>
-                        <Link to={`/companies/${s.main.id}`} className="font-semibold text-slate-900 hover:text-teal-700 hover:underline">
+                        <Link to={`/companies/${s.main.id}`} className="font-semibold text-slate-900 hover:text-indigo-700 hover:underline">
                           {s.main.company_name}
                         </Link>
                         {s.also.length > 0 && (
@@ -217,7 +217,7 @@ export function VisitRoute() {
                         <div className="text-xs text-slate-500">
                           {s.main.address ?? s.main.city}
                           {s.main.phone && (
-                            <a href={`tel:${s.main.phone}`} className="ml-2 tabular-nums text-teal-700 hover:underline">
+                            <a href={`tel:${s.main.phone}`} className="ml-2 tabular-nums text-indigo-700 hover:underline">
                               {s.main.phone}
                             </a>
                           )}

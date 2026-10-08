@@ -371,7 +371,7 @@ function FormField({ label, value, onChange, type = 'text', className = '', plac
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+        className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
       />
     </div>
   );
@@ -388,11 +388,11 @@ function Modal({ title, onClose, children, wide }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white rounded-2xl shadow-2xl w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[85dvh] flex flex-col`}
+        className={`bg-white rounded-lg shadow-2xl w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[85dvh] flex flex-col`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 rounded-t-2xl">
-          <h3 className="font-bold text-slate-800">{title}</h3>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"><X className="w-5 h-5" /></button>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 rounded-t-lg">
+          <h3 className="font-semibold text-slate-800">{title}</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-400"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-6 overflow-y-auto">{children}</div>
       </div>
@@ -414,9 +414,9 @@ function CopyButton({ text, label = 'コピー', className = '' }) {
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <button onClick={copy} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-      copied ? 'bg-teal-100 text-teal-700' : 'bg-slate-700 text-white hover:bg-slate-600'
-    } ${className}`}>
+    <button onClick={copy} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+ copied ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-700 text-white hover:bg-slate-600'
+ } ${className}`}>
       <Copy className="w-3.5 h-3.5" />{copied ? 'コピーしました' : label}
     </button>
   );
@@ -427,17 +427,17 @@ function ProgressCard({ label, actual, goal, unit = '件', onClick }) {
   const over = goal > 0 && actual >= goal;
   const Tag = onClick ? 'button' : 'div';
   return (
-    <Tag onClick={onClick} className={`bg-white rounded-xl p-4 shadow-sm border border-slate-100 text-left w-full ${onClick ? 'hover:shadow-md hover:border-teal-200 transition cursor-pointer' : ''}`}>
+    <Tag onClick={onClick} className={`bg-white rounded-lg p-4 ring-1 ring-slate-200 text-left w-full ${onClick ? 'hover:shadow-md hover:border-indigo-200 transition cursor-pointer' : ''}`}>
       <div className="flex justify-between items-baseline mb-2">
-        <span className="text-xs font-bold text-slate-500">{label}</span>
-        <span className={`text-xs font-bold ${over ? 'text-teal-600' : 'text-slate-400'}`}>{pct}%</span>
+        <span className="text-xs font-semibold text-slate-500">{label}</span>
+        <span className={`text-xs font-semibold ${over ? 'text-indigo-600' : 'text-slate-400'}`}>{pct}%</span>
       </div>
       <div className="flex items-baseline gap-1 mb-3">
         <span className="text-2xl font-extrabold text-slate-800">{actual}</span>
         <span className="text-sm text-slate-400">/ {goal}{unit}</span>
       </div>
       <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${over ? 'bg-teal-500' : 'bg-indigo-400'}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full transition-all ${over ? 'bg-indigo-500' : 'bg-indigo-400'}`} style={{ width: `${pct}%` }} />
       </div>
     </Tag>
   );
@@ -446,9 +446,9 @@ function ProgressCard({ label, actual, goal, unit = '件', onClick }) {
 function RateCard({ label, rate, onClick }) {
   const Tag = onClick ? 'button' : 'div';
   return (
-    <Tag onClick={onClick} className={`bg-white rounded-xl p-4 shadow-sm border border-slate-100 text-left w-full ${onClick ? 'hover:shadow-md hover:border-teal-200 transition cursor-pointer' : ''}`}>
+    <Tag onClick={onClick} className={`bg-white rounded-lg p-4 ring-1 ring-slate-200 text-left w-full ${onClick ? 'hover:shadow-md hover:border-indigo-200 transition cursor-pointer' : ''}`}>
       <div className="mb-2">
-        <span className="text-xs font-bold text-slate-500">{label}</span>
+        <span className="text-xs font-semibold text-slate-500">{label}</span>
       </div>
       <div className="flex items-baseline gap-1 mb-3">
         <span className="text-2xl font-extrabold text-slate-800">{rate}</span>
@@ -475,8 +475,8 @@ function DonutCard({ label, actual, goal, unit = '件', rate = null, onClick }) 
   const Tag = onClick ? 'button' : 'div';
 
   return (
-    <Tag onClick={onClick} className={`bg-white rounded-xl p-4 shadow-sm border border-slate-100 w-full flex flex-col items-center ${onClick ? 'hover:shadow-md hover:border-teal-200 transition cursor-pointer' : ''}`}>
-      <span className="text-xs font-bold text-slate-500 mb-2 text-center">{label}</span>
+    <Tag onClick={onClick} className={`bg-white rounded-lg p-4 ring-1 ring-slate-200 w-full flex flex-col items-center ${onClick ? 'hover:shadow-md hover:border-indigo-200 transition cursor-pointer' : ''}`}>
+      <span className="text-xs font-semibold text-slate-500 mb-2 text-center">{label}</span>
       <div className="relative">
         <svg width="110" height="110" viewBox="0 0 110 110">
           <circle cx="55" cy="55" r={R} fill="none" stroke="#f1f5f9" strokeWidth="12" />
@@ -519,15 +519,15 @@ function LoginView({ onLogin }) {
 
   return (
     <div className="flex h-[100dvh] items-center justify-center bg-slate-50 p-4">
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm space-y-4">
+      <form onSubmit={submit} className="bg-white rounded-lg shadow-lg p-8 w-full max-w-sm space-y-4">
         <div className="text-center mb-2">
-          <h1 className="text-xl font-bold text-slate-800">CRMシステム</h1>
+          <h1 className="text-xl font-semibold text-slate-800">CRMシステム</h1>
           <p className="text-xs text-slate-400 mt-1">ログインしてください</p>
         </div>
         <FormField label="ユーザー名" value={username} onChange={e => setUsername(e.target.value)} />
         <FormField label="パスワード" type="password" value={password} onChange={e => setPassword(e.target.value)} />
         {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-        <button type="submit" disabled={loading} className="w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700 disabled:opacity-50">
+        <button type="submit" disabled={loading} className="w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50">
           {loading ? 'ログイン中...' : 'ログイン'}
         </button>
       </form>
@@ -682,9 +682,9 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold text-slate-800">実績サマリー</h2>
+        <h2 className="text-lg font-semibold text-slate-800">実績サマリー</h2>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
             {[['all', '全体'], ['department', '課'], ['personal', '個人']].map(([v, l]) => (
               <button key={v}
                 onClick={() => {
@@ -692,45 +692,45 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
                   if (v === 'department') setScopeValue(currentUser?.department || (departments[0]?.name || ''));
                   else if (v === 'personal') setScopeValue(currentUser?.displayName || '');
                 }}
-                className={`px-3 py-2 text-sm font-bold ${scopeType === v ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                className={`px-3 py-2 text-sm font-medium ${scopeType === v ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                 {l}
               </button>
             ))}
           </div>
           {scopeType === 'department' && (
-            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               <option value="">課を選択</option>
               {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
           )}
           {scopeType === 'personal' && (
             <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} disabled={!isOwner}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white disabled:bg-slate-50">
+              className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white disabled:bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
-          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">すべての協会</option>
             {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
-          <select value={period} onChange={e => setPeriod(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={period} onChange={e => setPeriod(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="all">全期間</option>
             {months.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
           {period !== 'all' && (
-            <button onClick={() => { setDraft(goal); setEditing(true); }} className="px-3 py-2 text-sm font-semibold text-teal-700 bg-teal-50 rounded-lg hover:bg-teal-100">目標設定</button>
+            <button onClick={() => { setDraft(goal); setEditing(true); }} className="px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100">目標設定</button>
           )}
-          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
             <button onClick={() => setSummaryView('card')} title="カード表示"
-              className={`p-2 ${summaryView === 'card' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+              className={`p-2 ${summaryView === 'card' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
               <LayoutGrid className="w-4 h-4" />
             </button>
             <button onClick={() => setSummaryView('chart')} title="円グラフ表示"
-              className={`p-2 ${summaryView === 'chart' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+              className={`p-2 ${summaryView === 'chart' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
               <PieChart className="w-4 h-4" />
             </button>
           </div>
-          <button onClick={exportPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-slate-700 rounded-lg hover:bg-slate-600">
+          <button onClick={exportPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600">
             <Download className="w-4 h-4" />PDF出力
           </button>
         </div>
@@ -773,7 +773,7 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
             <FormField label="営業粗利 目標（P）" type="number" value={draft.profit} onChange={e => setDraft({ ...draft, profit: Number(e.target.value) })} />
             <FormField label="台数 目標" type="number" value={draft.quantity} onChange={e => setDraft({ ...draft, quantity: Number(e.target.value) })} />
           </div>
-          <button onClick={saveGoal} className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
+          <button onClick={saveGoal} className="mt-5 w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">保存する</button>
         </Modal>
       )}
 
@@ -788,9 +788,9 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
                 return (
                   <button key={r.id}
                     onClick={() => { setDrilldown(null); onOpenCustomer(r.customerId); }}
-                    className="text-left bg-white rounded-xl border border-slate-100 p-3 hover:shadow-md hover:border-teal-200 transition">
+                    className="text-left bg-white rounded-md ring-1 ring-inset ring-slate-300 p-3 hover:shadow-md hover:border-indigo-200 transition">
                     <p className="text-xs text-slate-400">{cust?.gakuenName || ''}{cust?.associationType ? ` ・ ${cust.associationType}` : ''}</p>
-                    <p className="font-bold text-slate-800 text-sm">{r.customerName || cust?.enName || '不明な顧客'}</p>
+                    <p className="font-semibold text-slate-800 text-sm">{r.customerName || cust?.enName || '不明な顧客'}</p>
                     <p className="text-xs text-slate-500 mt-1">{r.type}{r.flag ? `（${r.flag}）` : ''} ・ {r.date}</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">担当: {effectiveAssignee(r) || '未設定'}</p>
                     {r.productName && (
@@ -805,10 +805,10 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-slate-600 flex items-center gap-1.5"><CalendarDays className="w-4 h-4" />直近の予定</h3>
-            <button onClick={() => onNavigate('calendar')} className="text-xs text-teal-600 font-semibold">カレンダーを見る</button>
+            <h3 className="text-sm font-semibold text-slate-600 flex items-center gap-1.5"><CalendarDays className="w-4 h-4" />直近の予定</h3>
+            <button onClick={() => onNavigate('calendar')} className="text-xs text-indigo-600 font-medium">カレンダーを見る</button>
           </div>
           {upcoming.length === 0 ? (
             <p className="text-sm text-slate-400">直近の予定はありません。</p>
@@ -816,8 +816,8 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
             <ul className="space-y-2">
               {upcoming.map(r => (
                 <li key={r.id}>
-                  <button onClick={() => onOpenCustomer(r.customerId)} className="w-full text-left text-sm hover:bg-slate-50 rounded-lg px-1.5 py-1 -mx-1.5 transition">
-                    <p className="font-semibold text-teal-700 hover:underline">{r.customerName || '不明な顧客'}</p>
+                  <button onClick={() => onOpenCustomer(r.customerId)} className="w-full text-left text-sm hover:bg-slate-50 rounded-md px-1.5 py-1 -mx-1.5 transition">
+                    <p className="font-semibold text-indigo-700 hover:underline">{r.customerName || '不明な顧客'}</p>
                     <p className="text-xs text-indigo-600">{r.scheduledDate} {r.scheduledTime}</p>
                   </button>
                 </li>
@@ -826,10 +826,10 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
           )}
         </div>
 
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-slate-600 flex items-center gap-1.5"><BarChart className="w-4 h-4" />テレアポ状況</h3>
-            <button onClick={() => onNavigate('teleappt_stats')} className="text-xs text-teal-600 font-semibold">集計を見る</button>
+            <h3 className="text-sm font-semibold text-slate-600 flex items-center gap-1.5"><BarChart className="w-4 h-4" />テレアポ状況</h3>
+            <button onClick={() => onNavigate('teleappt_stats')} className="text-xs text-indigo-600 font-medium">集計を見る</button>
           </div>
           <div className="flex justify-around text-center">
             <div><p className="text-2xl font-extrabold text-slate-800">{teleToday}</p><p className="text-[10px] text-slate-400">今日</p></div>
@@ -837,24 +837,24 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 flex flex-col justify-between">
-          <h3 className="text-sm font-bold text-slate-600 flex items-center gap-1.5 mb-3"><FileText className="w-4 h-4" />日報</h3>
+        <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200 flex flex-col justify-between">
+          <h3 className="text-sm font-semibold text-slate-600 flex items-center gap-1.5 mb-3"><FileText className="w-4 h-4" />日報</h3>
           <p className="text-xs text-slate-400 mb-3">今日の活動を自動集計して日報を作成できます。</p>
-          <button onClick={() => onNavigate('daily_report')} className="w-full py-2 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">日報を作成する</button>
+          <button onClick={() => onNavigate('daily_report')} className="w-full py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700">日報を作成する</button>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <h3 className="text-sm font-bold text-slate-600 mb-3">最近の記録</h3>
+      <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+        <h3 className="text-sm font-semibold text-slate-600 mb-3">最近の記録</h3>
         {filtered.length === 0 ? (
           <p className="text-sm text-slate-400">まだ記録がありません。「顧客リスト」から顧客を選んで記録を追加してください。</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {filtered.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.id - a.id)).slice(0, 8).map(r => (
               <li key={r.id} className="py-2.5">
-                <button onClick={() => onOpenCustomer(r.customerId)} className="w-full flex justify-between items-center text-sm hover:bg-slate-50 rounded-lg px-1.5 -mx-1.5 py-0.5 transition text-left">
+                <button onClick={() => onOpenCustomer(r.customerId)} className="w-full flex justify-between items-center text-sm hover:bg-slate-50 rounded-md px-1.5 -mx-1.5 py-0.5 transition text-left">
                   <div>
-                    <span className="font-semibold text-teal-700 hover:underline">{r.customerName || '不明な顧客'}</span>
+                    <span className="font-semibold text-indigo-700 hover:underline">{r.customerName || '不明な顧客'}</span>
                     <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
                   </div>
                   <span className="text-xs text-slate-400">{r.date}</span>
@@ -899,12 +899,12 @@ function CustomerModal({ customer, associationTypes, industryTypes, members, cur
         <FormField label="園名ふりがな" value={form.enNameKana} onChange={set('enNameKana')} />
         <div className="flex flex-col gap-1 md:col-span-2">
           <label className="text-xs font-semibold text-slate-500">加盟協会（複数選択可）</label>
-          <div className="flex flex-wrap gap-2 p-2 border border-slate-200 rounded-lg bg-white min-h-[42px]">
+          <div className="flex flex-wrap gap-2 p-2 ring-1 ring-slate-200 rounded-lg bg-white min-h-[42px]">
             {associationOptions.length === 0 && <span className="text-xs text-slate-400 px-1">選択肢がありません</span>}
             {associationOptions.map(a => (
               <label
                 key={a.id}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs cursor-pointer border transition ${selectedAssociations.includes(a.name) ? 'bg-teal-50 border-teal-400 text-teal-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs cursor-pointer transition ${selectedAssociations.includes(a.name) ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-slate-50 ring-1 ring-slate-200 text-slate-600'}`}
               >
                 <input
                   type="checkbox"
@@ -920,14 +920,14 @@ function CustomerModal({ customer, associationTypes, industryTypes, members, cur
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">業種</label>
-          <select value={form.industry || ''} onChange={set('industry')} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={form.industry || ''} onChange={set('industry')} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">未設定</option>
             {industryOptions.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">担当者</label>
-          <select value={form.assignedTo} onChange={set('assignedTo')} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={form.assignedTo} onChange={set('assignedTo')} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">未設定</option>
             {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
           </select>
@@ -951,7 +951,7 @@ function CustomerModal({ customer, associationTypes, industryTypes, members, cur
       </div>
       <button
         onClick={() => onSave({ ...form, id: form.id || Date.now() })}
-        className="mt-6 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700 flex items-center justify-center gap-2"
+        className="mt-6 w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 flex items-center justify-center gap-2"
       >
         <Save className="w-4 h-4" /> 保存する
       </button>
@@ -968,11 +968,11 @@ function ReportGenerator({ customer, reportTemplates, latestRecord }) {
   const text = template ? fillTemplate(template.body, customer, { '{{メモ}}': memo, '{{結果}}': result }) : '';
 
   return (
-    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+    <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 space-y-3">
       <div className="flex flex-wrap gap-3">
         <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
           <label className="text-xs font-semibold text-slate-500">フォーマット</label>
-          <select value={templateId} onChange={e => setTemplateId(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={templateId} onChange={e => setTemplateId(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             {reportTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
@@ -980,14 +980,14 @@ function ReportGenerator({ customer, reportTemplates, latestRecord }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">メモ（5W1H）</label>
-          <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={3} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" />
+          <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={3} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">結果</label>
-          <textarea value={result} onChange={e => setResult(e.target.value)} rows={3} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" />
+          <textarea value={result} onChange={e => setResult(e.target.value)} rows={3} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
         </div>
       </div>
-      <div className="bg-white border border-slate-200 rounded-lg p-3">
+      <div className="bg-white ring-1 ring-slate-200 rounded-lg p-3">
         <pre className="text-xs whitespace-pre-wrap font-sans text-slate-700">{text}</pre>
       </div>
       <CopyButton text={text} label="報告文をコピー" />
@@ -1035,13 +1035,13 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-[11px] font-semibold text-slate-500">活動種別</label>
-          <select value={type} onChange={e => { setType(e.target.value); setFlag(''); }} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+          <select value={type} onChange={e => { setType(e.target.value); setFlag(''); }} className="px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             {activityTypes.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-[11px] font-semibold text-slate-500">結果フラグ</label>
-          <select value={flag} onChange={e => setFlag(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+          <select value={flag} onChange={e => setFlag(e.target.value)} className="px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">なし</option>
             {currentFlags.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
@@ -1050,7 +1050,7 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
         <FormField label="時間" type="time" value={time} onChange={e => setTime(e.target.value)} />
         <div className="flex flex-col gap-1 col-span-2">
           <label className="text-[11px] font-semibold text-slate-500">担当者</label>
-          <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+          <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">未設定</option>
             {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
           </select>
@@ -1063,18 +1063,18 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold text-slate-500">{isRecall ? '再コール予定時間' : '予定時間'}</label>
             {isTimeSlotFlag(flag) ? (
-              <select value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+              <select value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                 <option value="">時間帯を選択</option>
                 {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             ) : (
-              <input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
+              <input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded-md text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
             )}
           </div>
           {isRecall && (
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold text-slate-500">ランク</label>
-              <select value={recallRank} onChange={e => setRecallRank(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+              <select value={recallRank} onChange={e => setRecallRank(e.target.value)} className="px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                 {RECALL_RANKS.map(r => <option key={r} value={r}>{r}ランク</option>)}
               </select>
             </div>
@@ -1093,7 +1093,7 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold text-slate-500">商品名</label>
-            <select value={productName} onChange={e => setProductName(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white">
+            <select value={productName} onChange={e => setProductName(e.target.value)} className="px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               {products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
@@ -1106,12 +1106,12 @@ function RecordEditForm({ record, activityTypes, products, members, onSave, onCa
 
       <div className="flex flex-col gap-1">
         <label className="text-[11px] font-semibold text-slate-500">メモ</label>
-        <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={3} className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white" />
+        <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={3} className="px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
       </div>
 
       <div className="flex gap-2">
-        <button onClick={save} className="flex-1 py-2 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700">保存する</button>
-        <button onClick={onCancel} className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-medium">キャンセル</button>
+        <button onClick={save} className="flex-1 py-2 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700">保存する</button>
+        <button onClick={onCancel} className="px-4 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-xs font-medium">キャンセル</button>
       </div>
     </div>
   );
@@ -1201,8 +1201,8 @@ function CompanyLinkSection({ customer, allCustomers, setCustomers, onOpenLinked
   };
 
   return (
-    <div className="mb-5 bg-orange-50/60 border border-orange-200 rounded-xl p-4">
-      <p className="text-xs font-bold text-orange-700 mb-2 flex items-center gap-1.5">
+    <div className="mb-5 bg-orange-50/60 border border-orange-200 rounded-lg p-4">
+      <p className="text-xs font-semibold text-orange-700 mb-2 flex items-center gap-1.5">
         <Link2 className="w-3.5 h-3.5" />法人被り・関連顧客の連携
       </p>
       {linked.length > 0 ? (
@@ -1211,11 +1211,11 @@ function CompanyLinkSection({ customer, allCustomers, setCustomers, onOpenLinked
             <li key={c.id} className="flex justify-between items-center bg-white rounded-lg px-3 py-2 border border-orange-100">
               <div className="min-w-0">
                 <p className="text-xs text-slate-400 truncate">{c.gakuenName}{c.industry ? ` ・ ${c.industry}` : ''}</p>
-                <p className="text-sm font-bold text-slate-700 truncate">{c.enName || '（園名未登録）'}</p>
+                <p className="text-sm font-semibold text-slate-700 truncate">{c.enName || '（園名未登録）'}</p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <button onClick={() => onOpenLinked && onOpenLinked(c)} className="px-2.5 py-1.5 bg-teal-600 text-white rounded-lg text-[11px] font-bold hover:bg-teal-700">カードを開く</button>
-                <button onClick={() => unlink(c)} className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg text-[11px] font-bold hover:bg-slate-50">解除</button>
+                <button onClick={() => onOpenLinked && onOpenLinked(c)} className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-md text-[11px] font-medium hover:bg-indigo-700">カードを開く</button>
+                <button onClick={() => unlink(c)} className="px-2.5 py-1.5 bg-white ring-1 ring-inset ring-slate-300 text-slate-500 rounded-md text-[11px] font-medium hover:bg-slate-50">解除</button>
               </div>
             </li>
           ))}
@@ -1226,15 +1226,15 @@ function CompanyLinkSection({ customer, allCustomers, setCustomers, onOpenLinked
       <div className="relative">
         <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
         <input value={query} onChange={e => setQuery(e.target.value)} placeholder="法人名・園名で検索して連携"
-          className="w-full pl-8 pr-3 py-2 border border-orange-200 rounded-lg text-xs bg-white" />
+          className="w-full pl-8 pr-3 py-2 border border-orange-200 rounded-md text-xs bg-white" />
       </div>
       {results.length > 0 && (
         <ul className="mt-2 space-y-1">
           {results.map(c => (
             <li key={c.id}>
-              <button onClick={() => link(c)} className="w-full text-left px-3 py-2 bg-white hover:bg-orange-100 border border-orange-100 rounded-lg">
+              <button onClick={() => link(c)} className="w-full text-left px-3 py-2 bg-white hover:bg-orange-100 border border-orange-100 rounded-md">
                 <p className="text-xs text-slate-400">{c.gakuenName}{c.associationType ? ` ・ ${c.associationType}` : ''}</p>
-                <p className="text-sm font-bold text-slate-700">{c.enName || '（園名未登録）'} <span className="text-[11px] font-normal text-teal-600">← タップで連携</span></p>
+                <p className="text-sm font-semibold text-slate-700">{c.enName || '（園名未登録）'} <span className="text-[11px] font-normal text-indigo-600">← タップで連携</span></p>
               </button>
             </li>
           ))}
@@ -1310,11 +1310,11 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
               <span key={name} className="px-2.5 py-1 bg-slate-100 rounded-full text-xs text-slate-600">{name}</span>
             ))}
             {customer.industry && <span className="px-2.5 py-1 bg-emerald-50 rounded-full text-xs text-emerald-700">{customer.industry}</span>}
-            {status && <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${status.badge}`}>現在の状況: {status.label}</span>}
+            {status && <span className={`px-2 py-0.5 rounded text-xs font-medium ${status.badge}`}>現在の状況: {status.label}</span>}
             {/* 拒否のオン/オフスイッチ（手動で切り替え） */}
             <button
               onClick={() => setCustomers(prev => prev.map(c => c.id === customer.id ? { ...c, rejected: !c.rejected } : c))}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition ${customer.rejected ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400'}`}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition ${customer.rejected ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400'}`}
               title="拒否のオン/オフを切り替え">
               <XCircle className="w-3.5 h-3.5" />
               拒否
@@ -1328,10 +1328,10 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
       <div className="flex flex-wrap gap-4 text-sm text-slate-600 mb-5">
         {customer.chairman && <span className="flex items-center gap-1"><Users className="w-4 h-4" />理事長: {customer.chairman}{customer.chairmanKana ? `（${customer.chairmanKana}）` : ''}</span>}
         {customer.principal && <span className="flex items-center gap-1"><Users className="w-4 h-4" />園長: {customer.principal}{customer.principalKana ? `（${customer.principalKana}）` : ''}</span>}
-        {customer.tel && <a href={`tel:${customer.tel}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.tel}</a>}
-        {customer.mobile && <a href={`tel:${customer.mobile}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.mobile}（携帯）</a>}
-        {customer.headquartersTel && <a href={`tel:${customer.headquartersTel}`} className="flex items-center gap-1 text-teal-700 font-semibold"><Phone className="w-4 h-4" />{customer.headquartersTel}（本部）</a>}
-        {customer.email && <a href={`mailto:${customer.email}`} className="flex items-center gap-1 text-teal-700"><Mail className="w-4 h-4" />{customer.email}</a>}
+        {customer.tel && <a href={`tel:${customer.tel}`} className="flex items-center gap-1 text-indigo-700 font-semibold"><Phone className="w-4 h-4" />{customer.tel}</a>}
+        {customer.mobile && <a href={`tel:${customer.mobile}`} className="flex items-center gap-1 text-indigo-700 font-semibold"><Phone className="w-4 h-4" />{customer.mobile}（携帯）</a>}
+        {customer.headquartersTel && <a href={`tel:${customer.headquartersTel}`} className="flex items-center gap-1 text-indigo-700 font-semibold"><Phone className="w-4 h-4" />{customer.headquartersTel}（本部）</a>}
+        {customer.email && <a href={`mailto:${customer.email}`} className="flex items-center gap-1 text-indigo-700"><Mail className="w-4 h-4" />{customer.email}</a>}
         {customer.address && <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{customer.address}</span>}
         {customer.hpLink && <a href={customer.hpLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-600"><Globe className="w-4 h-4" />HP</a>}
         {customer.recruitSiteLink && <a href={customer.recruitSiteLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-emerald-600"><Briefcase className="w-4 h-4" />採用サイト</a>}
@@ -1351,14 +1351,14 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
       </div>
 
       <div className="flex flex-wrap gap-4 mb-5">
-        <button onClick={() => onEdit(customer)} className="text-sm font-semibold text-teal-700 flex items-center gap-1"><Edit className="w-4 h-4" />基本情報を編集</button>
-        <button onClick={() => setShowForm(v => !v)} className="text-sm font-semibold text-indigo-700 flex items-center gap-1">
+        <button onClick={() => onEdit(customer)} className="text-sm font-medium text-indigo-700 flex items-center gap-1"><Edit className="w-4 h-4" />基本情報を編集</button>
+        <button onClick={() => setShowForm(v => !v)} className="text-sm font-medium text-indigo-700 flex items-center gap-1">
           <PenTool className="w-4 h-4" />{showForm ? '記録フォームを閉じる' : '新しい記録を追加'}
         </button>
-        <button onClick={() => { setShowReport(v => !v); if (showReport) setReportSeedRecord(null); }} className="text-sm font-semibold text-purple-700 flex items-center gap-1">
+        <button onClick={() => { setShowReport(v => !v); if (showReport) setReportSeedRecord(null); }} className="text-sm font-medium text-purple-700 flex items-center gap-1">
           <FileText className="w-4 h-4" />{showReport ? '報告文フォームを閉じる' : '報告文を作成'}
         </button>
-        <button onClick={() => setShowLinks(v => !v)} className="text-sm font-semibold text-orange-700 flex items-center gap-1">
+        <button onClick={() => setShowLinks(v => !v)} className="text-sm font-medium text-orange-700 flex items-center gap-1">
           <Link2 className="w-4 h-4" />{showLinks ? '法人被りを閉じる' : `法人被りを見る${linkedCount > 0 ? `（${linkedCount}）` : ''}`}
         </button>
       </div>
@@ -1377,7 +1377,7 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
       )}
 
       {showForm && (
-        <div className="mb-6 bg-slate-50 border border-slate-200 rounded-xl p-4">
+        <div className="mb-6 bg-slate-50 ring-1 ring-slate-200 rounded-lg p-4">
           <RecordFields
             customer={customer}
             setRecords={setRecords}
@@ -1392,7 +1392,7 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
         </div>
       )}
 
-      <h4 className="text-sm font-bold text-slate-600 mb-2">活動履歴タイムライン</h4>
+      <h4 className="text-sm font-semibold text-slate-600 mb-2">活動履歴タイムライン</h4>
       {history.length === 0 ? (
         <p className="text-sm text-slate-400">記録がありません。</p>
       ) : (
@@ -1406,9 +1406,9 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-slate-700">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
-                      {r.assignedTo && <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full text-[10px] font-bold">担当: {r.assignedTo}</span>}
+                      {r.assignedTo && <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full text-[10px] font-semibold">担当: {r.assignedTo}</span>}
                       {r.flag === '再コール' && (
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.recallDone ? 'bg-slate-200 text-slate-500' : 'bg-orange-100 text-orange-700'}`}>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${r.recallDone ? 'bg-slate-200 text-slate-500' : 'bg-orange-100 text-orange-700'}`}>
                           {r.recallDone ? '再コール対応済み' : '再コール未対応'}
                         </span>
                       )}
@@ -1418,14 +1418,14 @@ function CustomerDetailModal({ customer, allCustomers, setCustomers, records, se
                             setRecords(prev => prev.map(x => x.id === r.id ? { ...x, recallDone: !x.recallDone } : x));
                             showAlert(r.recallDone ? '再コールを未対応に戻しました。' : '再コールを対応済みにしました。');
                           }}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${r.recallDone ? 'border-slate-200 text-slate-500 hover:bg-slate-100' : 'border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100'}`}>
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${r.recallDone ? 'ring-1 ring-inset ring-slate-300 text-slate-500 hover:bg-slate-100' : 'border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100'}`}>
                           {r.recallDone ? '未対応に戻す' : '対応済みにする'}
                         </button>
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-xs text-slate-400">{r.date} {r.time}</span>
-                      <button onClick={() => setEditingRecordId(r.id)} className="p-1 text-slate-300 hover:text-teal-600"><Edit className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setEditingRecordId(r.id)} className="p-1 text-slate-300 hover:text-indigo-600"><Edit className="w-3.5 h-3.5" /></button>
                       {canDelete && (
                         <button onClick={() => deleteRecord(r.id)} className="p-1 text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                       )}
@@ -1456,24 +1456,24 @@ function getCustomerStatus(customerId, records) {
   if (custRecords.length === 0) return null;
 
   const hasOrder = custRecords.some(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
-  if (hasOrder) return { label: 'ユーザー', badge: 'bg-amber-100 text-amber-700', card: 'border-amber-300 bg-amber-50/60' };
+  if (hasOrder) return { label: 'ユーザー', badge: 'bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200', card: 'border-amber-300 bg-amber-50/60' };
 
   const hasSalesResult = custRecords.some(r => SALES_TYPES.includes(r.type) && ['NG', '返事待ち', '返事待ちNG'].includes(r.flag));
-  if (hasSalesResult) return { label: '営業実行済み', badge: 'bg-blue-100 text-blue-700', card: 'border-blue-300 bg-blue-50/60' };
+  if (hasSalesResult) return { label: '営業実行済み', badge: 'bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200', card: 'border-blue-300 bg-blue-50/60' };
 
   const hasVisitTimeSet = custRecords.some(r => r.type === '初回訪問' && r.flag === '営業時間設定');
-  if (hasVisitTimeSet) return { label: '初回訪問済み・営業時間設定', badge: 'bg-purple-200 text-purple-800', card: 'border-purple-400 bg-purple-100/60' };
+  if (hasVisitTimeSet) return { label: '初回訪問済み・営業時間設定', badge: 'bg-purple-50 text-purple-800 ring-1 ring-inset ring-purple-200', card: 'border-purple-400 bg-purple-100/60' };
 
   const hasVisit = custRecords.some(r => r.type === '初回訪問');
-  if (hasVisit) return { label: '初回訪問済み', badge: 'bg-purple-100 text-purple-700', card: 'border-purple-300 bg-purple-50/60' };
+  if (hasVisit) return { label: '初回訪問済み', badge: 'bg-purple-50 text-purple-800 ring-1 ring-inset ring-purple-200', card: 'border-purple-300 bg-purple-50/60' };
 
   const hasTele = custRecords.some(r => r.type === 'テレアポ');
-  if (hasTele) return { label: 'テレアポ中', badge: 'bg-pink-100 text-pink-700', card: 'border-pink-300 bg-pink-50/60' };
+  if (hasTele) return { label: 'テレアポ中', badge: 'bg-pink-50 text-pink-800 ring-1 ring-inset ring-pink-200', card: 'border-pink-300 bg-pink-50/60' };
 
   const hasCompanyOverlap = custRecords.some(r => r.flag === '法人被り');
-  if (hasCompanyOverlap) return { label: '法人被り', badge: 'bg-slate-300 text-slate-700', card: 'border-slate-300 bg-slate-200/60' };
+  if (hasCompanyOverlap) return { label: '法人被り', badge: 'bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200', card: 'border-slate-300 bg-slate-200/60' };
 
-  return { label: '記録あり', badge: 'bg-slate-100 text-slate-600', card: 'border-slate-200' };
+  return { label: '記録あり', badge: 'bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200', card: 'border-slate-200' };
 }
 
 // ---------- 一括編集（担当者・協会の種類）モーダル ----------
@@ -1501,7 +1501,7 @@ function BulkEditModal({ count, members, associationTypes, activityTypes, onAppl
       <div className="space-y-4">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">担当者</label>
-          <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="__unchanged__">変更しない</option>
             <option value="">未設定にする</option>
             {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
@@ -1509,7 +1509,7 @@ function BulkEditModal({ count, members, associationTypes, activityTypes, onAppl
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">協会の種類</label>
-          <select value={associationType} onChange={e => setAssociationType(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={associationType} onChange={e => setAssociationType(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="__unchanged__">変更しない</option>
             <option value="">未設定にする</option>
             {associationTypes.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
@@ -1517,19 +1517,19 @@ function BulkEditModal({ count, members, associationTypes, activityTypes, onAppl
         </div>
 
         <div className="border-t border-slate-100 pt-4">
-          <p className="text-xs font-bold text-slate-500 mb-2">記録の一括登録（任意）</p>
+          <p className="text-xs font-semibold text-slate-500 mb-2">記録の一括登録（任意）</p>
           <p className="text-[11px] text-slate-400 mb-3">選択した活動種別・結果フラグで、対象全員に同じ内容の記録を1件ずつ追加します。受注詳細（商品・粗利など）は個別に記録画面から追記してください。</p>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">活動種別</label>
-              <select value={activityType} onChange={e => { setActivityType(e.target.value); setFlag(''); }} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+              <select value={activityType} onChange={e => { setActivityType(e.target.value); setFlag(''); }} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                 <option value="__none__">記録を追加しない</option>
                 {activityTypes.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">結果フラグ</label>
-              <select value={flag} onChange={e => setFlag(e.target.value)} disabled={activityType === '__none__'} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white disabled:bg-slate-50 disabled:text-slate-300">
+              <select value={flag} onChange={e => setFlag(e.target.value)} disabled={activityType === '__none__'} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white disabled:bg-slate-50 disabled:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                 <option value="">なし</option>
                 {currentFlags.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
@@ -1543,7 +1543,7 @@ function BulkEditModal({ count, members, associationTypes, activityTypes, onAppl
         </div>
       </div>
       <button onClick={apply} disabled={noChange}
-        className="mt-5 w-full py-2.5 bg-teal-600 disabled:bg-teal-300 text-white rounded-lg font-bold hover:bg-teal-700">
+        className="mt-5 w-full py-2.5 bg-indigo-600 disabled:bg-indigo-300 text-white rounded-md font-medium hover:bg-indigo-700">
         {count}件に適用する
       </button>
     </Modal>
@@ -1749,11 +1749,11 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
   return (
     <div className="space-y-4">
       {focusedCustomer && (
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5">
-          <p className="text-sm text-teal-800">
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
+          <p className="text-sm text-indigo-800">
             <strong>{focusedCustomer.enName || focusedCustomer.gakuenName}</strong> のみを表示しています
           </p>
-          <button onClick={() => setFocusedCustomerId(null)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-teal-200 text-teal-700 rounded-lg text-xs font-bold hover:bg-teal-100">
+          <button onClick={() => setFocusedCustomerId(null)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-indigo-700 rounded-md text-xs font-medium hover:bg-indigo-100">
             <X className="w-3.5 h-3.5" />すべての顧客を表示
           </button>
         </div>
@@ -1763,57 +1763,57 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="園名・理事長・園長・ふりがなで検索"
-              className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              className="w-full pl-9 pr-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
           <input value={addressFilter} onChange={e => setAddressFilter(e.target.value)} placeholder="住所で絞り込み"
-            className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white w-32" />
-          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white w-32 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">すべての協会</option>
             {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
-          <select value={industryFilter} onChange={e => setIndustryFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={industryFilter} onChange={e => setIndustryFilter(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">すべての業種</option>
             {industryOptionsList.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={activityTypeFilter} onChange={e => setActivityTypeFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={activityTypeFilter} onChange={e => setActivityTypeFilter(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">すべての活動種別</option>
             {activityTypes.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
           </select>
-          <select value={flagFilter} onChange={e => setFlagFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={flagFilter} onChange={e => setFlagFilter(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">すべての結果フラグ</option>
             {flagOptions.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">すべてのステータス</option>
             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           {isOwner && (
-            <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               <option value="">すべての担当者</option>
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
-          <select value={firstVisitFilter} onChange={e => setFirstVisitFilter(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={firstVisitFilter} onChange={e => setFirstVisitFilter(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">初回訪問：すべて</option>
             <option value="has">初回訪問済みのみ</option>
             <option value="none">初回訪問済みでないのみ</option>
           </select>
-          <label className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 px-3 py-2.5 ring-1 ring-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
             <input type="checkbox" checked={excludeCompanyOverlap} onChange={e => setExcludeCompanyOverlap(e.target.checked)} className="accent-orange-600" />
             <AlertTriangle className="w-3.5 h-3.5 text-orange-500" />
             法人被りリストを除く
           </label>
-          <label className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 px-3 py-2.5 ring-1 ring-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
             <input type="checkbox" checked={excludeUser} onChange={e => setExcludeUser(e.target.checked)} className="accent-amber-600" />
             <Star className="w-3.5 h-3.5 text-amber-500" />
             ユーザーを除く
           </label>
-          <label className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 px-3 py-2.5 ring-1 ring-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
             <input type="checkbox" checked={rejectedOnly} onChange={e => setRejectedOnly(e.target.checked)} className="accent-red-600" />
             <XCircle className="w-3.5 h-3.5 text-red-500" />
             拒否済みのみ
           </label>
-          <label className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 px-3 py-2.5 ring-1 ring-slate-200 rounded-lg text-sm bg-white cursor-pointer select-none">
             <input type="checkbox" checked={showRejectedMark} onChange={e => setShowRejectedMark(e.target.checked)} className="accent-red-600" />
             <XCircle className="w-3.5 h-3.5 text-red-400" />
             拒否マークを表示
@@ -1821,46 +1821,46 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-slate-400">{filtered.length}件</span>
-          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
-            <button onClick={() => setViewMode('card')} className={`p-2.5 ${viewMode === 'card' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`} title="カード表示">
+          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
+            <button onClick={() => setViewMode('card')} className={`p-2.5 ${viewMode === 'card' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`} title="カード表示">
               <LayoutGrid className="w-4 h-4" />
             </button>
-            <button onClick={() => setViewMode('table')} className={`p-2.5 ${viewMode === 'table' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`} title="表形式表示">
+            <button onClick={() => setViewMode('table')} className={`p-2.5 ${viewMode === 'table' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`} title="表形式表示">
               <List className="w-4 h-4" />
             </button>
           </div>
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleImportFile} className="hidden" />
-          <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50">
+          <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2.5 bg-white ring-1 ring-inset ring-slate-300 text-slate-600 rounded-md text-sm font-medium hover:bg-slate-50">
             <Upload className="w-4 h-4" /> CSVインポート
           </button>
-          <button onClick={() => downloadCustomersCSV(customers, records, showAlert)} className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50">
+          <button onClick={() => downloadCustomersCSV(customers, records, showAlert)} className="flex items-center gap-1.5 px-3 py-2.5 bg-white ring-1 ring-inset ring-slate-300 text-slate-600 rounded-md text-sm font-medium hover:bg-slate-50">
             <Download className="w-4 h-4" /> CSV出力
           </button>
           <button
             onClick={() => { setSelectMode(v => !v); setSelectedIds([]); }}
-            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-semibold border ${selectMode ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-md text-sm font-medium ${selectMode ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white ring-1 ring-inset ring-slate-300 text-slate-600 hover:bg-slate-50'}`}
           >
             <CheckSquare className="w-4 h-4" /> {selectMode ? '選択を終了' : '複数選択'}
           </button>
           {selectMode && (
-            <button onClick={toggleSelectAll} className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50">
+            <button onClick={toggleSelectAll} className="flex items-center gap-1.5 px-3 py-2.5 bg-white ring-1 ring-inset ring-slate-300 text-slate-600 rounded-md text-sm font-medium hover:bg-slate-50">
               <CheckSquare className="w-4 h-4" /> {allFilteredSelected ? '全解除' : `全件選択（${filtered.length}件）`}
             </button>
           )}
           {selectMode && canBulkEdit && (
             <button onClick={() => setBulkEditOpen(true)} disabled={selectedIds.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-indigo-600 disabled:bg-indigo-200 text-white rounded-lg text-sm font-bold">
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-indigo-600 disabled:bg-indigo-200 text-white rounded-md text-sm font-medium">
               <Edit className="w-4 h-4" /> {selectedIds.length}件を一括編集
             </button>
           )}
           {selectMode && canDeleteCustomer && (
             <button onClick={deleteSelected} disabled={selectedIds.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-red-600 disabled:bg-red-200 text-white rounded-lg text-sm font-bold">
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-red-600 disabled:bg-red-200 text-white rounded-md text-sm font-medium">
               <Trash2 className="w-4 h-4" /> {selectedIds.length}件を削除
             </button>
           )}
           {!selectMode && (
-            <button onClick={() => setEditing(emptyCustomer)} className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700">
+            <button onClick={() => setEditing(emptyCustomer)} className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700">
               <Plus className="w-4 h-4" /> 新規登録
             </button>
           )}
@@ -1924,17 +1924,17 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
             const isSelected = selectedIds.includes(c.id);
             return (
               <div key={c.id} onClick={() => selectMode ? toggleSelect(c.id) : setViewing(c)}
-                className={`bg-white rounded-xl shadow-sm border overflow-hidden cursor-pointer hover:shadow-md transition ${
-                  selectMode && isSelected ? 'border-teal-400 ring-2 ring-teal-200' : (status ? status.card : 'border-slate-100 hover:border-teal-200')
-                }`}>
+                className={`bg-white rounded-lg overflow-hidden cursor-pointer hover:shadow-md transition ${
+ selectMode && isSelected ? 'border-indigo-400 ring-2 ring-indigo-200' : (status ? status.card : 'ring-1 ring-slate-200 hover:border-indigo-200')
+ }`}>
                 <div className="p-4">
                   <div className="flex justify-between items-start">
                     <div className="flex items-start gap-2">
-                      {selectMode && (isSelected ? <CheckSquare className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" /> : <Square className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />)}
+                      {selectMode && (isSelected ? <CheckSquare className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" /> : <Square className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />)}
                       <div>
                         <p className="text-xs text-slate-400">{c.gakuenName}{c.associationType ? ` ・ ${c.associationType}` : ''}{c.industry ? ` ・ ${c.industry}` : ''}{c.assignedTo ? ` ・ 担当:${c.assignedTo}` : ''}</p>
                         <div className="flex items-center gap-1.5">
-                          <p className="font-bold text-slate-800">{c.enName || '（園名未登録）'}</p>
+                          <p className="font-semibold text-slate-800">{c.enName || '（園名未登録）'}</p>
                           {hasFirstVisit && (
                             <span title="初回訪問済み" className="inline-flex items-center justify-center w-4 h-4 bg-violet-100 text-violet-600 rounded-full shrink-0">
                               <CheckCircle className="w-3 h-3" />
@@ -1946,21 +1946,21 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                             </span>
                           )}
                           {showRejectedMark && isRejected && (
-                            <span title="代表・担当接触済みで拒否" className="inline-flex items-center gap-0.5 px-1.5 h-4 bg-red-100 text-red-600 rounded-full shrink-0 text-[10px] font-bold">
+                            <span title="代表・担当接触済みで拒否" className="inline-flex items-center gap-0.5 px-1.5 h-4 bg-red-100 text-red-600 rounded-full shrink-0 text-[10px] font-semibold">
                               <XCircle className="w-3 h-3" />拒否
                             </span>
                           )}
                         </div>
-                        {status && <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${status.badge}`}>{status.label}</span>}
+                        {status && <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-xs font-medium ${status.badge}`}>{status.label}</span>}
                       </div>
                     </div>
                     {!selectMode && (
                       <div className="flex items-center gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); setViewing(c); setViewingWithForm(true); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="記録登録">
+                        <button onClick={(e) => { e.stopPropagation(); setViewing(c); setViewingWithForm(true); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-md" title="記録登録">
                           <PenTool className="w-4 h-4" />
                         </button>
                         {canDeleteCustomer && (
-                          <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                          <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
@@ -2024,7 +2024,7 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
           {filtered.length === 0 && <p className="text-sm text-slate-400 col-span-full text-center py-10">該当する顧客がいません。新規登録してから記録を追加してください。</p>}
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-100 overflow-x-auto">
+        <div className="bg-white rounded-lg ring-1 ring-slate-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
@@ -2046,15 +2046,15 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                 const isSelected = selectedIds.includes(c.id);
                 return (
                   <tr key={c.id} onClick={() => selectMode ? toggleSelect(c.id) : setViewing(c)}
-                    className={`border-b border-slate-50 cursor-pointer hover:bg-slate-50 ${selectMode && isSelected ? 'bg-teal-50' : ''}`}>
+                    className={`border-b border-slate-50 cursor-pointer hover:bg-slate-50 ${selectMode && isSelected ? 'bg-indigo-50' : ''}`}>
                     {selectMode && (
-                      <td className="px-3 py-2.5">{isSelected ? <CheckSquare className="w-4 h-4 text-teal-600" /> : <Square className="w-4 h-4 text-slate-300" />}</td>
+                      <td className="px-3 py-2.5">{isSelected ? <CheckSquare className="w-4 h-4 text-indigo-600" /> : <Square className="w-4 h-4 text-slate-300" />}</td>
                     )}
                     <td className="px-3 py-2.5">
-                      <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <p className="font-semibold text-slate-800 flex items-center gap-1.5">
                         {c.enName || '（園名未登録）'}
                         {showRejectedMark && c.rejected === true && (
-                          <span title="代表・担当接触済みで拒否" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-[10px] font-bold shrink-0">
+                          <span title="代表・担当接触済みで拒否" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-[10px] font-semibold shrink-0">
                             <XCircle className="w-3 h-3" />拒否
                           </span>
                         )}
@@ -2064,14 +2064,14 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
                     <td className="px-3 py-2.5 text-slate-600">{c.associationType || '-'}</td>
                     <td className="px-3 py-2.5 text-slate-600">{c.tel || '-'}</td>
                     <td className="px-3 py-2.5 text-slate-600 max-w-[160px] truncate">{c.address || '-'}</td>
-                    <td className="px-3 py-2.5">{status && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${status.badge}`}>{status.label}</span>}</td>
+                    <td className="px-3 py-2.5">{status && <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${status.badge}`}>{status.label}</span>}</td>
                     <td className="px-3 py-2.5 text-xs text-slate-500">{latest ? `${latest.type}${latest.flag ? `（${latest.flag}）` : ''} - ${latest.date}` : '-'}</td>
                     {!selectMode && (
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1">
-                          <button onClick={(e) => { e.stopPropagation(); setViewing(c); setViewingWithForm(true); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><PenTool className="w-4 h-4" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); setViewing(c); setViewingWithForm(true); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-md"><PenTool className="w-4 h-4" /></button>
                           {canDeleteCustomer && (
-                            <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); deleteCustomer(c.id); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md"><Trash2 className="w-4 h-4" /></button>
                           )}
                         </div>
                       </td>
@@ -2216,14 +2216,14 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">活動種別</label>
-          <select value={type} onChange={e => { setType(e.target.value); setFlag(''); }} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={type} onChange={e => { setType(e.target.value); setFlag(''); }} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             {activityTypes.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
           </select>
         </div>
 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">結果フラグ</label>
-          <select value={flag} onChange={e => setFlag(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={flag} onChange={e => setFlag(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">なし</option>
             {currentFlags.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
@@ -2233,7 +2233,7 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
         <FormField label="時間" type="time" value={time} onChange={e => setTime(e.target.value)} />
         <div className="flex flex-col gap-1 md:col-span-2">
           <label className="text-xs font-semibold text-slate-500">担当者</label>
-          <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">未設定</option>
             {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
           </select>
@@ -2241,8 +2241,8 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
       </div>
 
       {needsSchedule && (
-        <div className={`${isRecall ? 'bg-orange-50 border-orange-200' : 'bg-indigo-50 border-indigo-200'} border rounded-xl p-4`}>
-          <p className={`text-xs font-bold mb-2 ${isRecall ? 'text-orange-700' : 'text-indigo-700'}`}>
+        <div className={`${isRecall ? 'bg-orange-50 border-orange-200' : 'bg-indigo-50 border-indigo-200'} border rounded-lg p-4`}>
+          <p className={`text-xs font-semibold mb-2 ${isRecall ? 'text-orange-700' : 'text-indigo-700'}`}>
             {isRecall ? '再コール予定日時（再コールページ・カレンダーに反映されます）' : '次回予定（カレンダーに反映されます）'}
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -2250,18 +2250,18 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">{isRecall ? '再コール予定時間' : '予定時間'}</label>
               {isTimeSlotFlag(flag) ? (
-                <select value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+                <select value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                   <option value="">時間帯を選択</option>
                   {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               ) : (
-                <input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm" />
+                <input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
               )}
             </div>
             {isRecall && (
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold text-slate-500">ランク</label>
-                <select value={recallRank} onChange={e => setRecallRank(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+                <select value={recallRank} onChange={e => setRecallRank(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                   {RECALL_RANKS.map(r => <option key={r} value={r}>{r}ランク</option>)}
                 </select>
               </div>
@@ -2274,24 +2274,24 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
       )}
 
       {isTele && (
-        <div className="bg-pink-50 border border-pink-200 rounded-xl p-4 space-y-3">
-          <p className="text-xs font-bold text-pink-700">通話の音声メモ（任意）</p>
+        <div className="bg-pink-50 border border-pink-200 rounded-lg p-4 space-y-3">
+          <p className="text-xs font-semibold text-pink-700">通話の音声メモ（任意）</p>
           <FormField label="音声リンク（URL）" value={voiceLink} onChange={e => setVoiceLink(e.target.value)} placeholder="録音データのURLがあれば貼り付け" />
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500">音声メモ</label>
             <textarea value={voiceMemo} onChange={e => setVoiceMemo(e.target.value)} rows={2} placeholder="パスワードや特記事項など"
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" />
+              className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
           </div>
         </div>
       )}
 
       {isOrder && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-          <p className="text-xs font-bold text-amber-700">受注詳細</p>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+          <p className="text-xs font-semibold text-amber-700">受注詳細</p>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">商品名</label>
-              <select value={productName} onChange={e => setProductName(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+              <select value={productName} onChange={e => setProductName(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                 {products.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
               </select>
             </div>
@@ -2306,10 +2306,10 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
       <div className="flex flex-col gap-1">
         <label className="text-xs font-semibold text-slate-500">メモ（5W1H）</label>
         <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={4}
-          className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
       </div>
 
-      <button onClick={save} className="w-full py-3 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700 flex items-center justify-center gap-2">
+      <button onClick={save} className="w-full py-3 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 flex items-center justify-center gap-2">
         <Save className="w-4 h-4" /> 記録を保存する
       </button>
     </div>
@@ -2349,30 +2349,30 @@ function EmailBuilderView({ customers, emailTemplates, setEmailTemplates, extraT
 
   return (
     <div>
-      <div className="flex gap-2 mb-5">
-        <button onClick={() => setInnerTab('compose')} className={`px-4 py-2 rounded-lg text-sm font-bold ${innerTab === 'compose' ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>メール作成</button>
-        <button onClick={() => setInnerTab('templates')} className={`px-4 py-2 rounded-lg text-sm font-bold ${innerTab === 'templates' ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>フォーマット管理</button>
+      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
+        <button onClick={() => setInnerTab('compose')} className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${innerTab === 'compose' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>メール作成</button>
+        <button onClick={() => setInnerTab('templates')} className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${innerTab === 'templates' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>フォーマット管理</button>
       </div>
 
       {innerTab === 'compose' && (
         <div className="max-w-2xl space-y-4">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500">対象法人（園名で検索）</label>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="検索..." className="px-3 py-2 border border-slate-200 rounded-lg text-sm mb-1" />
-            <select value={customerId} onChange={e => setCustomerId(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="検索..." className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm mb-1 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            <select value={customerId} onChange={e => setCustomerId(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               <option value="">選択してください</option>
               {filteredCustomers.map(c => <option key={c.id} value={c.id}>{c.enName || c.gakuenName}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500">メールフォーマット</label>
-            <select value={templateId} onChange={e => setTemplateId(e.target.value)} className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white">
+            <select value={templateId} onChange={e => setTemplateId(e.target.value)} className="px-3 py-2.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               {allTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
 
           {customer && template && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+            <div className="bg-white ring-1 ring-slate-200 rounded-lg p-4 space-y-3">
               <div>
                 <p className="text-xs font-semibold text-slate-500 mb-1">宛先</p>
                 <p className="text-sm">{customer.email || <span className="text-red-400">メールアドレス未登録</span>}</p>
@@ -2388,7 +2388,7 @@ function EmailBuilderView({ customers, emailTemplates, setEmailTemplates, extraT
               <div className="flex flex-wrap gap-2 pt-1">
                 <CopyButton text={`件名: ${subject}\n\n${body}`} label="全文コピー" />
                 <a href={`mailto:${customer.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700">
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700">
                   <Mail className="w-3.5 h-3.5" />メーラーで開く
                 </a>
               </div>
@@ -2399,18 +2399,18 @@ function EmailBuilderView({ customers, emailTemplates, setEmailTemplates, extraT
 
       {innerTab === 'templates' && (
         <div className="max-w-2xl space-y-3">
-          <button onClick={() => setEditingTpl({ id: null, name: '', subject: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">
+          <button onClick={() => setEditingTpl({ id: null, name: '', subject: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium">
             <Plus className="w-4 h-4" />新しいフォーマット
           </button>
           <ul className="space-y-2">
             {emailTemplates.map(t => (
-              <li key={t.id} className="bg-white border border-slate-200 rounded-lg p-3 flex justify-between items-start">
+              <li key={t.id} className="bg-white ring-1 ring-slate-200 rounded-lg p-3 flex justify-between items-start">
                 <div>
-                  <p className="text-sm font-bold text-slate-700">{t.name}</p>
+                  <p className="text-sm font-semibold text-slate-700">{t.name}</p>
                   <p className="text-xs text-slate-400">{t.subject}</p>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => setEditingTpl(t)} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                  <button onClick={() => setEditingTpl(t)} className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit className="w-4 h-4" /></button>
                   <button onClick={() => deleteTpl(t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </li>
@@ -2428,11 +2428,11 @@ function EmailBuilderView({ customers, emailTemplates, setEmailTemplates, extraT
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">本文</label>
               <textarea value={editingTpl.body} onChange={e => setEditingTpl({ ...editingTpl, body: e.target.value })} rows={8}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm resize-y max-h-72" />
+                className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm resize-y max-h-72 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
             </div>
           </div>
           <button onClick={() => saveTpl({ ...editingTpl, id: editingTpl.id || Date.now() })}
-            className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
+            className="mt-5 w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">保存する</button>
         </Modal>
       )}
     </div>
@@ -2601,11 +2601,11 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-2">
           {[['day', '日別'], ['week', '週別'], ['month', '月別']].map(([v, l]) => (
-            <button key={v} onClick={() => setGranularity(v)} className={`px-4 py-2 rounded-lg text-sm font-bold ${granularity === v ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>{l}</button>
+            <button key={v} onClick={() => setGranularity(v)} className={`px-4 py-2 rounded-md text-sm font-medium ${granularity === v ? 'bg-indigo-600 text-white' : 'bg-white ring-1 ring-inset ring-slate-300 text-slate-600'}`}>{l}</button>
           ))}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
             {[['all', '全体'], ['department', '課'], ['personal', '個人']].map(([v, l]) => (
               <button key={v}
                 onClick={() => {
@@ -2613,24 +2613,24 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
                   if (v === 'department') setScopeValue(currentUser?.department || (departments[0]?.name || ''));
                   else if (v === 'personal') setScopeValue(currentUser?.displayName || '');
                 }}
-                className={`px-3 py-2 text-sm font-bold ${scopeType === v ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                className={`px-3 py-2 text-sm font-medium ${scopeType === v ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                 {l}
               </button>
             ))}
           </div>
           {scopeType === 'department' && (
-            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               <option value="">課を選択</option>
               {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
           )}
           {scopeType === 'personal' && (
             <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} disabled={!isOwner}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white disabled:bg-slate-50">
+              className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white disabled:bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
-          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">すべての協会</option>
             {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
@@ -2638,17 +2638,17 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={openGoalModal} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50">
-          <Target className="w-4 h-4 text-teal-600" />目標設定
+        <button onClick={openGoalModal} className="flex items-center gap-1.5 px-3 py-2 bg-white ring-1 ring-inset ring-slate-300 text-slate-600 rounded-md text-sm font-medium hover:bg-slate-50">
+          <Target className="w-4 h-4 text-indigo-600" />目標設定
         </button>
-        <button onClick={() => setWeeklyModal(true)} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50">
+        <button onClick={() => setWeeklyModal(true)} className="flex items-center gap-1.5 px-3 py-2 bg-white ring-1 ring-inset ring-slate-300 text-slate-600 rounded-md text-sm font-medium hover:bg-slate-50">
           <CalendarDays className="w-4 h-4 text-indigo-600" />週間目標をまとめて作成
         </button>
-        <div className="flex border border-slate-200 rounded-lg overflow-hidden ml-auto">
-          <button onClick={() => setGoalView('card')} title="達成率をカード表示" className={`p-2 ${goalView === 'card' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+        <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden ml-auto">
+          <button onClick={() => setGoalView('card')} title="達成率をカード表示" className={`p-2 ${goalView === 'card' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
             <LayoutGrid className="w-4 h-4" />
           </button>
-          <button onClick={() => setGoalView('chart')} title="達成率を円グラフ表示" className={`p-2 ${goalView === 'chart' ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+          <button onClick={() => setGoalView('chart')} title="達成率を円グラフ表示" className={`p-2 ${goalView === 'chart' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
             <PieChart className="w-4 h-4" />
           </button>
         </div>
@@ -2667,7 +2667,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
                     const g = (teleGoals || {})[keyForGranularity(base)] || {};
                     setGoalModal({ baseDate: base, call: g.call || 0, timeSetting: g.timeSetting || 0 });
                   }}
-                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" />
+                  className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
               </div>
             ) : (
               <div className="flex flex-col gap-1">
@@ -2679,7 +2679,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
                     const g = (teleGoals || {})[keyForGranularity(base)] || {};
                     setGoalModal({ baseDate: base, call: g.call || 0, timeSetting: g.timeSetting || 0 });
                   }}
-                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" />
+                  className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
               </div>
             )}
             <p className="text-xs text-slate-400">設定先: <strong className="text-slate-600">{keyForGranularity(goalModal.baseDate)}</strong></p>
@@ -2689,9 +2689,9 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
             </div>
           </div>
           <div className="flex gap-2 mt-5">
-            <button onClick={saveGoal} className="flex-1 py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
+            <button onClick={saveGoal} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">保存する</button>
             {(teleGoals || {})[keyForGranularity(goalModal.baseDate)] && (
-              <button onClick={deleteGoal} className="px-4 py-2.5 border border-red-200 text-red-600 rounded-lg font-bold hover:bg-red-50">削除</button>
+              <button onClick={deleteGoal} className="px-4 py-2.5 border border-red-200 text-red-600 rounded-md font-medium hover:bg-red-50">削除</button>
             )}
           </div>
         </Modal>
@@ -2710,7 +2710,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
                   return (
                     <button key={dow}
                       onClick={() => setWeeklyDraft({ ...weeklyDraft, days: active ? weeklyDraft.days.filter(d => d !== dow) : [...weeklyDraft.days, dow] })}
-                      className={`w-9 h-9 rounded-full text-sm font-bold ${active ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                      className={`w-9 h-9 rounded-full text-sm font-medium ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
                       {WEEKDAY_JA[dow]}
                     </button>
                   );
@@ -2723,7 +2723,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
             </div>
             <p className="text-xs text-slate-500">週合計（自動計算）: コール {(Number(weeklyDraft.call) || 0) * weeklyDraft.days.length}件 ／ 時間設定 {(Number(weeklyDraft.timeSetting) || 0) * weeklyDraft.days.length}件</p>
           </div>
-          <button onClick={applyWeekly} className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">まとめて作成する</button>
+          <button onClick={applyWeekly} className="mt-5 w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">まとめて作成する</button>
         </Modal>
       )}
 
@@ -2735,9 +2735,9 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
             const noFlagCount = items.filter(i => !i.flag).length;
             const f = computeFunnel(items);
             return (
-              <div key={key} className="bg-white rounded-xl border border-slate-100 p-4">
+              <div key={key} className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
                 <div className="flex justify-between items-start mb-3">
-                  <p className="text-sm font-bold text-slate-700">{key}</p>
+                  <p className="text-sm font-semibold text-slate-700">{key}</p>
                   <CopyButton text={buildReport(key, items)} label="レポートをコピー" />
                 </div>
 
@@ -2746,7 +2746,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
                   if (!g || (!g.call && !g.timeSetting)) {
                     return (
                       <button onClick={() => setGoalModal({ baseDate: baseDateForKey(key, items), call: 0, timeSetting: 0 })}
-                        className="text-[11px] text-teal-600 font-semibold mb-3 flex items-center gap-1">
+                        className="text-[11px] text-indigo-600 font-medium mb-3 flex items-center gap-1">
                         <Target className="w-3.5 h-3.5" />この期間の目標を設定
                       </button>
                     );
@@ -2755,9 +2755,9 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
                   return (
                     <div className="mb-3">
                       <div className="flex items-center gap-2 mb-2">
-                        <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Target className="w-3.5 h-3.5 text-teal-600" />目標に対する達成率</p>
+                        <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1"><Target className="w-3.5 h-3.5 text-indigo-600" />目標に対する達成率</p>
                         <button onClick={() => setGoalModal({ baseDate: baseDateForKey(key, items), call: g.call || 0, timeSetting: g.timeSetting || 0 })}
-                          className="text-[11px] text-teal-600 font-semibold underline">編集</button>
+                          className="text-[11px] text-indigo-600 font-medium underline">編集</button>
                       </div>
                       <div className="grid grid-cols-2 gap-3 max-w-md">
                         <Card label="コール数" actual={f.callCount} goal={g.call || 0} />
@@ -2781,7 +2781,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
                     ['接続アポ率', f.apptRate, '%', items.filter(i => isInitialTimeSettingFlag(i.flag))],
                   ].map(([label, value, unit, recs]) => (
                     <button key={label} onClick={() => setDrilldown({ title: `${key} ${label.trim()}`, records: recs })}
-                      className="bg-slate-50 rounded-lg p-2 text-center hover:bg-slate-100 hover:ring-1 hover:ring-teal-300 transition">
+                      className="bg-slate-50 rounded-md p-2 text-center hover:bg-slate-100 hover:ring-1 hover:ring-indigo-300 transition">
                       <p className="text-base font-extrabold text-slate-800">{value}<span className="text-xs font-normal text-slate-400">{unit}</span></p>
                       <p className="text-[10px] text-slate-400">{label}</p>
                     </button>
@@ -2795,7 +2795,7 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
                     if (n === 0) return null;
                     return <span key={f} className="px-2.5 py-1 bg-slate-100 rounded-full text-xs text-slate-600">{f}: {n}件</span>;
                   })}
-                  {noFlagCount > 0 && <span className="px-2.5 py-1 bg-slate-50 border border-dashed border-slate-200 rounded-full text-xs text-slate-400">フラグなし: {noFlagCount}件</span>}
+                  {noFlagCount > 0 && <span className="px-2.5 py-1 bg-slate-50 border-dashed ring-1 ring-slate-200 rounded-full text-xs text-slate-400">フラグなし: {noFlagCount}件</span>}
                 </div>
               </div>
             );
@@ -2814,9 +2814,9 @@ function TeleApptStatsView({ records, customers, activityTypes, members, departm
                 return (
                   <button key={r.id}
                     onClick={() => { setDrilldown(null); onOpenCustomer && onOpenCustomer(r.customerId); }}
-                    className="text-left bg-white rounded-xl border border-slate-100 p-3 hover:shadow-md hover:border-teal-200 transition">
+                    className="text-left bg-white rounded-md ring-1 ring-inset ring-slate-300 p-3 hover:shadow-md hover:border-indigo-200 transition">
                     <p className="text-xs text-slate-400">{cust?.gakuenName || ''}{cust?.associationType ? ` ・ ${cust.associationType}` : ''}</p>
-                    <p className="font-bold text-slate-800 text-sm">{r.customerName || cust?.enName || '不明な顧客'}</p>
+                    <p className="font-semibold text-slate-800 text-sm">{r.customerName || cust?.enName || '不明な顧客'}</p>
                     <p className="text-xs text-slate-500 mt-1">{r.type}{r.flag ? `（${r.flag}）` : ''} ・ {r.date} {r.time || ''}</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">担当: {effectiveAssignee(r) || '未設定'}</p>
                     {r.memo && <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{r.memo}</p>}
@@ -2866,7 +2866,7 @@ function NumField({ label, value, onChange, suffix = '件' }) {
       <label className="text-[11px] font-semibold text-slate-500">{label}</label>
       <div className="flex items-center gap-1">
         <input type="number" value={value} onChange={e => onChange(Number(e.target.value))}
-          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white" />
+          className="w-full px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
         <span className="text-xs text-slate-400 shrink-0">{suffix}</span>
       </div>
     </div>
@@ -3046,12 +3046,12 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
 
   return (
     <div className="max-w-3xl space-y-5">
-      <div className="bg-white rounded-xl border border-slate-100 p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
         <FormField label="日付" type="date" value={date} onChange={e => setDate(e.target.value)} />
         <FormField label="会社・支社名" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="例：WEB東京" />
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-slate-500">フォーマット</label>
-          <select value={formatId} onChange={e => setFormatId(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={formatId} onChange={e => setFormatId(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="standard">標準（自動集計フル版）</option>
             {(dailyReportTemplates || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
@@ -3062,8 +3062,8 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <p className="text-xs font-bold text-slate-500 mb-3">コミット（目標）※手入力</p>
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
+        <p className="text-xs font-semibold text-slate-500 mb-3">コミット（目標）※手入力</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <NumField label="今月コミット：粗利" value={monthlyCommitProfit} onChange={setMonthlyCommitProfit} suffix="P" />
           <NumField label="今月コミット：台数" value={monthlyCommitQuantity} onChange={setMonthlyCommitQuantity} suffix="台" />
@@ -3074,8 +3074,8 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <p className="text-xs font-bold text-slate-500 mb-3">本日の実績（自動集計）</p>
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
+        <p className="text-xs font-semibold text-slate-500 mb-3">本日の実績（自動集計）</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
           <div><p className="text-xl font-extrabold text-slate-800">{todayTimeSetting}</p><p className="text-[10px] text-slate-400">時間設定件数</p></div>
           <div><p className="text-xl font-extrabold text-slate-800">{todayVisit}</p><p className="text-[10px] text-slate-400">アポ（訪問）件数</p></div>
@@ -3084,15 +3084,15 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <p className="text-xs font-bold text-slate-500 mb-1">群私幼アプローチ（自動集計・協会の種類「群私幼」）</p>
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
+        <p className="text-xs font-semibold text-slate-500 mb-1">群私幼アプローチ（自動集計・協会の種類「群私幼」）</p>
         <p className="text-[11px] text-slate-400 mb-3">本日: 初回時間設定{gunshiyouToday.initialTimeSetting}件（代表{gunshiyouToday.initialTimeSettingRep}/担当{gunshiyouToday.initialTimeSettingStaff}） / 初回訪問{gunshiyouToday.initialVisit}件 / 時間設定{gunshiyouToday.timeSetting}件 / 訪問{gunshiyouToday.visit}件 / {gunshiyouToday.profit}P・{gunshiyouToday.quantity}台</p>
         <p className="text-[11px] text-slate-500">累計: 初回時間設定{gunshiyouCum.initialTimeSetting}件（代表{gunshiyouCum.initialTimeSettingRep}/担当{gunshiyouCum.initialTimeSettingStaff}） / 初回訪問{gunshiyouCum.initialVisit}件 / 時間設定{gunshiyouCum.timeSetting}件 / 訪問{gunshiyouCum.visit}件 / 実数{gunshiyouCum.profit}P・{gunshiyouCum.quantity}台</p>
         <p className="text-[11px] text-slate-500">日々累計必要数: {remainingProfit}P/{remainingQuantity}台（日{dailyNeededProfit}P/{dailyNeededQuantity}台）</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <p className="text-xs font-bold text-slate-500 mb-3">ユーザーアプローチ ※手入力（既存のフラグでは追跡していない指標のため）</p>
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
+        <p className="text-xs font-semibold text-slate-500 mb-3">ユーザーアプローチ ※手入力（既存のフラグでは追跡していない指標のため）</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <NumField label="1 コンタクト完了数" value={userStats.contact} onChange={v => setUserStats({ ...userStats, contact: v })} />
           <NumField label="2 アポ数" value={userStats.appt} onChange={v => setUserStats({ ...userStats, appt: v })} />
@@ -3105,40 +3105,40 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
         <p className="text-[11px] text-slate-400 mt-3">自動集計（協会の種類「ユーザー」）：本日訪問{userToday.visit}件 / 累計訪問{userCum.visit}件 / 実数{userCum.profit}P・{userCum.quantity}台</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <p className="text-xs font-bold text-slate-500 mb-1">新規アプローチ（自動集計・協会の種類「新規」）</p>
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
+        <p className="text-xs font-semibold text-slate-500 mb-1">新規アプローチ（自動集計・協会の種類「新規」）</p>
         <p className="text-[11px] text-slate-400 mb-1">本日: 時間設定{shinkiToday.initialTimeSetting}件 / 訪問{shinkiToday.initialVisit}件</p>
         <p className="text-[11px] text-slate-500">累計: 時間設定{shinkiCum.initialTimeSetting}件 / 訪問{shinkiCum.initialVisit}件 / {shinkiCum.profit}P・{shinkiCum.quantity}台</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-100 p-4 space-y-3">
-        <p className="text-xs font-bold text-slate-500">所感・自由記述</p>
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4 space-y-3">
+        <p className="text-xs font-semibold text-slate-500">所感・自由記述</p>
         <div className="flex flex-col gap-1">
           <label className="text-[11px] font-semibold text-slate-500">今日の成長</label>
-          <input value={growthText} onChange={e => setGrowthText(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          <input value={growthText} onChange={e => setGrowthText(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-[11px] font-semibold text-slate-500">改善点</label>
-          <input value={improvementText} onChange={e => setImprovementText(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          <input value={improvementText} onChange={e => setImprovementText(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-[11px] font-semibold text-slate-500">改善行動</label>
-          <input value={improvementActionText} onChange={e => setImprovementActionText(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+          <input value={improvementActionText} onChange={e => setImprovementActionText(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold text-slate-500">来週の目標①</label>
-            <input value={nextWeekGoal1} onChange={e => setNextWeekGoal1(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+            <input value={nextWeekGoal1} onChange={e => setNextWeekGoal1(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold text-slate-500">来週の目標②</label>
-            <input value={nextWeekGoal2} onChange={e => setNextWeekGoal2(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+            <input value={nextWeekGoal2} onChange={e => setNextWeekGoal2(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <p className="text-xs font-bold text-slate-500 mb-3">来週のコミット ／ 紹介取得数 ※手入力</p>
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
+        <p className="text-xs font-semibold text-slate-500 mb-3">来週のコミット ／ 紹介取得数 ※手入力</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <NumField label="来週コミット：時間設定" value={nextWeekCommitTimeSetting} onChange={setNextWeekCommitTimeSetting} />
           <NumField label="来週コミット：アポ" value={nextWeekCommitAppt} onChange={setNextWeekCommitAppt} suffix="訪問" />
@@ -3150,26 +3150,26 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
       </div>
 
       {selectedTpl && (
-        <div className="bg-white rounded-xl border border-slate-100 p-4">
+        <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500">自由記述（フォーマットの {'{{自由記述}}'} に入ります）</label>
-            <textarea value={freeText} onChange={e => setFreeText(e.target.value)} rows={3} className="px-3 py-2 border border-slate-200 rounded-lg text-sm resize-y" />
+            <textarea value={freeText} onChange={e => setFreeText(e.target.value)} rows={3} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm resize-y focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
           </div>
         </div>
       )}
 
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+      <div className="bg-slate-50 ring-1 ring-slate-200 rounded-lg p-3">
         <pre className="text-xs whitespace-pre-wrap font-sans text-slate-700">{reportText}</pre>
       </div>
       <div className="flex flex-wrap gap-2">
         <CopyButton text={reportText} label="日報をコピー" />
-        <button onClick={saveLog} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700">
+        <button onClick={saveLog} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700">
           <Save className="w-3.5 h-3.5" />{existingLog ? 'この日の日報を上書き保存' : '日報を保存してログに残す'}
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <button onClick={() => setHistoryOpen(v => !v)} className="w-full flex justify-between items-center text-sm font-bold text-slate-700">
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
+        <button onClick={() => setHistoryOpen(v => !v)} className="w-full flex justify-between items-center text-sm font-medium text-slate-700">
           過去の日報ログ（{dailyReportLogs.length}件）
           <ChevronDown className={`w-4 h-4 transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
         </button>
@@ -3179,9 +3179,9 @@ function DailyReportView({ records, customers, currentUser, dailyReportLogs, set
             {dailyReportLogs.slice().sort((a, b) => b.date.localeCompare(a.date)).map(log => (
               <li key={log.id} className="bg-slate-50 rounded-lg p-3">
                 <div className="flex justify-between items-center mb-1">
-                  <p className="text-xs font-bold text-slate-700">{log.date}</p>
+                  <p className="text-xs font-semibold text-slate-700">{log.date}</p>
                   <div className="flex gap-2">
-                    <button onClick={() => setDate(log.date)} className="text-[11px] text-teal-600 font-semibold">この日を開く</button>
+                    <button onClick={() => setDate(log.date)} className="text-[11px] text-indigo-600 font-medium">この日を開く</button>
                     <CopyButton text={log.text} label="コピー" />
                   </div>
                 </div>
@@ -3275,38 +3275,38 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-2">
           <button onClick={() => setTab('pending')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold ${tab === 'pending' ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>
+            className={`px-4 py-2 rounded-md text-sm font-medium ${tab === 'pending' ? 'bg-indigo-600 text-white' : 'bg-white ring-1 ring-inset ring-slate-300 text-slate-600'}`}>
             未対応（{pending.length}件）
           </button>
           <button onClick={() => setTab('done')}
-            className={`px-4 py-2 rounded-lg text-sm font-bold ${tab === 'done' ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>
+            className={`px-4 py-2 rounded-md text-sm font-medium ${tab === 'done' ? 'bg-indigo-600 text-white' : 'bg-white ring-1 ring-inset ring-slate-300 text-slate-600'}`}>
             対応済み（{done.length}件）
           </button>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {isOwner && (
             <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+              className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               <option value="">すべての担当者</option>
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
           <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">すべての協会</option>
             {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
           <select value={rankFilter} onChange={e => setRankFilter(e.target.value)}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">全ランク</option>
             {RECALL_RANKS.map(r => <option key={r} value={r}>{r}ランク</option>)}
           </select>
           <div className="flex items-center gap-1.5">
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-2 py-2 border border-slate-200 rounded-lg text-sm bg-white" title="予定日（この日以降）" />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-2 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" title="予定日（この日以降）" />
             <span className="text-xs text-slate-400">〜</span>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-2 py-2 border border-slate-200 rounded-lg text-sm bg-white" title="予定日（この日以前）" />
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-2 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" title="予定日（この日以前）" />
             {(dateFrom || dateTo) && (
-              <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-xs text-slate-400 hover:text-red-500 font-semibold">クリア</button>
+              <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-xs text-slate-400 hover:text-red-500 font-medium">クリア</button>
             )}
           </div>
         </div>
@@ -3314,19 +3314,19 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
 
       {tab === 'pending' && (
         <div className="grid grid-cols-3 gap-3">
-          <div className={`rounded-xl p-4 border ${overdueCount > 0 ? 'bg-red-50 border-red-300' : 'bg-white border-slate-100'}`}>
+          <div className={`rounded-lg p-4 ${overdueCount > 0 ? 'bg-red-50 border-red-300' : 'bg-white ring-1 ring-slate-200'}`}>
             <p className={`text-2xl font-extrabold ${overdueCount > 0 ? 'text-red-600' : 'text-slate-800'}`}>{overdueCount}</p>
-            <p className="text-[11px] text-slate-500 font-bold flex items-center gap-1">
+            <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
               {overdueCount > 0 && <AlertTriangle className="w-3 h-3 text-red-500" />}時間超過
             </p>
           </div>
-          <div className="bg-white rounded-xl p-4 border border-slate-100">
+          <div className="bg-white rounded-lg p-4 ring-1 ring-slate-200">
             <p className="text-2xl font-extrabold text-indigo-600">{todayCount}</p>
-            <p className="text-[11px] text-slate-500 font-bold">本日この後</p>
+            <p className="text-[11px] text-slate-500 font-semibold">本日この後</p>
           </div>
-          <div className="bg-white rounded-xl p-4 border border-slate-100">
+          <div className="bg-white rounded-lg p-4 ring-1 ring-slate-200">
             <p className="text-2xl font-extrabold text-slate-400">{noDateCount}</p>
-            <p className="text-[11px] text-slate-500 font-bold">日時未設定</p>
+            <p className="text-[11px] text-slate-500 font-semibold">日時未設定</p>
           </div>
         </div>
       )}
@@ -3345,17 +3345,17 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
             const today = tab === 'pending' && isToday(r) && !overdue;
             return (
               <li key={r.id}
-                className={`rounded-xl border p-4 ${overdue ? 'bg-red-50 border-red-300' : today ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white border-slate-100'}`}>
+                className={`rounded-lg p-4 ${overdue ? 'bg-red-50 border-red-300' : today ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white ring-1 ring-slate-200'}`}>
                 <div className="flex flex-wrap justify-between items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-slate-400">
                       {cust?.gakuenName || ''}{cust?.associationType ? ` ・ ${cust.associationType}` : ''}
                     </p>
-                    <p className="font-bold text-slate-800 flex items-center gap-2">
+                    <p className="font-semibold text-slate-800 flex items-center gap-2">
                       {r.customerName || cust?.enName || '不明な顧客'}
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${{'A':'bg-rose-100 text-rose-700','B':'bg-amber-100 text-amber-700','C':'bg-slate-100 text-slate-500'}[r.recallRank || 'A']}`}>{r.recallRank || 'A'}ランク</span>
                     </p>
-                    <p className={`text-sm font-bold mt-1 flex flex-wrap items-center gap-1.5 ${overdue ? 'text-red-600' : today ? 'text-indigo-700' : 'text-slate-600'}`}>
+                    <p className={`text-sm font-semibold mt-1 flex flex-wrap items-center gap-1.5 ${overdue ? 'text-red-600' : today ? 'text-indigo-700' : 'text-slate-600'}`}>
                       <CalendarDays className="w-4 h-4 shrink-0" />
                       {r.scheduledDate ? `${r.scheduledDate} ${r.scheduledTime || '（時間未設定）'}` : '予定日時が未設定です'}
                       {overdue && <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-[10px]">時間超過</span>}
@@ -3367,12 +3367,12 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
                     {r.memo && <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{r.memo}</p>}
                     <div className="flex flex-wrap items-center gap-3 mt-1.5">
                       {cust?.tel && (
-                        <a href={`tel:${cust.tel}`} className="inline-flex items-center gap-1 text-xs text-teal-700 font-bold">
+                        <a href={`tel:${cust.tel}`} className="inline-flex items-center gap-1 text-xs text-indigo-700 font-semibold">
                           <Phone className="w-3.5 h-3.5" />{cust.tel}
                         </a>
                       )}
                       {cust?.mobile && (
-                        <a href={`tel:${cust.mobile}`} className="inline-flex items-center gap-1 text-xs text-teal-700 font-bold">
+                        <a href={`tel:${cust.mobile}`} className="inline-flex items-center gap-1 text-xs text-indigo-700 font-semibold">
                           <Phone className="w-3.5 h-3.5" />{cust.mobile}（携帯）
                         </a>
                       )}
@@ -3381,21 +3381,21 @@ function RecallView({ records, setRecords, customers, members, currentUser, isOw
                   </div>
                   <div className="flex flex-col gap-1.5 shrink-0 w-full sm:w-auto">
                     <button onClick={() => onOpenCustomer(r.customerId)}
-                      className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50">
+                      className="px-3 py-1.5 bg-white ring-1 ring-inset ring-slate-300 text-slate-600 rounded-md text-xs font-medium hover:bg-slate-50">
                       顧客カードを開く
                     </button>
                     <button onClick={() => onOpenCustomer(r.customerId, true)}
-                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center justify-center gap-1">
+                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700 flex items-center justify-center gap-1">
                       <PenTool className="w-3.5 h-3.5" />記録を追加
                     </button>
                     {tab === 'pending' ? (
                       <button onClick={() => setDone(r.id, true)}
-                        className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700">
+                        className="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700">
                         対応済みにする
                       </button>
                     ) : (
                       <button onClick={() => setDone(r.id, false)}
-                        className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-300">
+                        className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-md text-xs font-medium hover:bg-slate-300">
                         未対応に戻す
                       </button>
                     )}
@@ -3524,7 +3524,7 @@ function CalendarView({ records, customers, members, departments, currentUser, i
 
   // 担当者ごとの色（メンバーの並び順で固定の色を割り当てる）
   const MEMBER_COLORS = [
-    { bg: 'bg-teal-500', hover: 'hover:bg-teal-600', dot: 'bg-teal-500' },
+    { bg: 'bg-indigo-500', hover: 'hover:bg-indigo-600', dot: 'bg-indigo-500' },
     { bg: 'bg-indigo-500', hover: 'hover:bg-indigo-600', dot: 'bg-indigo-500' },
     { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', dot: 'bg-rose-500' },
     { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', dot: 'bg-amber-500' },
@@ -3542,16 +3542,16 @@ function CalendarView({ records, customers, members, departments, currentUser, i
   const eventColor = (r) => colorMode === 'member' ? memberColor(effectiveAssignee(r)) : typeColor(r);
 
   const renderTimeGrid = (days) => (
-    <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+    <div className="bg-white rounded-lg ring-1 ring-slate-200 overflow-hidden">
       <div className="flex border-b border-slate-100">
         <div className="w-14 shrink-0 border-r border-slate-100" />
         {days.map(d => {
           const ds = toDateStr(d);
           const isToday = ds === todayStr;
           return (
-            <div key={ds} className={`flex-1 text-center py-2 ${isToday ? 'bg-teal-50' : ''}`}>
+            <div key={ds} className={`flex-1 text-center py-2 ${isToday ? 'bg-indigo-50' : ''}`}>
               <p className="text-[11px] text-slate-400">{WEEKDAY_JA[d.getDay()]}</p>
-              <p className={`text-lg font-bold ${isToday ? 'text-teal-600' : 'text-slate-700'}`}>{d.getDate()}</p>
+              <p className={`text-lg font-semibold ${isToday ? 'text-indigo-600' : 'text-slate-700'}`}>{d.getDate()}</p>
             </div>
           );
         })}
@@ -3578,7 +3578,7 @@ function CalendarView({ records, customers, members, departments, currentUser, i
                     <button key={r.id} style={eventStyle(r)}
                       onClick={() => onOpenCustomer && onOpenCustomer(r.customerId)}
                       className={`absolute left-0.5 right-0.5 ${col.bg} ${col.hover} text-white rounded-md px-1.5 py-1 overflow-hidden shadow-sm text-left transition`}>
-                      <p className="text-[10px] font-bold leading-tight truncate">{r.scheduledTime}</p>
+                      <p className="text-[10px] font-semibold leading-tight truncate">{r.scheduledTime}</p>
                       <p className="text-[10px] leading-tight truncate">{r.customerName || '不明な顧客'}</p>
                       <p className="text-[9px] leading-tight opacity-80 truncate">{r.type}{r.flag ? `（${r.flag}）` : ''}</p>
                       {cust?.address && <p className="text-[9px] leading-tight opacity-70 truncate">{cust.address}</p>}
@@ -3610,22 +3610,22 @@ function CalendarView({ records, customers, members, departments, currentUser, i
         <div className="flex gap-2">
           {[['month', '月'], ['week', '週'], ['day', '日']].map(([v, l]) => (
             <button key={v} onClick={() => setViewMode(v)}
-              className={`px-4 py-2 rounded-lg text-sm font-bold ${viewMode === v ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>
+              className={`px-4 py-2 rounded-md text-sm font-medium ${viewMode === v ? 'bg-indigo-600 text-white' : 'bg-white ring-1 ring-inset ring-slate-300 text-slate-600'}`}>
               {l}
             </button>
           ))}
-          <button onClick={() => setCursor(new Date())} className="px-4 py-2 rounded-lg text-sm font-bold bg-white border border-slate-200 text-slate-600">今日</button>
-          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+          <button onClick={() => setCursor(new Date())} className="px-4 py-2 rounded-md text-sm font-medium bg-white ring-1 ring-inset ring-slate-300 text-slate-600">今日</button>
+          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
             {[['type', '種別で色分け'], ['member', '担当者で色分け']].map(([v, l]) => (
               <button key={v} onClick={() => setColorMode(v)}
-                className={`px-3 py-2 text-sm font-bold ${colorMode === v ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                className={`px-3 py-2 text-sm font-medium ${colorMode === v ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                 {l}
               </button>
             ))}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
             {[['all', '全体'], ['department', '課'], ['personal', '個人']].map(([v, l]) => (
               <button key={v}
                 onClick={() => {
@@ -3633,34 +3633,34 @@ function CalendarView({ records, customers, members, departments, currentUser, i
                   if (v === 'department') setScopeValue(currentUser?.department || (departments[0]?.name || ''));
                   else if (v === 'personal') setScopeValue(currentUser?.displayName || '');
                 }}
-                className={`px-3 py-2 text-sm font-bold ${scopeType === v ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                className={`px-3 py-2 text-sm font-medium ${scopeType === v ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                 {l}
               </button>
             ))}
           </div>
           {scopeType === 'department' && (
-            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               <option value="">課を選択</option>
               {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
           )}
           {scopeType === 'personal' && (
             <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} disabled={!isOwner}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white disabled:bg-slate-50">
+              className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white disabled:bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
             </select>
           )}
-          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="">すべての協会</option>
             {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
       </div>
 
-      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-100 p-4">
-        <button onClick={() => move(-1)} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronLeft className="w-5 h-5" /></button>
-        <p className="font-bold text-slate-700">{headerLabel}</p>
-        <button onClick={() => move(1)} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronRight className="w-5 h-5" /></button>
+      <div className="flex items-center justify-between bg-white rounded-lg ring-1 ring-slate-200 p-4">
+        <button onClick={() => move(-1)} className="p-2 hover:bg-slate-100 rounded-md"><ChevronLeft className="w-5 h-5" /></button>
+        <p className="font-semibold text-slate-700">{headerLabel}</p>
+        <button onClick={() => move(1)} className="p-2 hover:bg-slate-100 rounded-md"><ChevronRight className="w-5 h-5" /></button>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 px-1">
@@ -3681,8 +3681,8 @@ function CalendarView({ records, customers, members, departments, currentUser, i
 
       {viewMode === 'month' && (
         <>
-          <div className="bg-white rounded-xl border border-slate-100 p-4">
-            <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 mb-2">
+          <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
+            <div className="grid grid-cols-7 text-center text-xs font-semibold text-slate-400 mb-2">
               {WEEKDAY_JA.map(d => <div key={d}>{d}</div>)}
             </div>
             <div className="grid grid-cols-7 gap-1">
@@ -3693,10 +3693,10 @@ function CalendarView({ records, customers, members, departments, currentUser, i
                 const isToday = ds === todayStr;
                 return (
                   <button key={i} onClick={() => setSelectedDate(ds)}
-                    className={`aspect-square rounded-lg p-1 text-left border transition ${
-                      selectedDate === ds ? 'border-teal-500 bg-teal-50' : isToday ? 'border-teal-300' : 'border-transparent hover:border-slate-200'
-                    }`}>
-                    <span className={`text-xs ${isToday ? 'font-bold text-teal-600' : 'text-slate-600'}`}>{d}</span>
+                    className={`aspect-square rounded-md p-1 text-left transition ${
+ selectedDate === ds ? 'border-indigo-500 bg-indigo-50' : isToday ? 'border-indigo-300' : 'border-transparent hover:ring-1 ring-inset ring-slate-300'
+ }`}>
+                    <span className={`text-xs ${isToday ? 'font-semibold text-indigo-600' : 'text-slate-600'}`}>{d}</span>
                     {items.length > 0 && (
                       <div className="mt-1 flex flex-wrap gap-0.5">
                         {items.slice(0, 3).map((it, idx) => <span key={idx} className={`w-1.5 h-1.5 rounded-full ${eventColor(it).dot}`} />)}
@@ -3709,8 +3709,8 @@ function CalendarView({ records, customers, members, departments, currentUser, i
           </div>
 
           {selectedDate && (
-            <div className="bg-white rounded-xl border border-slate-100 p-4">
-              <p className="text-sm font-bold text-slate-700 mb-3">{selectedDate} の予定（{selectedItems.length}件）</p>
+            <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
+              <p className="text-sm font-semibold text-slate-700 mb-3">{selectedDate} の予定（{selectedItems.length}件）</p>
               {selectedItems.length === 0 ? (
                 <p className="text-sm text-slate-400">この日の予定はありません。</p>
               ) : (
@@ -3721,16 +3721,16 @@ function CalendarView({ records, customers, members, departments, currentUser, i
                     return (
                       <li key={r.id}>
                         <button onClick={() => onOpenCustomer && onOpenCustomer(r.customerId)}
-                          className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 rounded-lg px-3 py-2 text-sm text-left transition">
+                          className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 rounded-md px-3 py-2 text-sm text-left transition">
                           <div className="flex items-start gap-2">
                             <span className={`w-2.5 h-2.5 rounded-full ${col.dot} mt-1.5 shrink-0`} />
                             <div>
-                              <span className="font-semibold text-teal-700 hover:underline">{r.customerName || '不明な顧客'}</span>
+                              <span className="font-semibold text-indigo-700 hover:underline">{r.customerName || '不明な顧客'}</span>
                               <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
                               {cust?.address && <p className="text-xs text-slate-400 mt-0.5">{cust.address}</p>}
                             </div>
                           </div>
-                          <span className="text-xs text-indigo-600 font-bold shrink-0">{r.scheduledTime || '時間未設定'}</span>
+                          <span className="text-xs text-indigo-600 font-semibold shrink-0">{r.scheduledTime || '時間未設定'}</span>
                         </button>
                       </li>
                     );
@@ -3761,10 +3761,10 @@ function GoogleCalendarStatusCard({ token }) {
   }, [token]);
 
   return (
-    <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-      <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><CalendarDays className="w-4 h-4" />Googleカレンダー連携</h3>
+    <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+      <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><CalendarDays className="w-4 h-4" />Googleカレンダー連携</h3>
       <div className="flex items-center gap-2 mb-3">
-        <span className={`w-2 h-2 rounded-full ${status ? 'bg-teal-500' : 'bg-slate-300'}`} />
+        <span className={`w-2 h-2 rounded-full ${status ? 'bg-indigo-500' : 'bg-slate-300'}`} />
         <span className="text-sm font-semibold text-slate-600">
           {status === null ? '確認中...' : status ? '連携済み：予定を保存すると自動でGoogleカレンダーに登録されます' : '未連携'}
         </span>
@@ -3786,9 +3786,9 @@ function GoogleCalendarStatusCard({ token }) {
 // ---------- メンバー管理（オーナーのみ） ----------
 const ROLE_LABELS = { owner: 'オーナー', executive: '役員', emgr: 'EMGR', mgr: 'MGR', smgr: 'SMGR', general: '一般', member: '一般' };
 const ROLE_BADGE_CLASS = {
-  owner: 'bg-amber-100 text-amber-700', executive: 'bg-rose-100 text-rose-700', emgr: 'bg-violet-100 text-violet-700',
-  mgr: 'bg-indigo-100 text-indigo-700', smgr: 'bg-teal-100 text-teal-700',
-  general: 'bg-slate-200 text-slate-600', member: 'bg-slate-200 text-slate-600',
+  owner: 'bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200', executive: 'bg-rose-50 text-rose-800 ring-1 ring-inset ring-rose-200', emgr: 'bg-violet-50 text-violet-800 ring-1 ring-inset ring-violet-200',
+  mgr: 'bg-indigo-50 text-indigo-800 ring-1 ring-inset ring-indigo-200', smgr: 'bg-indigo-50 text-indigo-800 ring-1 ring-inset ring-indigo-200',
+  general: 'bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200', member: 'bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200',
 };
 
 // ---------- 役職ごとの権限管理 ----------
@@ -3822,7 +3822,7 @@ function readFileAsDataUrl(file) {
 function Avatar({ photo, name, size = 'w-9 h-9' }) {
   if (photo) return <img src={photo} alt={name} className={`${size} rounded-full object-cover`} />;
   return (
-    <div className={`${size} rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold shrink-0`}>
+    <div className={`${size} rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-semibold shrink-0`}>
       {(name || '?').slice(0, 1)}
     </div>
   );
@@ -3883,10 +3883,10 @@ function MembersManagement({ token, currentUser, departments, showAlert, showCon
   };
 
   return (
-    <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-      <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Users className="w-4 h-4" />メンバー管理</h3>
+    <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+      <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Users className="w-4 h-4" />メンバー管理</h3>
       <button onClick={() => setEditing({ username: '', password: '', displayName: '', role: 'general', department: '', photo: '' })}
-        className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
+        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium mb-3">
         <Plus className="w-4 h-4" />メンバーを追加
       </button>
       {loading ? <p className="text-sm text-slate-400">読み込み中...</p> : (
@@ -3896,9 +3896,9 @@ function MembersManagement({ token, currentUser, departments, showAlert, showCon
               <div className="flex items-center gap-3">
                 <Avatar photo={m.photo} name={m.displayName} />
                 <div>
-                  <p className="text-sm font-bold text-slate-700">{m.displayName} <span className="text-xs text-slate-400 font-normal">（{m.username}）</span></p>
+                  <p className="text-sm font-semibold text-slate-700">{m.displayName} <span className="text-xs text-slate-400 font-normal">（{m.username}）</span></p>
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${ROLE_BADGE_CLASS[m.role] || ROLE_BADGE_CLASS.general}`}>
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${ROLE_BADGE_CLASS[m.role] || ROLE_BADGE_CLASS.general}`}>
                       {ROLE_LABELS[m.role] || '一般'}
                     </span>
                     {m.department && <span className="text-[10px] text-slate-400">{m.department}</span>}
@@ -3906,7 +3906,7 @@ function MembersManagement({ token, currentUser, departments, showAlert, showCon
                 </div>
               </div>
               <div className="flex gap-1">
-                <button onClick={() => setEditing({ ...m, password: '' })} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                <button onClick={() => setEditing({ ...m, password: '' })} className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit className="w-4 h-4" /></button>
                 {m.id !== currentUser?.id && (
                   <button onClick={() => remove(m.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                 )}
@@ -3934,7 +3934,7 @@ function MembersManagement({ token, currentUser, departments, showAlert, showCon
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">課</label>
               <select value={editing.department || ''} onChange={e => setEditing({ ...editing, department: e.target.value })}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+                className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                 <option value="">未設定</option>
                 {(departments || []).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
               </select>
@@ -3943,7 +3943,7 @@ function MembersManagement({ token, currentUser, departments, showAlert, showCon
             <FormField label={editing.id ? '新しいパスワード（変更する場合のみ）' : 'パスワード'} type="password" value={editing.password} onChange={e => setEditing({ ...editing, password: e.target.value })} />
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">役職</label>
-              <select value={editing.role} onChange={e => setEditing({ ...editing, role: e.target.value })} className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+              <select value={editing.role} onChange={e => setEditing({ ...editing, role: e.target.value })} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                 <option value="general">一般</option>
                 <option value="smgr">SMGR</option>
                 <option value="mgr">MGR</option>
@@ -3953,7 +3953,7 @@ function MembersManagement({ token, currentUser, departments, showAlert, showCon
               </select>
             </div>
           </div>
-          <button onClick={save} className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
+          <button onClick={save} className="mt-5 w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">保存する</button>
         </Modal>
       )}
     </div>
@@ -3970,8 +3970,8 @@ function RolePermissionsView({ rolePermissions, setRolePermissions }) {
   };
 
   return (
-    <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-      <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2"><Settings className="w-4 h-4" />役職ごとの権限管理</h3>
+    <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+      <h3 className="font-semibold text-slate-700 mb-1 flex items-center gap-2"><Settings className="w-4 h-4" />役職ごとの権限管理</h3>
       <p className="text-xs text-slate-400 mb-4">オーナーはすべての権限を常に持っています（変更できません）。各役職ごとに、機能の利用可否を設定してください。</p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -3991,7 +3991,7 @@ function RolePermissionsView({ rolePermissions, setRolePermissions }) {
                       type="checkbox"
                       checked={!!rolePermissions?.[role]?.[p.key]}
                       onChange={() => toggle(role, p.key)}
-                      className="w-4 h-4 accent-teal-600 cursor-pointer"
+                      className="w-4 h-4 accent-indigo-600 cursor-pointer"
                     />
                   </td>
                 ))}
@@ -4040,25 +4040,25 @@ function SettingsView({
 
   return (
     <div>
-      <div className="flex gap-2 mb-5 flex-wrap">
+      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
         {TABS.map(([v, l]) => (
-          <button key={v} onClick={() => setInnerTab(v)} className={`px-4 py-2 rounded-lg text-sm font-bold ${innerTab === v ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>{l}</button>
+          <button key={v} onClick={() => setInnerTab(v)} className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${innerTab === v ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>{l}</button>
         ))}
       </div>
 
       {innerTab === 'templates' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-            <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" />顧客向け報告フォーマット</h3>
-            <button onClick={() => setEditingTpl({ kind: 'report', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
+          <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+            <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" />顧客向け報告フォーマット</h3>
+            <button onClick={() => setEditingTpl({ kind: 'report', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium mb-3">
               <Plus className="w-4 h-4" />新しいフォーマット
             </button>
             <ul className="space-y-2">
               {reportTemplates.map(t => (
                 <li key={t.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-start">
-                  <p className="text-sm font-bold text-slate-700">{t.name}</p>
+                  <p className="text-sm font-semibold text-slate-700">{t.name}</p>
                   <div className="flex gap-1">
-                    <button onClick={() => setEditingTpl({ kind: 'report', ...t })} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                    <button onClick={() => setEditingTpl({ kind: 'report', ...t })} className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit className="w-4 h-4" /></button>
                     <button onClick={() => deleteTpl('report', t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </li>
@@ -4067,17 +4067,17 @@ function SettingsView({
             <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{法人名}} {{園名}} {{理事長}} {{園長}} {{住所}} {{TEL}} {{HPリンク}} {{メモ}} {{結果}}'}</p>
           </div>
 
-          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-            <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><FileText className="w-4 h-4" />日報フォーマット</h3>
-            <button onClick={() => setEditingTpl({ kind: 'daily', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
+          <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+            <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><FileText className="w-4 h-4" />日報フォーマット</h3>
+            <button onClick={() => setEditingTpl({ kind: 'daily', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium mb-3">
               <Plus className="w-4 h-4" />新しいフォーマット
             </button>
             <ul className="space-y-2">
               {dailyReportTemplates.map(t => (
                 <li key={t.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-start">
-                  <p className="text-sm font-bold text-slate-700">{t.name}</p>
+                  <p className="text-sm font-semibold text-slate-700">{t.name}</p>
                   <div className="flex gap-1">
-                    <button onClick={() => setEditingTpl({ kind: 'daily', ...t })} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                    <button onClick={() => setEditingTpl({ kind: 'daily', ...t })} className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit className="w-4 h-4" /></button>
                     <button onClick={() => deleteTpl('daily', t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </li>
@@ -4086,21 +4086,21 @@ function SettingsView({
             <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{日付}} {{テレアポ件数}} {{初回訪問件数}} {{営業件数}} {{受注件数}} {{台数}} {{営業P}} {{自由記述}}'}</p>
           </div>
 
-          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
-            <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2"><CalendarDays className="w-4 h-4" />カレンダー・アジェンダ登録フォーマット（テレマリスト）</h3>
+          <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200 lg:col-span-2">
+            <h3 className="font-semibold text-slate-700 mb-1 flex items-center gap-2"><CalendarDays className="w-4 h-4" />カレンダー・アジェンダ登録フォーマット（テレマリスト）</h3>
             <p className="text-xs text-slate-400 mb-3">テレマリストで架電結果が「時間設定」の記録に、訪問する日時・事前確認日時を設定すると、このフォーマットに項目が自動で入った文面をコピーして、カレンダーやアジェンダに貼り付けられます。</p>
-            <button onClick={() => setEditingTpl({ kind: 'appointment', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
+            <button onClick={() => setEditingTpl({ kind: 'appointment', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium mb-3">
               <Plus className="w-4 h-4" />新しいフォーマット
             </button>
             <ul className="space-y-2">
               {appointmentTemplates.map(t => (
                 <li key={t.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-start">
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-700">{t.name}</p>
+                    <p className="text-sm font-semibold text-slate-700">{t.name}</p>
                     <p className="text-xs text-slate-400 mt-1 whitespace-pre-wrap line-clamp-3">{t.body}</p>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => setEditingTpl({ kind: 'appointment', ...t })} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                    <button onClick={() => setEditingTpl({ kind: 'appointment', ...t })} className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit className="w-4 h-4" /></button>
                     <button onClick={() => deleteTpl('appointment', t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </li>
@@ -4128,8 +4128,8 @@ function SettingsView({
         <div className="space-y-6">
           <GoogleCalendarStatusCard token={token} />
 
-          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-            <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Globe className="w-4 h-4" />スプレッドシートとの連携について</h3>
+          <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+            <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Globe className="w-4 h-4" />スプレッドシートとの連携について</h3>
             <p className="text-sm text-slate-600 leading-relaxed">
               このアプリはデータをデータベースに保存する仕組みのため、Googleスプレッドシートと自動で常時同期することはできません。
             </p>
@@ -4147,11 +4147,11 @@ function SettingsView({
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">本文</label>
               <textarea value={editingTpl.body} onChange={e => setEditingTpl({ ...editingTpl, body: e.target.value })} rows={8}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm resize-y max-h-72" />
+                className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm resize-y max-h-72 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
             </div>
           </div>
           <button onClick={() => saveTpl({ ...editingTpl, id: editingTpl.id || Date.now() })}
-            className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
+            className="mt-5 w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">保存する</button>
         </Modal>
       )}
     </div>
@@ -4217,12 +4217,12 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Package className="w-4 h-4" />商品管理</h3>
+      <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+        <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Package className="w-4 h-4" />商品管理</h3>
         <div className="flex gap-2 mb-4">
           <input value={newProduct} onChange={e => setNewProduct(e.target.value)} placeholder="新しい商品名" autoComplete="off"
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-          <button onClick={addProduct} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
+            className="flex-1 px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          <button onClick={addProduct} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium">追加</button>
         </div>
         <ul className="space-y-1.5">
           {products.map(p => (
@@ -4234,13 +4234,13 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
         </ul>
       </div>
 
-      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" />協会の種類管理</h3>
+      <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+        <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4" />協会の種類管理</h3>
         <p className="text-xs text-slate-400 mb-3">ここで登録した選択肢が、顧客登録フォームの「協会の種類」プルダウンに反映されます。</p>
         <div className="flex gap-2 mb-4">
           <input value={newAssociationType} onChange={e => setNewAssociationType(e.target.value)} placeholder="例：〇〇県私立幼稚園協会" autoComplete="off"
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-          <button onClick={addAssociationType} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
+            className="flex-1 px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          <button onClick={addAssociationType} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium">追加</button>
         </div>
         <ul className="space-y-1.5">
           {associationTypes.map(a => (
@@ -4252,13 +4252,13 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
         </ul>
       </div>
 
-      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Briefcase className="w-4 h-4" />業種管理</h3>
+      <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+        <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Briefcase className="w-4 h-4" />業種管理</h3>
         <p className="text-xs text-slate-400 mb-3">ここで登録した選択肢が、顧客登録フォームの「業種」プルダウンと顧客リストの絞り込みに反映されます。</p>
         <div className="flex gap-2 mb-4">
           <input value={newIndustry} onChange={e => setNewIndustry(e.target.value)} placeholder="例：幼稚園" autoComplete="off"
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-          <button onClick={addIndustry} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
+            className="flex-1 px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          <button onClick={addIndustry} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium">追加</button>
         </div>
         <ul className="space-y-1.5">
           {(industryTypes || []).map(t => (
@@ -4270,13 +4270,13 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
         </ul>
       </div>
 
-      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
-        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Users className="w-4 h-4" />課の管理</h3>
+      <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200 lg:col-span-2">
+        <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Users className="w-4 h-4" />課の管理</h3>
         <p className="text-xs text-slate-400 mb-3">ここで登録した課が、メンバー管理の「課」プルダウンとHOME画面の集計切り替えに反映されます。</p>
         <div className="flex gap-2 mb-4">
           <input value={newDepartment} onChange={e => setNewDepartment(e.target.value)} placeholder="例：WEB営業　東京　１課" autoComplete="off"
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-          <button onClick={addDepartment} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
+            className="flex-1 px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          <button onClick={addDepartment} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium">追加</button>
         </div>
         <div className="flex flex-wrap gap-2">
           {(departments || []).map(d => (
@@ -4289,19 +4289,19 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
-        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Filter className="w-4 h-4" />活動種別・結果フラグ管理</h3>
+      <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200 lg:col-span-2">
+        <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Filter className="w-4 h-4" />活動種別・結果フラグ管理</h3>
         <p className="text-xs text-slate-400 mb-3">結果フラグに「再コール」がある活動種別では、記録の登録時に再コール予定日時を設定でき、再コールページに一覧表示されます。</p>
         <div className="flex gap-2 mb-4">
           <input value={newType} onChange={e => setNewType(e.target.value)} placeholder="新しい活動種別" autoComplete="off"
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-          <button onClick={addType} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
+            className="flex-1 px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          <button onClick={addType} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium">追加</button>
         </div>
         <div className="space-y-4 max-h-96 overflow-y-auto">
           {activityTypes.map(a => (
-            <div key={a.id} className="border border-slate-100 rounded-lg p-3">
+            <div key={a.id} className="ring-1 ring-slate-200 rounded-lg p-3">
               <div className="flex justify-between items-center mb-2">
-                <p className="text-sm font-bold text-slate-700">{a.name}</p>
+                <p className="text-sm font-semibold text-slate-700">{a.name}</p>
                 <button onClick={() => removeType(a.id, a.name)} className="p-1 text-slate-300 hover:text-red-500" title="この活動種別を削除">
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -4316,8 +4316,8 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
               </div>
               <div className="flex gap-2">
                 <input value={flagDraft[a.id] || ''} onChange={e => setFlagDraft({ ...flagDraft, [a.id]: e.target.value })}
-                  placeholder="フラグを追加" autoComplete="off" className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-xs" />
-                <button onClick={() => addFlag(a.id)} className="px-3 py-1.5 bg-slate-700 text-white rounded text-xs font-bold">追加</button>
+                  placeholder="フラグを追加" autoComplete="off" className="flex-1 px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                <button onClick={() => addFlag(a.id)} className="px-3 py-1.5 bg-slate-700 text-white rounded text-xs font-medium">追加</button>
               </div>
             </div>
           ))}
@@ -4358,10 +4358,10 @@ function TemplateListEditor({ title, icon, items, onChange, withSubject, variabl
   };
 
   return (
-    <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-      <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2">{icon}{title}</h3>
+    <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+      <h3 className="font-semibold text-slate-700 mb-1 flex items-center gap-2">{icon}{title}</h3>
       <p className="text-xs text-slate-400 mb-3">ここで作成したフォーマットは自分だけに「【マイ】」付きで表示されます。他のメンバーには影響しません。</p>
-      <button onClick={() => setEditing({ id: null, name: '', subject: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
+      <button onClick={() => setEditing({ id: null, name: '', subject: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium mb-3">
         <Plus className="w-4 h-4" />新しいフォーマット
       </button>
       {list.length === 0 ? (
@@ -4371,11 +4371,11 @@ function TemplateListEditor({ title, icon, items, onChange, withSubject, variabl
           {list.map(t => (
             <li key={t.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-start">
               <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-700 truncate">{t.name}</p>
+                <p className="text-sm font-semibold text-slate-700 truncate">{t.name}</p>
                 {withSubject && t.subject && <p className="text-xs text-slate-400 truncate">{t.subject}</p>}
               </div>
               <div className="flex gap-1 shrink-0">
-                <button onClick={() => setEditing(t)} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                <button onClick={() => setEditing(t)} className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit className="w-4 h-4" /></button>
                 <button onClick={() => remove(t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
               </div>
             </li>
@@ -4392,11 +4392,11 @@ function TemplateListEditor({ title, icon, items, onChange, withSubject, variabl
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-500">本文</label>
               <textarea value={editing.body} onChange={e => setEditing({ ...editing, body: e.target.value })} rows={8}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm resize-y max-h-72" />
+                className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm resize-y max-h-72 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
             </div>
             {variablesHint && <p className="text-[11px] text-slate-400">利用可能な変数: {variablesHint}</p>}
           </div>
-          <button onClick={() => save(editing)} className="mt-5 w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">保存する</button>
+          <button onClick={() => save(editing)} className="mt-5 w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">保存する</button>
         </Modal>
       )}
     </div>
@@ -4498,20 +4498,20 @@ function MyPageView({ user, token, onLogout, updateUser, personal, updatePersona
 
   return (
     <div className="max-w-3xl">
-      <div className="flex gap-2 mb-5 flex-wrap">
+      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
         {TABS.map(([v, l]) => (
-          <button key={v} onClick={() => setInnerTab(v)} className={`px-4 py-2 rounded-lg text-sm font-bold ${innerTab === v ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}>{l}</button>
+          <button key={v} onClick={() => setInnerTab(v)} className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${innerTab === v ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}>{l}</button>
         ))}
       </div>
 
       {innerTab === 'profile' && (
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 space-y-5">
+        <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200 space-y-5">
           <div className="flex items-center gap-3">
             <Avatar photo={photo} name={user.displayName} size="w-16 h-16" />
             <div>
-              <p className="text-sm font-bold text-slate-700">{user.displayName}</p>
+              <p className="text-sm font-semibold text-slate-700">{user.displayName}</p>
               <p className="text-xs text-slate-400">{ROLE_LABELS[user.role] || '一般'}{user.department ? ` ・ ${user.department}` : ''} ・ ID: {user.username}</p>
-              <label className="inline-block mt-1 text-xs text-teal-600 font-semibold cursor-pointer">
+              <label className="inline-block mt-1 text-xs text-indigo-600 font-semibold cursor-pointer">
                 写真を変更
                 <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
               </label>
@@ -4521,33 +4521,33 @@ function MyPageView({ user, token, onLogout, updateUser, personal, updatePersona
           <div className="border-t border-slate-100 pt-4 space-y-2">
             <FormField label="表示名" value={displayName} onChange={e => setDisplayName(e.target.value)} />
             <p className="text-[11px] text-slate-400">※表示名を変更すると、過去の記録・顧客の「担当者」との紐付け名も変わるため、集計に影響する場合があります。</p>
-            <button onClick={changeName} className="w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700">表示名を変更する</button>
+            <button onClick={changeName} className="w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">表示名を変更する</button>
           </div>
 
           <div className="border-t border-slate-100 pt-4 space-y-2">
             <FormField label="新しいパスワード" type="password" value={password} onChange={e => setPassword(e.target.value)} />
-            <button onClick={changePassword} className="w-full py-2.5 bg-slate-700 text-white rounded-lg font-bold hover:bg-slate-600">パスワードを変更する</button>
+            <button onClick={changePassword} className="w-full py-2.5 bg-slate-700 text-white rounded-md font-medium hover:bg-slate-600">パスワードを変更する</button>
           </div>
 
-          <button onClick={onLogout} className="w-full py-2.5 border border-red-200 text-red-600 rounded-lg font-bold hover:bg-red-50">ログアウト</button>
+          <button onClick={onLogout} className="w-full py-2.5 border border-red-200 text-red-600 rounded-md font-medium hover:bg-red-50">ログアウト</button>
         </div>
       )}
 
       {innerTab === 'flags' && (
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-          <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2"><Filter className="w-4 h-4" />マイ活動種別・結果フラグ</h3>
+        <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
+          <h3 className="font-semibold text-slate-700 mb-1 flex items-center gap-2"><Filter className="w-4 h-4" />マイ活動種別・結果フラグ</h3>
           <p className="text-xs text-slate-400 mb-3">
             自分だけが使う活動種別・結果フラグを登録できます。全体設定と同じ名前の活動種別（例：テレアポ）を作ると、その種別に自分のフラグが追加された形で表示されます。ここでの設定は他のメンバーには影響しません。
           </p>
           <div className="flex flex-wrap gap-2 mb-3">
             <input value={newTypeName} onChange={e => setNewTypeName(e.target.value)} placeholder="新しい活動種別名" autoComplete="off"
-              className="flex-1 min-w-[160px] px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-            <button onClick={() => addMyType(newTypeName)} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold">追加</button>
+              className="flex-1 min-w-[160px] px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            <button onClick={() => addMyType(newTypeName)} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium">追加</button>
           </div>
           <div className="flex flex-wrap gap-1.5 mb-4 items-center">
             <span className="text-[11px] text-slate-400">全体の種別にフラグを追加したい場合はここから作成:</span>
             {(globalActivityTypes || []).filter(g => !myTypes.some(m => m.name === g.name)).map(g => (
-              <button key={g.id} onClick={() => addMyType(g.name)} className="px-2.5 py-1 bg-slate-100 hover:bg-teal-100 rounded-full text-[11px] font-bold text-slate-600">＋ {g.name}</button>
+              <button key={g.id} onClick={() => addMyType(g.name)} className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-100 rounded-full text-[11px] font-medium text-slate-600">＋ {g.name}</button>
             ))}
           </div>
           {myTypes.length === 0 ? (
@@ -4555,11 +4555,11 @@ function MyPageView({ user, token, onLogout, updateUser, personal, updatePersona
           ) : (
             <div className="space-y-4">
               {myTypes.map(a => (
-                <div key={a.id} className="border border-slate-100 rounded-lg p-3">
+                <div key={a.id} className="ring-1 ring-slate-200 rounded-lg p-3">
                   <div className="flex justify-between items-center mb-2">
-                    <p className="text-sm font-bold text-slate-700">
+                    <p className="text-sm font-semibold text-slate-700">
                       {a.name}
-                      {(globalActivityTypes || []).some(g => g.name === a.name) && <span className="ml-2 text-[10px] text-teal-600 font-bold">全体の「{a.name}」にフラグが追記されます</span>}
+                      {(globalActivityTypes || []).some(g => g.name === a.name) && <span className="ml-2 text-[10px] text-indigo-600 font-semibold">全体の「{a.name}」にフラグが追記されます</span>}
                     </p>
                     <button onClick={() => removeMyType(a.id, a.name)} className="p-1 text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                   </div>
@@ -4574,8 +4574,8 @@ function MyPageView({ user, token, onLogout, updateUser, personal, updatePersona
                   </div>
                   <div className="flex gap-2">
                     <input value={flagDraft[a.id] || ''} onChange={e => setFlagDraft({ ...flagDraft, [a.id]: e.target.value })}
-                      placeholder="結果フラグを追加" autoComplete="off" className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-xs" />
-                    <button onClick={() => addMyFlag(a.id)} className="px-3 py-1.5 bg-slate-700 text-white rounded text-xs font-bold">追加</button>
+                      placeholder="結果フラグを追加" autoComplete="off" className="flex-1 px-2 py-1.5 ring-1 ring-inset ring-slate-300 rounded text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                    <button onClick={() => addMyFlag(a.id)} className="px-3 py-1.5 bg-slate-700 text-white rounded text-xs font-medium">追加</button>
                   </div>
                 </div>
               ))}
@@ -4622,8 +4622,8 @@ function MyPageView({ user, token, onLogout, updateUser, personal, updatePersona
 function NavItem({ icon, label, isActive, onClick, badge }) {
   return (
     <button onClick={onClick} className={`w-full flex items-center gap-3 px-5 py-3 text-left text-sm font-medium transition-colors ${
-      isActive ? 'bg-slate-700 text-white border-l-4 border-teal-400' : 'text-slate-300 hover:bg-slate-700/60 border-l-4 border-transparent'
-    }`}>
+ isActive ? 'bg-slate-700 text-white border-l-4 border-indigo-400' : 'text-slate-300 hover:bg-slate-700/60 border-l-4 border-transparent'
+ }`}>
       {icon}{label}
       {badge > 0 && (
         <span className="ml-auto min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-[11px] font-extrabold rounded-full flex items-center justify-center animate-pulse">
@@ -4781,8 +4781,8 @@ export default function App() {
   if (authLoading) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-slate-50 flex-col">
-        <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mb-4" />
-        <p className="text-slate-400 font-bold text-sm">読み込み中...</p>
+        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
+        <p className="text-slate-400 font-semibold text-sm">読み込み中...</p>
       </div>
     );
   }
@@ -4793,8 +4793,8 @@ export default function App() {
   if (!dataLoaded) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-slate-50 flex-col">
-        <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mb-4" />
-        <p className="text-slate-400 font-bold text-sm">データを読み込み中...</p>
+        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
+        <p className="text-slate-400 font-semibold text-sm">データを読み込み中...</p>
       </div>
     );
   }
@@ -4811,7 +4811,7 @@ export default function App() {
             </span>
           )}
         </button>
-        <h1 className="font-bold text-sm">CRMシステム</h1>
+        <h1 className="font-semibold text-sm">CRMシステム</h1>
         <button onClick={() => setActiveTab('mypage')} className="p-0.5"><Avatar photo={user.photo} name={user.displayName} size="w-7 h-7" /></button>
       </header>
 
@@ -4820,7 +4820,7 @@ export default function App() {
           <div className="fixed inset-0 bg-black/50" onClick={() => setMenuOpen(false)} />
           <div className="w-64 bg-slate-800 h-full relative z-10 flex flex-col pt-4 overflow-y-auto">
             <button onClick={() => setMenuOpen(false)} className="absolute top-3 right-3 text-white"><X className="w-5 h-5" /></button>
-            <div className="px-5 py-3 text-white font-bold border-b border-slate-700 mb-2">CRMシステム</div>
+            <div className="px-5 py-3 text-white font-semibold border-b border-slate-700 mb-2">CRMシステム</div>
             {menuItems.map(m => <NavItem key={m.id} {...m} isActive={activeTab === m.id} onClick={() => { setActiveTab(m.id); setMenuOpen(false); }} />)}
             <button onClick={() => { setMenuOpen(false); setShowReleaseHistory(true); }} className="mx-5 my-3 text-left text-xs text-slate-400 hover:text-white underline underline-offset-2">更新情報</button>
           </div>
@@ -4829,26 +4829,26 @@ export default function App() {
 
       {/* デスクトップサイドバー */}
       <aside className="hidden md:flex w-60 bg-slate-800 flex-col shrink-0">
-        <div className="px-5 py-6 text-white font-bold text-lg border-b border-slate-700">CRMシステム</div>
+        <div className="px-5 py-6 text-white font-semibold text-lg border-b border-slate-700">CRMシステム</div>
         <nav className="flex-1 py-3 overflow-y-auto">
           {menuItems.map(m => <NavItem key={m.id} {...m} isActive={activeTab === m.id} onClick={() => setActiveTab(m.id)} />)}
         </nav>
-        <button onClick={() => setActiveTab('mypage')} className="mx-3 mb-2 px-3 py-2.5 bg-slate-700/60 hover:bg-slate-700 rounded-lg text-left flex items-center gap-2.5">
+        <button onClick={() => setActiveTab('mypage')} className="mx-3 mb-2 px-3 py-2.5 bg-slate-700/60 hover:bg-slate-700 rounded-md text-left flex items-center gap-2.5">
           <Avatar photo={user.photo} name={user.displayName} size="w-8 h-8" />
           <div className="min-w-0">
-            <p className="text-sm font-bold text-white truncate">{user.displayName}</p>
+            <p className="text-sm font-semibold text-white truncate">{user.displayName}</p>
             <p className="text-[10px] text-slate-400">{ROLE_LABELS[user.role] || '一般'} ・ マイページ</p>
           </div>
         </button>
         <div className="px-5 pb-4 text-[10px] flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full ${syncError ? 'bg-red-400' : 'bg-teal-400'}`} />
+          <span className={`w-1.5 h-1.5 rounded-full ${syncError ? 'bg-red-400' : 'bg-indigo-400'}`} />
           <span className={syncError ? 'text-red-300' : 'text-slate-500'}>{syncError ? '保存に失敗しました（通信を確認してください）' : 'サーバーと同期中'}</span>
           <button onClick={() => setShowReleaseHistory(true)} className="ml-auto text-slate-400 hover:text-white underline underline-offset-2">更新情報</button>
         </div>
       </aside>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
-        <h2 className="hidden md:block text-xl font-bold text-slate-800 mb-6">{titles[activeTab]}</h2>
+        <h2 className="hidden md:block text-xl font-semibold text-slate-800 mb-6">{titles[activeTab]}</h2>
         {activeTab === 'home' && (
           <HomeView records={records} customers={customers} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} associationTypes={associationTypes} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
         )}
@@ -4879,7 +4879,7 @@ export default function App() {
           />
         )}
         {activeTab === 'telema' && (
-          <Suspense fallback={<p className="text-slate-400 font-bold text-sm">読み込み中...</p>}>
+          <Suspense fallback={<p className="text-slate-400 font-semibold text-sm">読み込み中...</p>}>
             <TelemaApp appointmentTemplates={appointmentTemplates || []} />
           </Suspense>
         )}
@@ -4931,21 +4931,21 @@ export default function App() {
 
       {alertMsg && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full text-center">
-            <CheckCircle className="w-10 h-10 text-teal-500 mx-auto mb-3" />
+          <div className="bg-white rounded-lg shadow-2xl p-6 max-w-sm w-full text-center">
+            <CheckCircle className="w-10 h-10 text-indigo-500 mx-auto mb-3" />
             <p className="text-sm font-medium text-slate-700 mb-5">{alertMsg}</p>
-            <button onClick={() => setAlertMsg('')} className="w-full py-2.5 bg-teal-600 text-white rounded-lg font-bold">OK</button>
+            <button onClick={() => setAlertMsg('')} className="w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium">OK</button>
           </div>
         </div>
       )}
 
       {confirmState && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full">
+          <div className="bg-white rounded-lg shadow-2xl p-6 max-w-sm w-full">
             <p className="text-sm font-medium text-slate-700 mb-5">{confirmState.msg}</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmState(null)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium">キャンセル</button>
-              <button onClick={() => { confirmState.onConfirm(); setConfirmState(null); }} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold">実行する</button>
+              <button onClick={() => setConfirmState(null)} className="px-4 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm font-medium">キャンセル</button>
+              <button onClick={() => { confirmState.onConfirm(); setConfirmState(null); }} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium">実行する</button>
             </div>
           </div>
         </div>

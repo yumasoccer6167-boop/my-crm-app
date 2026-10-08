@@ -28,7 +28,7 @@ export function Layout() {
               to={n.to === "/companies" ? listTo : n.to}
               end={n.end}
               className={({ isActive }) =>
-                `whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${isActive ? "border-teal-600 text-teal-700" : "border-transparent text-slate-600 hover:text-slate-900"}`
+                `whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${isActive ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-600 hover:text-slate-900"}`
               }
             >
               {n.label}
