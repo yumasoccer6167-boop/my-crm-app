@@ -65,6 +65,13 @@ const initialReportTemplates = [
     body: '《法人》{{法人名}}\n《園名》{{園名}}\n《代表》{{理事長}}\n《住所》{{住所}}\n《URL》{{HPリンク}}\n《連絡先》{{TEL}}\n\n【5W1H】\n{{メモ}}\n\n【結果】\n{{結果}}' },
 ];
 
+// テレマリストで「時間設定」の架電結果を保存したあと、カレンダー・アジェンダに登録するときの文面（{{項目}}に値が自動で入る）
+const APPOINTMENT_TEMPLATE_VARIABLES = '{{法人名}} {{園名}} {{住所}} {{TEL}} {{HPリンク}} {{先方担当者}} {{架電者}} {{営業担当}} {{訪問日時}} {{事前確認日時}} {{架電日時}} {{結果}} {{メモ}}';
+const initialAppointmentTemplates = [
+  { id: 1, name: '基本のアポ登録フォーマット',
+    body: '【アポ】{{園名}}\n法人名：{{法人名}}\n訪問日時：{{訪問日時}}\n事前確認日時：{{事前確認日時}}\n住所：{{住所}}\nTEL：{{TEL}}\n先方担当者：{{先方担当者}}\n架電者：{{架電者}}\nHP：{{HPリンク}}\n\n【メモ】\n{{メモ}}' },
+];
+
 const initialDailyReportTemplates = [
   { id: 1, name: '標準日報フォーマット',
     body: '{{日付}} 日報\n\n【テレアポ】{{テレアポ件数}}件\n【初回訪問】{{初回訪問件数}}件\n【営業】{{営業件数}}件\n【受注】{{受注件数}}件（台数{{台数}} / 粗利{{営業P}}）\n\n【所感・特記事項】\n{{自由記述}}' },
@@ -3999,17 +4006,18 @@ function RolePermissionsView({ rolePermissions, setRolePermissions }) {
 
 // ---------- 設定・管理（オーナー専用：報告フォーマット／商品・フラグ／メンバー／データ運用） ----------
 function SettingsView({
-  reportTemplates, setReportTemplates, dailyReportTemplates, setDailyReportTemplates,
+  reportTemplates, setReportTemplates, dailyReportTemplates, setDailyReportTemplates, appointmentTemplates, setAppointmentTemplates,
   products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, industryTypes, setIndustryTypes,
   departments, setDepartments,
   rolePermissions, setRolePermissions, isOwner,
   token, currentUser, showAlert, showConfirm,
 }) {
   const [innerTab, setInnerTab] = useState('templates');
-  const [editingTpl, setEditingTpl] = useState(null); // { kind: 'report' | 'daily', ...tpl }
+  const [editingTpl, setEditingTpl] = useState(null); // { kind: 'report' | 'daily' | 'appointment', ...tpl }
+  const tplSetter = (kind) => (kind === 'daily' ? setDailyReportTemplates : kind === 'appointment' ? setAppointmentTemplates : setReportTemplates);
 
   const saveTpl = (tpl) => {
-    const setter = tpl.kind === 'daily' ? setDailyReportTemplates : setReportTemplates;
+    const setter = tplSetter(tpl.kind);
     setter(prev => {
       const exists = prev.some(p => p.id === tpl.id);
       const clean = { id: tpl.id, name: tpl.name, body: tpl.body };
@@ -4019,7 +4027,7 @@ function SettingsView({
   };
 
   const deleteTpl = (kind, id) => {
-    const setter = kind === 'daily' ? setDailyReportTemplates : setReportTemplates;
+    const setter = tplSetter(kind);
     showConfirm('このフォーマットを削除しますか？', () => setter(prev => prev.filter(p => p.id !== id)));
   };
 
@@ -4076,6 +4084,30 @@ function SettingsView({
               ))}
             </ul>
             <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{日付}} {{テレアポ件数}} {{初回訪問件数}} {{営業件数}} {{受注件数}} {{台数}} {{営業P}} {{自由記述}}'}</p>
+          </div>
+
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 lg:col-span-2">
+            <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2"><CalendarDays className="w-4 h-4" />カレンダー・アジェンダ登録フォーマット（テレマリスト）</h3>
+            <p className="text-xs text-slate-400 mb-3">テレマリストで架電結果が「時間設定」の記録に、訪問する日時・事前確認日時を設定すると、このフォーマットに項目が自動で入った文面をコピーして、カレンダーやアジェンダに貼り付けられます。</p>
+            <button onClick={() => setEditingTpl({ kind: 'appointment', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold mb-3">
+              <Plus className="w-4 h-4" />新しいフォーマット
+            </button>
+            <ul className="space-y-2">
+              {appointmentTemplates.map(t => (
+                <li key={t.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-start">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-700">{t.name}</p>
+                    <p className="text-xs text-slate-400 mt-1 whitespace-pre-wrap line-clamp-3">{t.body}</p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => setEditingTpl({ kind: 'appointment', ...t })} className="p-1.5 text-slate-400 hover:text-teal-600"><Edit className="w-4 h-4" /></button>
+                    <button onClick={() => deleteTpl('appointment', t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </li>
+              ))}
+              {appointmentTemplates.length === 0 && <li className="text-xs text-slate-400">フォーマットがありません（新しいフォーマットを追加してください）</li>}
+            </ul>
+            <p className="text-xs text-slate-400 pt-3">利用可能な変数: {APPOINTMENT_TEMPLATE_VARIABLES}（日時は「2026/10/20(火) 10:00」の形で入り、未設定のときは「未定」になります）</p>
           </div>
         </div>
       )}
@@ -4630,7 +4662,7 @@ export default function App() {
   const { data, makeSetter, loaded: dataLoaded, syncError } = useSyncedData({
     customers: [], records: [], products: initialProducts, activityTypes: initialActivityTypes,
     goals: initialGoals, emailTemplates: initialEmailTemplates, reportTemplates: initialReportTemplates,
-    dailyReportTemplates: initialDailyReportTemplates, associationTypes: initialAssociationTypes, dailyReportLogs: [],
+    dailyReportTemplates: initialDailyReportTemplates, appointmentTemplates: initialAppointmentTemplates, associationTypes: initialAssociationTypes, dailyReportLogs: [],
     departments: initialDepartments,
     rolePermissions: initialRolePermissions,
     industryTypes: initialIndustryTypes,
@@ -4638,7 +4670,7 @@ export default function App() {
     personalSettings: {},
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, associationTypes, dailyReportLogs, rolePermissions, departments, industryTypes, teleGoals, personalSettings } = data;
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, appointmentTemplates, associationTypes, dailyReportLogs, rolePermissions, departments, industryTypes, teleGoals, personalSettings } = data;
   const canViewSettings = isOwner || hasPermission(user?.role, 'viewSettings', rolePermissions);
   const canDeleteCustomer = isOwner || hasPermission(user?.role, 'deleteCustomer', rolePermissions);
   const canBulkEdit = isOwner || hasPermission(user?.role, 'bulkEdit', rolePermissions);
@@ -4650,6 +4682,7 @@ export default function App() {
   const setEmailTemplates = makeSetter('emailTemplates');
   const setReportTemplates = makeSetter('reportTemplates');
   const setDailyReportTemplates = makeSetter('dailyReportTemplates');
+  const setAppointmentTemplates = makeSetter('appointmentTemplates');
   const setAssociationTypes = makeSetter('associationTypes');
   const setDailyReportLogs = makeSetter('dailyReportLogs');
   const setRolePermissions = makeSetter('rolePermissions');
@@ -4847,7 +4880,7 @@ export default function App() {
         )}
         {activeTab === 'telema' && (
           <Suspense fallback={<p className="text-slate-400 font-bold text-sm">読み込み中...</p>}>
-            <TelemaApp />
+            <TelemaApp appointmentTemplates={appointmentTemplates || []} />
           </Suspense>
         )}
         {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} customers={customers} activityTypes={effectiveActivityTypes} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} teleGoals={teleGoals || {}} setTeleGoals={setTeleGoals} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />}
@@ -4873,6 +4906,7 @@ export default function App() {
           <SettingsView
             reportTemplates={reportTemplates} setReportTemplates={setReportTemplates}
             dailyReportTemplates={dailyReportTemplates} setDailyReportTemplates={setDailyReportTemplates}
+            appointmentTemplates={appointmentTemplates || []} setAppointmentTemplates={setAppointmentTemplates}
             products={products} setProducts={setProducts}
             activityTypes={activityTypes} setActivityTypes={setActivityTypes}
             associationTypes={associationTypes} setAssociationTypes={setAssociationTypes}

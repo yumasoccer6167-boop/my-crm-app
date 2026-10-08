@@ -1,6 +1,8 @@
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { Layout } from "./components/Layout";
+import type { AppointmentTemplate } from "./lib/appointment-format";
 import { MastersProvider } from "./lib/masters";
+import { TemplatesProvider } from "./lib/templates";
 import { CompanyDetail } from "./pages/CompanyDetail";
 import { Companies } from "./pages/Companies";
 import { Dashboard } from "./pages/Dashboard";
@@ -26,10 +28,12 @@ const router = createMemoryRouter([
 ]);
 
 /** CRM本体（src/App.jsx）の「テレマリスト」タブの中身 */
-export default function TelemaApp() {
+export default function TelemaApp({ appointmentTemplates = [] }: { appointmentTemplates?: AppointmentTemplate[] }) {
   return (
-    <MastersProvider>
-      <RouterProvider router={router} />
-    </MastersProvider>
+    <TemplatesProvider appointmentTemplates={appointmentTemplates}>
+      <MastersProvider>
+        <RouterProvider router={router} />
+      </MastersProvider>
+    </TemplatesProvider>
   );
 }

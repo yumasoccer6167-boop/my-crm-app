@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import type { Contact, RecordType, VisitMethod } from "../../types";
+import type { CallLog, Company, Contact, RecordType, VisitMethod } from "../../types";
 import type { CallExtraction } from "../../types";
 import { AIResult } from "./AIResult";
+import { AppointmentCopy } from "./AppointmentCopy";
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
@@ -29,12 +30,17 @@ const KINDS: { value: RecordType; label: string }[] = [
  */
 export function CallEntry({
   companyId,
+  company,
+  organization,
   phone,
   contacts,
   isUser,
   onSaved,
 }: {
   companyId: number;
+  /** 「時間設定」で保存したあと、カレンダー・アジェンダ登録用の文面を作るのに使う */
+  company: Company;
+  organization: Record<string, unknown> | null;
   phone: string | null;
   contacts: Contact[];
   /** ユーザー（導入済み）の施設なら、記録に部署（営業部・制作部・CS など）を付けられる */
@@ -51,6 +57,10 @@ export function CallEntry({
   const [note, setNote] = useState("");
   const [statusId, setStatusId] = useState<number | null>(null);
   const [nextCall, setNextCall] = useState("");
+  // 結果が「時間設定」のときの、訪問する日時と事前確認の日時
+  const [visitAt, setVisitAt] = useState("");
+  const [precheckAt, setPrecheckAt] = useState("");
+  const [savedAppointment, setSavedAppointment] = useState<CallLog | null>(null);
   const [contactId, setContactId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +86,7 @@ export function CallEntry({
 
   const active = statuses.filter((s) => s.is_active && s.category !== "not_started");
   const isVisit = kind === "visit";
+  const isAppointment = !isVisit && statuses.find((s) => s.id === statusId)?.category === "appointment";
   const atValid = !!fromLocalInput(recordedAt) && (!atEdited || new Date(recordedAt).getTime() <= Date.now() + 60_000);   // 未来の日時は記録できない
   const canSave = atValid && (isVisit ? note.trim() !== "" : note.trim() !== "" || statusId !== null);
 
@@ -96,13 +107,22 @@ export function CallEntry({
           param: { id: String(companyId) },
           json: isVisit
             ? { ...common, record_type: "visit", visit_method: visitMethod }
-            : { ...common, result_status_id: statusId ?? undefined, phone_number: phone, next_call_at: nextCall ? fromLocalInput(nextCall) : undefined },
+            : {
+                ...common,
+                result_status_id: statusId ?? undefined,
+                phone_number: phone,
+                next_call_at: nextCall ? fromLocalInput(nextCall) : undefined,
+                ...(isAppointment ? { visit_at: fromLocalInput(visitAt), precheck_at: fromLocalInput(precheckAt) } : {}),
+              },
         }),
       );
       if (isUser) saveLastSection(sectionId);
       setNote("");
       setStatusId(null);
       setNextCall("");
+      setVisitAt("");
+      setPrecheckAt("");
+      setSavedAppointment(saved.result_category === "appointment" ? saved : null);
       setRecordedAt(toLocalInput(new Date().toISOString()));
       setAtEdited(false);
       setSavedMsg("保存しました");
@@ -240,6 +260,20 @@ export function CallEntry({
         </div>
         )}
 
+        {isAppointment && (
+          <div className="grid gap-3 rounded-md bg-amber-50/60 p-3 ring-1 ring-inset ring-amber-200 sm:grid-cols-2">
+            <div>
+              <div className="mb-1 text-xs text-slate-600">訪問する日時</div>
+              <input type="datetime-local" value={visitAt} onChange={(e) => setVisitAt(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-600">事前確認日時</div>
+              <input type="datetime-local" value={precheckAt} onChange={(e) => setPrecheckAt(e.target.value)} className={inputCls} />
+            </div>
+            <p className="text-xs text-slate-500 sm:col-span-2">どちらも後から変えられます。保存すると、カレンダー・アジェンダ登録用の文面をコピーできます。</p>
+          </div>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-2">
           {!isVisit && (
           <div>
@@ -293,6 +327,8 @@ export function CallEntry({
             </>
           )}
         </div>
+
+        {savedAppointment && <AppointmentCopy call={savedAppointment} company={company} organization={organization} contacts={contacts} onClose={() => setSavedAppointment(null)} />}
 
         {aiState?.running && <div className="text-sm text-indigo-700">AIで整理しています…（メモは保存済みです）</div>}
         {aiState?.error && (

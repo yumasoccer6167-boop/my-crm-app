@@ -94,6 +94,9 @@ export type CallLog = {
   id: number;
   record_type: RecordType;
   visit_method: VisitMethod | null;
+  /** 結果が「時間設定」のときの、訪問する日時と事前確認の日時 */
+  visit_at: string | null;
+  precheck_at: string | null;
   company_id: number;
   contact_id: number | null;
   contact_name: string | null;

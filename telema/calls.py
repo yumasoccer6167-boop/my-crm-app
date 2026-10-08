@@ -21,10 +21,15 @@ CALL_BODY = {
     # 記録の種類。省略は架電。訪問（visit）のときは方法（visit＝訪問／zoom）が必須
     'record_type': Enum(['call', 'visit'], default='call'),
     'visit_method': Enum(['visit', 'zoom'], nullable=True, optional=True),
+    # 「時間設定」の結果のときの、訪問する日時と事前確認の日時（任意）
+    'visit_at': IsoDatetime(nullable=True, optional=True),
+    'precheck_at': IsoDatetime(nullable=True, optional=True),
 }
 
+_APPOINTMENT_ONLY = {'visit_at': '訪問日時', 'precheck_at': '事前確認日時'}
+
 # 訪問の記録に付けられない項目（架電の結果・次回架電・電話番号は架電のためのもの）
-_CALL_ONLY = {'result_status_id': '結果', 'next_call_at': '次回架電', 'next_action': '次回アクション', 'phone_number': '電話番号'}
+_CALL_ONLY = {'result_status_id': '結果', 'next_call_at': '次回架電', 'next_action': '次回アクション', 'phone_number': '電話番号', **{k: v for k, v in _APPOINTMENT_ONLY.items()}}
 
 CALL_SELECT = '''SELECT cl.*, ct.name AS contact_name, u.display_name AS user_name, s.label AS result_label, s.category AS result_category,
     sec.name AS section_name
@@ -33,6 +38,11 @@ CALL_SELECT = '''SELECT cl.*, ct.name AS contact_name, u.display_name AS user_na
   LEFT JOIN users u ON u.id = cl.user_id
   LEFT JOIN telema_call_statuses s ON s.id = cl.result_status_id
   LEFT JOIN telema_sections sec ON sec.id = cl.section_id'''
+
+
+def _is_appointment(d, status_id):
+    """結果が「時間設定」（ステータス区分 appointment）か"""
+    return bool(status_id) and bool(d.first("SELECT 1 FROM telema_call_statuses WHERE id = %s AND category = 'appointment'", (status_id,)))
 
 
 def _check_section(d, section_id, current_section_id=None):
@@ -73,14 +83,16 @@ def create_call(id):
             raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（訪問の記録には{"・".join(sent)}は付けられません）')
     elif b.get('visit_method') is not None:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 架電の記録には付けられません）')
+    elif any(b.get(k) is not None for k in _APPOINTMENT_ONLY) and not _is_appointment(d, b.get('result_status_id')):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問日時・事前確認日時は結果が「時間設定」のときだけ設定できます）')
     called_at = b.get('called_at') or now_iso()
     call_id = d.value(
         '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id,
-                                          record_type, visit_method)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                                          record_type, visit_method, visit_at, precheck_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b.get('contact_id'), user['id'], called_at, None if is_visit else (b.get('phone_number') or company['phone']), b.get('result_status_id'),
          b['raw_note'], 'pending' if b['raw_note'].strip() and not is_visit else 'skipped', b.get('section_id'),
-         b['record_type'], b.get('visit_method')),
+         b['record_type'], b.get('visit_method'), b.get('visit_at'), b.get('precheck_at')),
     )
     # 履歴を先に確定させる（この後の会社更新で失敗しても架電メモは残す）
     d.commit()
@@ -117,6 +129,8 @@ CALL_PATCH = {
     'contact_id': Int(nullable=True),
     'section_id': Int(nullable=True),
     'visit_method': Enum(['visit', 'zoom']),
+    'visit_at': IsoDatetime(nullable=True),
+    'precheck_at': IsoDatetime(nullable=True),
 }
 
 # メモを直したら、古いメモから作ったAI整理は内容と食い違うので消して再整理できる状態に戻す
@@ -135,7 +149,7 @@ def _recalc_company_calls(d, company_id):
 
 @bp.patch('/calls/<id>')
 def update_call(id):
-    """過去の架電履歴を直す（日時・結果・話した相手・メモ・部署）。無効化と同じく、sales は自分の架電だけ直せる。
+    """過去の架電履歴を直す（日時・結果・話した相手・メモ・部署・訪問日時・事前確認日時）。無効化と同じく、sales は自分の架電だけ直せる。
     会社の現在の状態（ステータス・次回架電など）は、直した履歴に合わせて勝手に書き換えない（最終架電日時と件数だけ再計算する）"""
     id = parse_id(id)
     b = parse(CALL_PATCH, body(), partial=True)
@@ -161,6 +175,15 @@ def update_call(id):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には結果は付けられません）')
     if call['record_type'] == 'call' and 'visit_method' in b:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 架電の記録には付けられません）')
+
+    # 訪問日時・事前確認日時は結果が「時間設定」のときだけ。結果を時間設定以外に直したら、付いていた日時は外す
+    final_status = b['result_status_id'] if 'result_status_id' in b else call['result_status_id']
+    if call['record_type'] == 'call' and not _is_appointment(d, final_status):
+        if any(b.get(k) is not None for k in _APPOINTMENT_ONLY):
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問日時・事前確認日時は結果が「時間設定」のときだけ設定できます）')
+        b.update({k: None for k in _APPOINTMENT_ONLY if call[k] is not None})
+    elif call['record_type'] == 'visit' and any(b.get(k) is not None for k in _APPOINTMENT_ONLY):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には付けられません）')
 
     changes = {k: v for k, v in b.items() if call[k] != v}
     if not changes:

@@ -23,6 +23,7 @@
 - AIは提案を返すだけ。会社情報・ステータス・次回架電日は利用者が採用したときだけ変わる
 - `telema_call_logs.raw_note` は必ず保存する。AIが失敗しても架電履歴の保存は成功させる
 - `telema_call_logs.record_type` は架電（call）か訪問（visit）。訪問は `visit_method`（visit｜zoom）を持ち、結果・次回架電を持たず、施設の状態・架電件数・集計・AI整理の対象外
+- `telema_call_logs.visit_at` / `precheck_at`（訪問する日時・事前確認日時）は、結果が「時間設定」（区分 appointment）の架電にだけ付く。結果を時間設定以外に直すと外れる。登録用の文面は CRM 本体の「設定・管理 → 報告フォーマット」のフォーマットに値を当てはめて作る（`src/telema/lib/appointment-format.ts`）
 - 履歴は削除せず `is_active = 0`
 - SQL は必ずプレースホルダ（`%s`）で値を渡す。APIキーをフロントに置かない
 

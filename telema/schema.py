@@ -459,6 +459,11 @@ ALTER TABLE telema_call_logs ADD COLUMN record_type TEXT NOT NULL DEFAULT 'call'
 ALTER TABLE telema_call_logs ADD COLUMN visit_method TEXT CHECK (visit_method IN ('visit', 'zoom'));
 ALTER TABLE telema_call_logs ADD CONSTRAINT telema_calls_visit_method CHECK ((record_type = 'visit') = (visit_method IS NOT NULL));
 """,
+    # 9: 「時間設定」（ステータス区分 appointment）の架電結果に付ける、訪問する日時と事前確認の日時。架電の記録にだけ付く
+    r"""
+ALTER TABLE telema_call_logs ADD COLUMN visit_at TEXT;
+ALTER TABLE telema_call_logs ADD COLUMN precheck_at TEXT;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

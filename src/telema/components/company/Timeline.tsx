@@ -1,5 +1,7 @@
 import { useState } from "react";
-import type { CallLog, Contact, VisitMethod } from "../../types";
+import type { CallLog, Company, Contact, VisitMethod } from "../../types";
+import { fmtAppointmentDate } from "../../lib/appointment-format";
+import { AppointmentCopy } from "./AppointmentCopy";
 import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput, isOverdue, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
@@ -40,12 +42,16 @@ function CallEditForm({
   const [contactId, setContactId] = useState<number | null>(call.contact_id);
   const [sectionId, setSectionId] = useState<number | null>(call.section_id);
   const [visitMethod, setVisitMethod] = useState<VisitMethod>(call.visit_method ?? "visit");
+  const [visitAt, setVisitAt] = useState(toLocalInput(call.visit_at));
+  const [precheckAt, setPrecheckAt] = useState(toLocalInput(call.precheck_at));
   const [note, setNote] = useState(call.raw_note);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // 無効になったステータスでも、この履歴が今そのステータスなら選べるように残す
   const isVisit = call.record_type === "visit";
+  // 結果が「時間設定」のときだけ、訪問する日時・事前確認日時を設定できる
+  const isAppointment = !isVisit && statuses.find((s) => s.id === statusId)?.category === "appointment";
   const options = statuses.filter((s) => (s.is_active && s.category !== "not_started") || s.id === call.result_status_id);
   const noteChanged = note !== call.raw_note;
   const hasAI = call.ai_status === "done" || !!call.ai_summary;
@@ -66,7 +72,9 @@ function CallEditForm({
             raw_note: note,
             called_at: iso,
             contact_id: contactId,
-            ...(isVisit ? { visit_method: visitMethod } : { result_status_id: statusId }),
+            ...(isVisit
+              ? { visit_method: visitMethod }
+              : { result_status_id: statusId, visit_at: isAppointment ? fromLocalInput(visitAt) : null, precheck_at: isAppointment ? fromLocalInput(precheckAt) : null }),
             ...(isUser ? { section_id: sectionId } : {}),
           },
         }),
@@ -157,6 +165,19 @@ function CallEditForm({
       </div>
       )}
 
+      {isAppointment && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <div className="mb-1 text-xs text-slate-500">訪問する日時</div>
+            <input type="datetime-local" value={visitAt} onChange={(e) => setVisitAt(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <div className="mb-1 text-xs text-slate-500">事前確認日時</div>
+            <input type="datetime-local" value={precheckAt} onChange={(e) => setPrecheckAt(e.target.value)} className={inputCls} />
+          </div>
+        </div>
+      )}
+
       <div>
         <div className="mb-1 text-xs text-slate-500">メモ</div>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={4} className={`${inputCls} resize-y leading-relaxed`} />
@@ -180,6 +201,8 @@ function CallEditForm({
 export function Timeline({
   calls,
   contacts,
+  company,
+  organization,
   nextCallAt,
   nextAction,
   isUser,
@@ -187,6 +210,9 @@ export function Timeline({
 }: {
   calls: CallLog[];
   contacts: Contact[];
+  /** 「時間設定」の記録から、カレンダー・アジェンダ登録用の文面を作るのに使う */
+  company: Company;
+  organization: Record<string, unknown> | null;
   nextCallAt: string | null;
   nextAction: string | null;
   /** ユーザー（導入済み）の施設なら、タイムラインを部署別（営業部・制作部・CS など）に切り替えて見られる */
@@ -196,6 +222,7 @@ export function Timeline({
   const { me, aiAvailable, sections } = useMasters();
   const [running, setRunning] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [copyingId, setCopyingId] = useState<number | null>(null);
   const [tab, setTab] = useState(ALL_TAB);
   const [kind, setKind] = useState<KindFilter>("all");
 
@@ -320,7 +347,24 @@ export function Timeline({
               ) : (
                 <>
                   {cl.ai_summary && <p className="mt-1 rounded bg-indigo-50 px-2 py-1 text-sm text-indigo-900">AI要約：{cl.ai_summary}</p>}
+                  {(cl.visit_at || cl.precheck_at) && (
+                    <p className="mt-1 text-sm text-amber-800">
+                      {cl.visit_at && <span className="mr-3">訪問 {fmtAppointmentDate(cl.visit_at)}</span>}
+                      {cl.precheck_at && <span>事前確認 {fmtAppointmentDate(cl.precheck_at)}</span>}
+                    </p>
+                  )}
                   {cl.raw_note && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{cl.raw_note}</p>}
+                  {cl.result_category === "appointment" && (
+                    <div className="mt-1">
+                      {copyingId === cl.id ? (
+                        <AppointmentCopy call={cl} company={company} organization={organization} contacts={contacts} onClose={() => setCopyingId(null)} />
+                      ) : (
+                        <Button size="sm" variant="ghost" className="text-indigo-700" onClick={() => setCopyingId(cl.id)}>
+                          カレンダー・アジェンダ登録用にコピー
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   {cl.ai_status === "failed" && <p className="mt-1 text-xs text-amber-700">AI整理に失敗しました（メモは保存済み）{cl.ai_error && `：${cl.ai_error}`}</p>}
                   {aiAvailable && cl.raw_note.trim() && cl.record_type === "call" && cl.ai_status !== "done" && canModify && (
                     <Button size="sm" variant="ghost" className="mt-1 text-indigo-700" disabled={running === cl.id} onClick={() => analyze(cl.id)}>

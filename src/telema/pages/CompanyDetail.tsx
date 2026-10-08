@@ -168,7 +168,7 @@ export function CompanyDetail() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           {editable ? (
-            <CallEntry companyId={company.id} phone={phone} contacts={contacts} isUser={!!company.is_user} onSaved={reloadAll} />
+            <CallEntry companyId={company.id} company={company} organization={organization} phone={phone} contacts={contacts} isUser={!!company.is_user} onSaved={reloadAll} />
           ) : (
             <div className="rounded-md bg-slate-100 p-3 text-sm text-slate-600">他の営業担当の企業のため、架電・訪問の登録はできません</div>
           )}
@@ -184,7 +184,7 @@ export function CompanyDetail() {
           {calls.error ? (
             <ErrorBox message={calls.error} onRetry={calls.reload} />
           ) : (
-            <Timeline calls={calls.data ?? []} contacts={contacts} nextCallAt={nextCallAt} nextAction={(company.next_action as string | null) ?? null} isUser={!!company.is_user} onChanged={reloadAll} />
+            <Timeline calls={calls.data ?? []} contacts={contacts} company={company} organization={organization} nextCallAt={nextCallAt} nextAction={(company.next_action as string | null) ?? null} isUser={!!company.is_user} onChanged={reloadAll} />
           )}
         </div>
 
