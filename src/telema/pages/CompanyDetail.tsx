@@ -205,7 +205,7 @@ export function CompanyDetail() {
             editable={editable}
             onSaved={detail.reload}
           />
-          <SuccessCasesCard company={company} organization={organization} />
+          <SuccessCasesCard company={company} organization={organization} contracts={contracts} />
           <ContactsCard companyId={company.id} contacts={contacts} editable={editable} onSaved={detail.reload} />
           <RelationsCard companyId={company.id} contacts={contacts} editable={editable} />
           <FieldsCard

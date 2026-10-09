@@ -23,6 +23,9 @@ export type SuccessCasePrefill = {
   industry: string;
   area: string;
   url: string;
+  /** 契約情報の商材から決めた、制作内容（絞り込み用の分類）と施策名 */
+  tags?: string[];
+  measure?: string;
 };
 
 // CRM本体（src/App.jsx）から渡されるもの：設定・管理の登録用フォーマット、事例管理の事例、ページ間の移動

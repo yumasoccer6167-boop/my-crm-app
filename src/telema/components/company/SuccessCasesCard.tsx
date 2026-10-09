@@ -1,11 +1,45 @@
-import type { Company } from "../../types";
-import { useHost } from "../../lib/host";
+import type { Company, Contract } from "../../types";
+import { useHost, type SuccessCasePrefill } from "../../lib/host";
 import { Button, Card } from "../ui";
 
-/** この施設に紐づく事例（CRM本体の「事例管理」）。事例の追加は、カルテの情報を反映した状態で事例管理のフォームが開く */
-export function SuccessCasesCard({ company, organization }: { company: Company; organization: Record<string, unknown> | null }) {
+// 商材名から、事例の「制作内容」（絞り込み用の分類）を決める。当てはまらない商材は分類しない
+const TAG_RULES: [RegExp, string][] = [
+  [/MEO|口コミ/i, "MEO・口コミ対策"],
+  [/Movie|動画|ムービー/i, "動画"],
+  [/採用/, "採用サイト"],
+  [/広告/, "広告運用"],
+  [/Site|サイト|ホームページ|HP/i, "ホームページ"],
+];
+export function tagsFromProducts(products: string[]): string[] {
+  return [...new Set(products.flatMap((p) => TAG_RULES.filter(([re]) => re.test(p)).map(([, tag]) => tag)))];
+}
+
+/** カルテの情報（法人名・施設名・業種・エリア・サイトURL・契約情報の商材）から、事例の追加フォームの初期値をつくる */
+export function prefillFromCompany(company: Company, organization: Record<string, unknown> | null, contracts: Contract[]): SuccessCasePrefill {
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const org = str(organization?.name).trim();
+  const facility = company.company_name;
+  const products = [...new Set(contracts.map((c) => c.product_name.trim()).filter(Boolean))];
+  return {
+    telemaCompanyId: company.id,
+    telemaCompanyName: facility,
+    // 法人名があれば「法人名（施設名）」。施設名が法人名と同じなら重ねない
+    name: org && org !== facility ? `${org}（${facility}）` : facility,
+    industry: str(company.industry),
+    area: [company.prefecture, company.city].filter((v) => typeof v === "string" && v).join(""),
+    url: str(company.website) || str(organization?.website),
+    tags: tagsFromProducts(products),
+    measure: products.join("＋"),
+  };
+}
+
+/** この施設に紐づく事例（CRM本体の「事例管理」）。ユーザーの施設には「事例管理を登録」ボタンを出し、カルテの情報を反映して事例管理のフォームを開く */
+export function SuccessCasesCard({ company, organization, contracts }: { company: Company; organization: Record<string, unknown> | null; contracts: Contract[] }) {
   const { successCases, openSuccessCase, createSuccessCase } = useHost();
   const mine = successCases.filter((c) => c.telemaCompanyId === company.id);
+  const isUser = !!company.is_user;
+  // ユーザーでない施設は、すでに紐づいた事例があるときだけカードを出す
+  if (!isUser && mine.length === 0) return null;
   return (
     <Card
       title={
@@ -14,26 +48,15 @@ export function SuccessCasesCard({ company, organization }: { company: Company; 
         </>
       }
       action={
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() =>
-            createSuccessCase({
-              telemaCompanyId: company.id,
-              telemaCompanyName: company.company_name,
-              name: company.company_name,
-              industry: (company.industry as string | null) ?? "",
-              area: [company.prefecture, company.city].filter((v) => typeof v === "string" && v).join(""),
-              url: (company.website as string | null) ?? (organization?.website as string | undefined) ?? "",
-            })
-          }
-        >
-          ＋事例を登録
-        </Button>
+        isUser && (
+          <Button size="sm" variant="primary" onClick={() => createSuccessCase(prefillFromCompany(company, organization, contracts))}>
+            事例管理を登録
+          </Button>
+        )
       }
     >
       {mine.length === 0 ? (
-        <p className="text-sm text-slate-400">この施設の事例はまだありません。「事例を登録」で、カルテの情報を反映して事例管理に登録できます。</p>
+        <p className="text-sm text-slate-400">この施設の事例はまだありません。「事例管理を登録」で、法人名・施設名・住所・契約情報の商材などを反映して、事例管理に登録できます。</p>
       ) : (
         <ul className="space-y-2">
           {mine.map((c) => (
