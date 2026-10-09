@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import SuccessCasesView from './SuccessCases';
+import ContractListView from './ContractList';
 
 // 育てるテレマリスト（src/telema）。開いたときだけ読み込む
 const TelemaApp = lazy(() => import('./telema/TelemaApp'));
@@ -4859,6 +4860,7 @@ export default function App() {
     { id: 'calendar', icon: <CalendarDays className="w-4 h-4" />, label: 'カレンダー' },
     { id: 'recall', icon: <Phone className="w-4 h-4" />, label: '再コール', badge: recallOverdueCount },
     { id: 'telema', icon: <PhoneCall className="w-4 h-4" />, label: 'テレマリスト' },
+    { id: 'contracts', icon: <ClipboardList className="w-4 h-4" />, label: '契約リスト' },
     { id: 'success_cases', icon: <Trophy className="w-4 h-4" />, label: '事例管理' },
     { id: 'teleappt_stats', icon: <BarChart className="w-4 h-4" />, label: 'テレアポ集計' },
     { id: 'daily_report', icon: <FileText className="w-4 h-4" />, label: '日報' },
@@ -4868,7 +4870,7 @@ export default function App() {
   ];
 
   const titles = {
-    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', recall: '再コール管理', telema: 'テレマリスト', success_cases: '事例管理', teleappt_stats: 'テレアポ集計', daily_report: '日報',
+    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', recall: '再コール管理', telema: 'テレマリスト', contracts: '契約リスト', success_cases: '事例管理', teleappt_stats: 'テレアポ集計', daily_report: '日報',
     email: 'メール制作', mypage: 'マイページ', settings: '設定・管理',
   };
 
@@ -4983,6 +4985,9 @@ export default function App() {
               onCreateSuccessCase={(create) => { setSuccessCaseRequest({ ts: Date.now(), create }); setActiveTab('success_cases'); }}
             />
           </Suspense>
+        )}
+        {activeTab === 'contracts' && (
+          <ContractListView token={token} onOpenTelemaCompany={(companyId) => { setTelemaRequest({ ts: Date.now(), companyId }); setActiveTab('telema'); }} />
         )}
         {activeTab === 'success_cases' && (
           <SuccessCasesView

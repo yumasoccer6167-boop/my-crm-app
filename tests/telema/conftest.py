@@ -8,6 +8,7 @@ CRM本体の app.py をそのまま読み込み、ログイン（/api/login）�
 """
 import itertools
 import os
+import shutil
 import sys
 import tempfile
 
@@ -30,9 +31,11 @@ CRM_ROLE = {'admin': 'owner', 'manager': 'mgr', 'sales': 'general'}
 @pytest.fixture(scope='session')
 def pg():
     import pgserver
-    srv = pgserver.get_server(tempfile.mkdtemp(prefix='telema-pg-'), cleanup_mode='stop')
+    data_dir = tempfile.mkdtemp(prefix='telema-pg-')
+    srv = pgserver.get_server(data_dir, cleanup_mode='stop')
     yield srv
     srv.cleanup()
+    shutil.rmtree(data_dir, ignore_errors=True)   # 1回あたり約180MBのデータが一時フォルダに残り続けるのを防ぐ
 
 
 class Client:

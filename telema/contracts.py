@@ -1,9 +1,12 @@
 """契約情報（商材・契約日・営業担当）。1施設に複数件（商材ごと）持てる。履歴と同じく削除せず無効化する。"""
-from flask import jsonify
+import re
 
-from .common import CONTRACT_SELECT, audit, can_edit_company
+from flask import jsonify, request
+
+from .common import CONTRACT_SELECT, audit, can_edit_company, company_visibility
 from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found
+from .normalize import escape_like
 from .routes import bp
 from .validate import Bool, Int, IsoDate, Str, parse, parse_id
 
@@ -77,3 +80,100 @@ def update_contract(id):
     row = d.first(f'{CONTRACT_SELECT} WHERE ct.id = %s', (id,))
     audit(d, user['id'], 'deactivate' if b.get('is_active') is False else 'update', 'contract', id, before, row)
     return jsonify(row)
+
+
+# ---------- 契約リスト（全施設の契約情報を一覧にしたページ用） ----------
+# 契約情報はカルテで登録されたものをそのまま使う（別に登録しない）。見える範囲の施設の分だけ。商材・契約日・営業担当・アポ担当者名で絞り込める
+_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def _arg_int(name, lo=1, hi=None):
+    raw = request.args.get(name)
+    if raw in (None, ''):
+        return None
+    if not raw.isdigit() or int(raw) < lo or (hi is not None and int(raw) > hi):
+        raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{name}: 数値で指定してください）')
+    return int(raw)
+
+
+def _arg_date(name):
+    raw = request.args.get(name)
+    if raw in (None, ''):
+        return None
+    if not _DATE.match(raw):
+        raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{name}: YYYY-MM-DD で指定してください）')
+    return raw
+
+
+_CONTRACT_FROM = '''FROM telema_contracts ct
+  JOIN telema_companies c ON c.id = ct.company_id
+  LEFT JOIN telema_organizations o ON o.id = c.organization_id
+  LEFT JOIN users u ON u.id = ct.assigned_user_id'''
+
+
+@bp.get('/contracts')
+def list_contracts():
+    user = current_user()
+    vis_sql, vis_params = company_visibility(user)
+    where = ['ct.is_active = 1', 'c.is_active = 1', vis_sql]
+    params = list(vis_params)
+
+    q = (request.args.get('q') or '').strip()[:100]
+    if q:
+        like = f'%{escape_like(q)}%'
+        where.append('(c.search_text ILIKE %s OR ct.product_name ILIKE %s OR ct.appointment_user_name ILIKE %s)')
+        params += [like, like, like]
+    product = (request.args.get('product') or '')[:100]
+    if product:
+        where.append('ct.product_name = %s')
+        params.append(product)
+    assigned = request.args.get('assigned')
+    if assigned == 'none':
+        where.append('ct.assigned_user_id IS NULL')
+    elif assigned:
+        where.append('ct.assigned_user_id = %s')
+        params.append(_arg_int('assigned'))
+    appointment = (request.args.get('appointment') or '')[:100]
+    if appointment == '__none__':
+        where.append("COALESCE(ct.appointment_user_name, '') = ''")
+    elif appointment:
+        where.append('ct.appointment_user_name = %s')
+        params.append(appointment)
+    date_from, date_to = _arg_date('date_from'), _arg_date('date_to')
+    if date_from:
+        where.append('ct.contract_date >= %s')
+        params.append(date_from)
+    if date_to:
+        where.append('ct.contract_date <= %s')
+        params.append(date_to)
+    order = 'ASC' if request.args.get('order') == 'asc' else 'DESC'
+    page = _arg_int('page') or 1
+    per_page = _arg_int('per_page', hi=200) or 50
+
+    d = db()
+    clause = ' AND '.join(where)
+    total = d.value(f'SELECT COUNT(*) {_CONTRACT_FROM} WHERE {clause}', params)
+    items = d.all(
+        f'''SELECT ct.id, ct.company_id, c.company_name, o.name AS organization_name, c.prefecture, c.city, c.is_user,
+                  ct.product_name, ct.product_url, ct.contract_date, ct.assigned_user_id, u.display_name AS assigned_user_name,
+                  ct.appointment_user_name
+             {_CONTRACT_FROM} WHERE {clause}
+             ORDER BY ct.contract_date {order}, ct.id {order} LIMIT %s OFFSET %s''',
+        [*params, per_page, (page - 1) * per_page])
+    return jsonify({'total': total, 'page': page, 'per_page': per_page, 'items': items})
+
+
+@bp.get('/contracts/facets')
+def contract_facets():
+    """絞り込みの選択肢（商材・営業担当・アポ担当者名と、それぞれの件数）。見える範囲の契約だけ"""
+    user = current_user()
+    vis_sql, vis_params = company_visibility(user)
+    base = f'{_CONTRACT_FROM} WHERE ct.is_active = 1 AND c.is_active = 1 AND {vis_sql}'
+    d = db()
+    return jsonify({
+        'products': d.all(f'SELECT ct.product_name AS value, COUNT(*) AS n {base} GROUP BY 1 ORDER BY n DESC, 1', vis_params),
+        'assignees': d.all(
+            f'SELECT ct.assigned_user_id AS id, u.display_name AS name, COUNT(*) AS n {base} AND ct.assigned_user_id IS NOT NULL GROUP BY 1, 2 ORDER BY n DESC, 2', vis_params),
+        'appointments': d.all(
+            f"SELECT ct.appointment_user_name AS value, COUNT(*) AS n {base} AND COALESCE(ct.appointment_user_name, '') <> '' GROUP BY 1 ORDER BY n DESC, 1", vis_params),
+    })

@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# 接続情報など（パスワードを含むので、名前を打ち間違えてもコミットされないよう .env で始まるものはすべて除外）
+.env
+.env.*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
