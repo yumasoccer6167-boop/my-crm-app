@@ -38,7 +38,23 @@ export function Network() {
   const [params, setParams] = useSearchParams();
   const customers = params.get("customers") !== "0";
   const graph = useApi(() => unwrap(api.relations.graph.$get({ query: { customers: customers ? "1" : "0" } })), [customers]);
-  const data = graph.data;
+  // 同じ加盟協会による自動のつながりを図に出すか。選んだ状態はこのブラウザに覚えておく
+  const [showAssoc, setShowAssoc] = useState(() => {
+    try {
+      return localStorage.getItem("telema:network-assoc") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const raw = graph.data;
+  const assocEdgeCount = raw?.edges.filter((e) => e.auto).length ?? 0;
+  // オフのときは、加盟協会の線を外す。その線だけでつながっていた施設は点からも外す（ユーザーは「つながりの無いユーザーも表示」に従う）
+  const data = useMemo(() => {
+    if (!raw || showAssoc) return raw;
+    const edges = raw.edges.filter((e) => !e.auto);
+    const linked = new Set(edges.flatMap((e) => [e.source, e.target]));
+    return { ...raw, edges, nodes: raw.nodes.filter((n) => linked.has(n.id) || (customers && !!n.is_user)) };
+  }, [raw, showAssoc, customers]);
   const focus = Number(params.get("focus")) || null;
   const all = useMemo(() => new Map((data?.nodes ?? []).map((n) => [n.id, n])), [data]);
   // 表示する都道府県（"all" は全体）。カルテから開いたときはその施設の都道府県
@@ -520,6 +536,21 @@ export function Network() {
           />
           つながりの無いユーザーも表示
         </label>
+        <label className="flex items-center gap-1.5 text-sm text-slate-700" title="基本情報の加盟協会が同じ施設どうしを、自動で線につなぎます">
+          <input
+            type="checkbox"
+            checked={showAssoc}
+            onChange={(e) => {
+              setShowAssoc(e.target.checked);
+              try {
+                localStorage.setItem("telema:network-assoc", e.target.checked ? "1" : "0");
+              } catch {
+                // 保存できなくても、この画面の表示は切り替わる
+              }
+            }}
+          />
+          加盟協会のつながりを表示{assocEdgeCount > 0 && <span className="text-xs text-slate-500">（{assocEdgeCount}本）</span>}
+        </label>
         <Button size="sm" variant="primary" className="ml-auto" onClick={() => setConnect({ initial: sel })}>
           ＋つなぐ
         </Button>
@@ -853,7 +884,7 @@ export function Network() {
             {bubbles
               ? "県のバブルをクリックでその県の相関図・ドラッグで移動・ホイールで拡大縮小"
               : "ドラッグで移動・ホイールで拡大縮小・点をクリックで詳細・県名をクリックでその県の相関図"}
-            {(data?.auto_skipped.length ?? 0) > 0 && (
+            {showAssoc && (data?.auto_skipped.length ?? 0) > 0 && (
               <div className="mt-0.5 text-amber-700">
                 会員数が多い加盟協会（{data!.auto_skipped.map((a) => `${a.name} ${a.count}件`).join("・")}）は、線が多すぎるため相関図には引いていません（各施設のカルテで確認できます）
               </div>
