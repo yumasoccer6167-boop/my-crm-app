@@ -13,6 +13,9 @@ const empty: Draft = { other: null, otherContacts: [], contactId: "", otherConta
 export function RelationsCard({ companyId, contacts, editable }: { companyId: number; contacts: Contact[]; editable: boolean }) {
   const id = String(companyId);
   const list = useApi(() => unwrap(api.companies[":id"].relations.$get({ param: { id } })), [id]);
+  // 同じ加盟協会の施設は、登録しなくても自動でつながる（協会名が詳細になる）
+  const peers = useApi(() => unwrap(api.companies[":id"]["association-peers"].$get({ param: { id } })), [id]);
+  const [openPeers, setOpenPeers] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<Draft>(empty);
   const [error, setError] = useState<string | null>(null);
@@ -172,6 +175,32 @@ export function RelationsCard({ companyId, contacts, editable }: { companyId: nu
             </div>
             {r.other_address && <div className="text-xs text-slate-400">{r.other_address}</div>}
             {r.notes && <div className="mt-0.5 whitespace-pre-wrap text-xs text-slate-600">{r.notes}</div>}
+          </div>
+        ))}
+        {(peers.data ?? []).map((g) => (
+          <div key={g.association_id} className="rounded-md bg-slate-50 p-2 text-sm ring-1 ring-inset ring-slate-200">
+            <button type="button" className="block w-full text-left" onClick={() => setOpenPeers(openPeers === g.association_id ? null : g.association_id)} aria-expanded={openPeers === g.association_id}>
+              <span className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                <span>同じ加盟協会の園 {g.total}件（自動でつながっています）</span>
+                <span className="shrink-0 text-slate-400">{openPeers === g.association_id ? "閉じる" : "開く"}</span>
+              </span>
+              <span className="mt-1 inline-block break-words rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] text-indigo-700">{g.association_name}</span>
+            </button>
+            {openPeers === g.association_id && (
+              <ul className="mt-2 space-y-1">
+                {g.peers.map((p) => (
+                  <li key={p.id} className="flex items-center gap-2">
+                    <Link to={`/companies/${p.id}`} className="truncate font-medium text-indigo-700 hover:underline">
+                      {p.company_name}
+                    </Link>
+                    {!!p.is_user && <span className="rounded bg-emerald-50 px-1.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
+                    {p.status_label && <StatusBadge label={p.status_label} category={p.status_category} />}
+                  </li>
+                ))}
+                {g.total > g.peers.length && <li className="text-xs text-slate-500">ほか {g.total - g.peers.length}件（先頭 {g.peers.length}件を表示）</li>}
+                {!g.in_graph && <li className="text-xs text-amber-700">会員数が多いため、相関図には線を引いていません</li>}
+              </ul>
+            )}
           </div>
         ))}
       </div>

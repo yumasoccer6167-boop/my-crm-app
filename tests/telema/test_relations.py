@@ -75,3 +75,86 @@ def test_営業は他人の担当の施設とはつなげず相関図にも出�
         assert client.api(f'/companies/{mine}/relations')[1] == []
     finally:
         client.set_my_role('admin')
+
+
+# ---------- 同じ加盟協会の施設は自動でつながる ----------
+# テスト間で同じDBを使うので、線は自分が作った施設のものだけを見る
+def join_association(client, company_id, name):
+    assoc = next((a['id'] for a in client.api('/associations')[1] if a['name'] == name), None) or client.api('/associations', {'name': name})[1]['id']
+    cur = [a['id'] for a in client.api(f'/companies/{company_id}')[1]['associations']]
+    assert client.api(f'/companies/{company_id}/associations', {'association_ids': [*cur, assoc]}, method='PATCH')[0] == 200
+    return assoc
+
+
+def edges_of(client, ids, auto=None):
+    es = client.api('/relations/graph')[1]['edges']
+    return [e for e in es if e['source'] in ids and e['target'] in ids and (auto is None or e['auto'] == auto)]
+
+
+def test_同じ加盟協会の施設は自動でつながり_詳細に協会名が入る(client):
+    a, b, c = (add_company(client, n, '神奈川県相模原市1-1') for n in ('協会園A', '協会園B', '協会園C'))
+    other = add_company(client, '別協会の園', '神奈川県相模原市2-2')
+    mine = {a, b, c, other}
+    stored = client.sql('SELECT COUNT(*) AS n FROM telema_company_relations')[0]['n']
+    join_association(client, a, '相模原市協会'); join_association(client, b, '相模原市協会'); join_association(client, other, '別の協会')
+    # 1協会だけ共通 → 線は1本。保存はしない
+    es = edges_of(client, mine, auto=True)
+    assert [(e['source'], e['target'], e['label'], e['notes']) for e in es] == [(a, b, '相模原市協会', None)]
+    assert es[0]['id'] < 0 and client.sql('SELECT COUNT(*) AS n FROM telema_company_relations')[0]['n'] == stored
+    nodes = {n['id'] for n in client.api('/relations/graph')[1]['nodes']}
+    assert {a, b} <= nodes and other not in nodes
+    # 協会を付けた施設が増えれば、自動でつながりも増える。複数の協会が共通なら詳細にまとめて入る
+    join_association(client, c, '相模原市協会')
+    join_association(client, a, '県連合会'); join_association(client, b, '県連合会')
+    assert {(e['source'], e['target']): e['label'] for e in edges_of(client, mine, auto=True)} == {
+        (a, b): '相模原市協会、県連合会', (a, c): '相模原市協会', (b, c): '相模原市協会'}
+    # 協会を外せばつながりも消える
+    assert client.api(f'/companies/{c}/associations', {'association_ids': []}, method='PATCH')[0] == 200
+    assert {(e['source'], e['target']) for e in edges_of(client, mine, auto=True)} == {(a, b)}
+
+
+def test_手動のつながりがある組は手動を優先し_無効な施設と協会は対象外(client):
+    a, b, c = (add_company(client, n) for n in ('園1', '園2', '園3'))
+    mine = {a, b, c}
+    for x in mine:
+        join_association(client, x, '共通協会')
+    assert client.api(f'/companies/{a}/relations', {'other_company_id': b, 'label': '園長会'})[0] == 201
+    assert {(e['source'], e['target'], e['auto']) for e in edges_of(client, mine)} == {(a, b, False), (a, c, True), (b, c, True)}
+    client.sql('UPDATE telema_companies SET is_active = 0 WHERE id = %s', (c,))
+    assert {(e['source'], e['target'], e['auto']) for e in edges_of(client, mine)} == {(a, b, False)}
+    client.sql('UPDATE telema_companies SET is_active = 1 WHERE id = %s', (c,))
+    assoc = next(x['id'] for x in client.api('/associations')[1] if x['name'] == '共通協会')
+    client.api(f'/associations/{assoc}', {'is_active': False}, method='PATCH')
+    assert edges_of(client, mine, auto=True) == []
+
+
+def test_会員数が多い協会は相関図に線を引かず_カルテには一覧で出る(client, monkeypatch):
+    from telema import relations
+    monkeypatch.setattr(relations, 'AUTO_EDGE_MAX_MEMBERS', 2)
+    a, b, c = (add_company(client, n) for n in ('多1', '多2', '多3'))
+    for x in (a, b, c):
+        join_association(client, x, '大きい協会')
+    g = client.api('/relations/graph')[1]
+    assert edges_of(client, {a, b, c}, auto=True) == []
+    assert [(s['name'], s['count']) for s in g['auto_skipped'] if s['name'] == '大きい協会'] == [('大きい協会', 3)]
+    peers = client.api(f'/companies/{a}/association-peers')[1]
+    assert [(p['association_name'], p['total'], p['in_graph']) for p in peers] == [('大きい協会', 2, False)]
+    assert [x['company_name'] for x in peers[0]['peers']] == ['多2', '多3']
+
+
+def test_カルテに同じ協会の施設が出て_営業は見える範囲だけ(client):
+    other = client.add_user('他の営業')
+    mine = add_company(client, '自分の園')
+    open_ = add_company(client, '未割当の園')
+    theirs = add_company(client, '他人の園', assigned_user_id=other)
+    for x in (mine, open_, theirs):
+        join_association(client, x, '同じ協会')
+    assert [p['company_name'] for p in client.api(f'/companies/{mine}/association-peers')[1][0]['peers']] == ['他人の園', '未割当の園']
+    client.set_my_role('sales')
+    try:
+        peers = client.api(f'/companies/{mine}/association-peers')[1]
+        assert peers[0]['total'] == 1 and [p['company_name'] for p in peers[0]['peers']] == ['未割当の園']
+        assert client.api(f'/companies/{theirs}/association-peers')[0] == 404
+        assert not any(theirs in (e['source'], e['target']) for e in client.api('/relations/graph')[1]['edges'])
+    finally:
+        client.set_my_role('admin')

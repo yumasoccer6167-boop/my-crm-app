@@ -207,6 +207,20 @@ export type GraphEdge = {
   target_contact_name: string | null;
   label: string | null;
   notes: string | null;
+  /** true は、同じ加盟協会による自動のつながり（保存されておらず、外せない）。label に協会名が入る */
+  auto: boolean;
+};
+
+/** 会員数が多くて、相関図に線を引かなかった加盟協会 */
+export type AutoSkipped = { id: number; name: string; count: number };
+
+/** 同じ加盟協会の施設（自動のつながり）。協会ごと */
+export type AssociationPeers = {
+  association_id: number;
+  association_name: string;
+  total: number;
+  in_graph: boolean;
+  peers: { id: number; company_name: string; address: string | null; is_user: number; status_label: string | null; status_category: string | null }[];
 };
 
 export type CompanyDetailData = {

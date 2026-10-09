@@ -853,6 +853,11 @@ export function Network() {
             {bubbles
               ? "県のバブルをクリックでその県の相関図・ドラッグで移動・ホイールで拡大縮小"
               : "ドラッグで移動・ホイールで拡大縮小・点をクリックで詳細・県名をクリックでその県の相関図"}
+            {(data?.auto_skipped.length ?? 0) > 0 && (
+              <div className="mt-0.5 text-amber-700">
+                会員数が多い加盟協会（{data!.auto_skipped.map((a) => `${a.name} ${a.count}件`).join("・")}）は、線が多すぎるため相関図には引いていません（各施設のカルテで確認できます）
+              </div>
+            )}
           </div>
           <div className="absolute right-2 top-2 flex gap-1.5">
             {sub.nodes.length > 0 && (
