@@ -6,6 +6,7 @@ import { ContactsCard } from "../components/company/ContactsCard";
 import { ContractsCard } from "../components/company/ContractsCard";
 import { FieldsCard } from "../components/company/FieldsCard";
 import { RelationsCard } from "../components/company/RelationsCard";
+import { SuccessCasesCard } from "../components/company/SuccessCasesCard";
 import { SummaryCard } from "../components/company/SummaryCard";
 import { TagsRow } from "../components/company/TagsRow";
 import { Timeline } from "../components/company/Timeline";
@@ -204,6 +205,7 @@ export function CompanyDetail() {
             editable={editable}
             onSaved={detail.reload}
           />
+          <SuccessCasesCard company={company} organization={organization} />
           <ContactsCard companyId={company.id} contacts={contacts} editable={editable} onSaved={detail.reload} />
           <RelationsCard companyId={company.id} contacts={contacts} editable={editable} />
           <FieldsCard

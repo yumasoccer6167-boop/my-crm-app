@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { CallLog, Company, Contact } from "../../types";
 import { appointmentValues, fillAppointmentTemplate } from "../../lib/appointment-format";
 import { useMasters } from "../../lib/masters";
-import { useAppointmentTemplates } from "../../lib/templates";
+import { useAppointmentTemplates } from "../../lib/host";
 import { Button, selectCls } from "../ui";
 
 /** クリップボードへ。https でない環境などで navigator.clipboard が使えないときは、選択してコピーする方法に切り替える */

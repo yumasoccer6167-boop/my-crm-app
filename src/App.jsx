@@ -6,8 +6,10 @@ import {
   ChevronDown, Star, Camera, Upload, Download, Copy, BarChart,
   Sparkles, FileText, ClipboardList, CalendarDays,
   ChevronLeft, ChevronRight, CheckSquare, Square, Mic, LayoutGrid, List,
-  Heart, Briefcase, AlertTriangle, PieChart, User, Link2, Target, XCircle, PhoneCall
+  Heart, Briefcase, AlertTriangle, PieChart, User, Link2, Target, XCircle, PhoneCall, Trophy
 } from 'lucide-react';
+
+import SuccessCasesView from './SuccessCases';
 
 // 育てるテレマリスト（src/telema）。開いたときだけ読み込む
 const TelemaApp = lazy(() => import('./telema/TelemaApp'));
@@ -260,7 +262,7 @@ function useAuth() {
 const ID_LIST_KEYS = [
   'customers', 'records', 'products', 'activityTypes', 'associationTypes',
   'dailyReportLogs', 'caseStudies', 'knowledgeArticles', 'knowledgeTags',
-  'departments', 'industryTypes',
+  'departments', 'industryTypes', 'successCases',
 ];
 
 // ---------- サーバー同期フック（/api/data 経由でデータベースと同期） ----------
@@ -4735,6 +4737,9 @@ export default function App() {
   });
   const [pendingViewCustomerId, setPendingViewCustomerId] = useState(null);
   const [pendingViewWithForm, setPendingViewWithForm] = useState(false);
+  // 事例管理とテレマリスト（カルテ）の行き来：開きたい事例／カルテを相手の画面に渡す
+  const [successCaseRequest, setSuccessCaseRequest] = useState(null);
+  const [telemaRequest, setTelemaRequest] = useState(null);
   // 他ページから顧客カードを開く（withForm=true なら記録フォームを開いた状態で表示）
   const openCustomerFromHome = (customerId, withForm = false) => {
     setPendingViewCustomerId(customerId);
@@ -4754,10 +4759,11 @@ export default function App() {
     rolePermissions: initialRolePermissions,
     industryTypes: initialIndustryTypes,
     teleGoals: {},
+    successCases: [],
     personalSettings: {},
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, appointmentTemplates, associationTypes, dailyReportLogs, rolePermissions, departments, industryTypes, teleGoals, personalSettings } = data;
+  const { customers, records, products, activityTypes, goals, emailTemplates, reportTemplates, dailyReportTemplates, appointmentTemplates, associationTypes, dailyReportLogs, rolePermissions, departments, industryTypes, teleGoals, successCases, personalSettings } = data;
   const canViewSettings = isOwner || hasPermission(user?.role, 'viewSettings', rolePermissions);
   const canDeleteCustomer = isOwner || hasPermission(user?.role, 'deleteCustomer', rolePermissions);
   const canBulkEdit = isOwner || hasPermission(user?.role, 'bulkEdit', rolePermissions);
@@ -4776,6 +4782,7 @@ export default function App() {
   const setDepartments = makeSetter('departments');
   const setIndustryTypes = makeSetter('industryTypes');
   const setTeleGoals = makeSetter('teleGoals');
+  const setSuccessCases = makeSetter('successCases');
   const setPersonalSettings = makeSetter('personalSettings');
 
   // ---- マイページ（個人設定） ----
@@ -4852,6 +4859,7 @@ export default function App() {
     { id: 'calendar', icon: <CalendarDays className="w-4 h-4" />, label: 'カレンダー' },
     { id: 'recall', icon: <Phone className="w-4 h-4" />, label: '再コール', badge: recallOverdueCount },
     { id: 'telema', icon: <PhoneCall className="w-4 h-4" />, label: 'テレマリスト' },
+    { id: 'success_cases', icon: <Trophy className="w-4 h-4" />, label: '事例管理' },
     { id: 'teleappt_stats', icon: <BarChart className="w-4 h-4" />, label: 'テレアポ集計' },
     { id: 'daily_report', icon: <FileText className="w-4 h-4" />, label: '日報' },
     { id: 'email', icon: <Mail className="w-4 h-4" />, label: 'メール制作' },
@@ -4860,7 +4868,7 @@ export default function App() {
   ];
 
   const titles = {
-    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', recall: '再コール管理', telema: 'テレマリスト', teleappt_stats: 'テレアポ集計', daily_report: '日報',
+    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', recall: '再コール管理', telema: 'テレマリスト', success_cases: '事例管理', teleappt_stats: 'テレアポ集計', daily_report: '日報',
     email: 'メール制作', mypage: 'マイページ', settings: '設定・管理',
   };
 
@@ -4967,8 +4975,22 @@ export default function App() {
         )}
         {activeTab === 'telema' && (
           <Suspense fallback={<p className="text-slate-400 font-semibold text-sm">読み込み中...</p>}>
-            <TelemaApp appointmentTemplates={appointmentTemplates || []} />
+            <TelemaApp
+              appointmentTemplates={appointmentTemplates || []}
+              successCases={successCases || []}
+              openCompanyRequest={telemaRequest}
+              onOpenSuccessCase={(caseId) => { setSuccessCaseRequest({ ts: Date.now(), caseId }); setActiveTab('success_cases'); }}
+              onCreateSuccessCase={(create) => { setSuccessCaseRequest({ ts: Date.now(), create }); setActiveTab('success_cases'); }}
+            />
           </Suspense>
+        )}
+        {activeTab === 'success_cases' && (
+          <SuccessCasesView
+            cases={successCases || []} setCases={setSuccessCases} currentUser={user} token={token} canDeleteAny={canDeleteCustomer}
+            request={successCaseRequest} onRequestHandled={() => setSuccessCaseRequest(null)}
+            onOpenTelemaCompany={(companyId) => { setTelemaRequest({ ts: Date.now(), companyId }); setActiveTab('telema'); }}
+            showAlert={showAlert}
+          />
         )}
         {activeTab === 'teleappt_stats' && <TeleApptStatsView records={records} customers={customers} activityTypes={effectiveActivityTypes} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} teleGoals={teleGoals || {}} setTeleGoals={setTeleGoals} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />}
         {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />}

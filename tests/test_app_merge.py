@@ -29,3 +29,10 @@ def test_ID配列でない項目は送られたときだけ置き換える():
     server = {'reportTemplates': [{'id': 1, 'name': 'A'}], 'goals': {'x': 1}}
     merged = merge_payload(server, {'goals': {'x': 2}}, {})
     assert merged['goals'] == {'x': 2} and merged['reportTemplates'] == server['reportTemplates']
+
+
+def test_事例管理の事例もIDごとにマージされる():
+    server = {'successCases': [{'id': 1, 'headline': 'A'}, {'id': 2, 'headline': 'B'}]}
+    merged = merge_payload(server, {'successCases': [{'id': 2, 'headline': 'B2'}, {'id': 3, 'headline': 'C'}]}, {})
+    assert merged['successCases'] == [{'id': 1, 'headline': 'A'}, {'id': 2, 'headline': 'B2'}, {'id': 3, 'headline': 'C'}]
+    assert [c['id'] for c in merge_payload(server, {'successCases': []}, {'successCases': [1]})['successCases']] == [2]

@@ -26,7 +26,7 @@ GOOGLE_CALENDAR_CREDENTIALS_JSON = os.environ.get('GOOGLE_CALENDAR_CREDENTIALS_J
 ID_LIST_KEYS = [
     'customers', 'records', 'products', 'activityTypes', 'associationTypes',
     'dailyReportLogs', 'caseStudies', 'knowledgeArticles', 'knowledgeTags',
-    'departments', 'industryTypes',
+    'departments', 'industryTypes', 'successCases',
 ]
 # 保持するバックアップ世代数
 BACKUP_KEEP = 50

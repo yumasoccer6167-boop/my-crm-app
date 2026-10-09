@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { Layout } from "./components/Layout";
 import type { AppointmentTemplate } from "./lib/appointment-format";
 import { MastersProvider } from "./lib/masters";
-import { TemplatesProvider } from "./lib/templates";
+import { HostProvider, type SuccessCase, type SuccessCasePrefill } from "./lib/host";
 import { CompanyDetail } from "./pages/CompanyDetail";
 import { Companies } from "./pages/Companies";
 import { Dashboard } from "./pages/Dashboard";
@@ -28,12 +29,28 @@ const router = createMemoryRouter([
 ]);
 
 /** CRM本体（src/App.jsx）の「テレマリスト」タブの中身 */
-export default function TelemaApp({ appointmentTemplates = [] }: { appointmentTemplates?: AppointmentTemplate[] }) {
+export default function TelemaApp({
+  appointmentTemplates = [],
+  successCases = [],
+  openCompanyRequest = null,
+  onOpenSuccessCase = () => {},
+  onCreateSuccessCase = () => {},
+}: {
+  appointmentTemplates?: AppointmentTemplate[];
+  successCases?: SuccessCase[];
+  /** 事例管理から「カルテを開く」で来たときに、その施設のカルテへ移動する（ts は同じ施設を続けて開けるようにするための値） */
+  openCompanyRequest?: { ts: number; companyId: number } | null;
+  onOpenSuccessCase?: (id: number) => void;
+  onCreateSuccessCase?: (prefill: SuccessCasePrefill) => void;
+}) {
+  useEffect(() => {
+    if (openCompanyRequest) void router.navigate(`/companies/${openCompanyRequest.companyId}`);
+  }, [openCompanyRequest]);
   return (
-    <TemplatesProvider appointmentTemplates={appointmentTemplates}>
+    <HostProvider value={{ appointmentTemplates, successCases, openSuccessCase: onOpenSuccessCase, createSuccessCase: onCreateSuccessCase }}>
       <MastersProvider>
         <RouterProvider router={router} />
       </MastersProvider>
-    </TemplatesProvider>
+    </HostProvider>
   );
 }
