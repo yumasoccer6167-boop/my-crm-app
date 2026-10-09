@@ -264,6 +264,29 @@ const ID_LIST_KEYS = [
 ];
 
 // ---------- サーバー同期フック（/api/data 経由でデータベースと同期） ----------
+// ・保存は「サーバーと同期済みの内容から変わった分」だけを送る（古い画面から保存しても、他の人の最新の変更を上書きしない）
+// ・画面を開きっぱなしでも、タブに戻ったとき・一定時間ごとに最新を読み込み直す（未保存の変更があるときは読み直さない）
+const REFRESH_INTERVAL_MS = 60 * 1000;     // 表示中の自動更新の間隔
+const REFRESH_MIN_GAP_MS = 15 * 1000;      // タブに戻るたびに読み込みすぎないための最短間隔
+
+// 同期済みの内容（base）から変わった項目だけを取り出す。IDを持つ配列は、変わった・増えた要素だけにする
+function buildChanges(data, base, deleted) {
+  const out = {};
+  Object.keys(data).forEach(key => {
+    const cur = data[key];
+    const prev = base ? base[key] : undefined;
+    if (ID_LIST_KEYS.includes(key) && Array.isArray(cur)) {
+      const prevJson = new Map((Array.isArray(prev) ? prev : []).filter(x => x && x.id != null).map(x => [x.id, JSON.stringify(x)]));
+      const changed = cur.filter(x => x && x.id != null && prevJson.get(x.id) !== JSON.stringify(x));
+      // 削除だけのときも、サーバーに削除を伝えるためキーは付ける
+      if (changed.length || (deleted[key] && deleted[key].length)) out[key] = changed;
+    } else if (JSON.stringify(cur) !== JSON.stringify(prev)) {
+      out[key] = cur;
+    }
+  });
+  return out;
+}
+
 function useSyncedData(initial, token, onUnauthorized) {
   const [data, setData] = useState(initial);
   const [loaded, setLoaded] = useState(false);
@@ -272,6 +295,23 @@ function useSyncedData(initial, token, onUnauthorized) {
   const prevDataRef = useRef(initial);   // 直前のデータ（削除検知用）
   const deletedRef = useRef({});         // 未送信の削除ID { key: Set(id) }
   const applyingServer = useRef(false);  // サーバー応答の反映中フラグ
+  const syncedRef = useRef(null);        // サーバーと同期済みの内容（保存で送る差分の基準）
+  const dirtyRef = useRef(false);        // 未保存の変更があるか（あれば自動更新しない）
+  const lastLoadRef = useRef(0);
+  const editSeqRef = useRef(0);          // 画面側の変更の通し番号（保存の送信中に、さらに変更があったかを調べる）
+  const lastServerTextRef = useRef('');  // 直近にサーバーから読んだ内容（変わっていなければ画面を更新しない）
+
+  // サーバーの内容を画面に反映する（同期済みの基準も更新）
+  const applyServer = (json) => {
+    applyingServer.current = true;
+    lastLoadRef.current = Date.now();
+    setData(prev => {
+      const next = { ...prev, ...json };
+      prevDataRef.current = next;
+      syncedRef.current = next;
+      return next;
+    });
+  };
 
   // 起動時にサーバーから読み込む
   useEffect(() => {
@@ -279,19 +319,50 @@ function useSyncedData(initial, token, onUnauthorized) {
     fetch('/api/data', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => {
         if (res.status === 401) { onUnauthorized && onUnauthorized(); throw new Error('unauthorized'); }
-        return res.json();
+        return res.text();
       })
-      .then(json => {
-        applyingServer.current = true;
-        setData(prev => {
-          const next = { ...prev, ...json };
-          prevDataRef.current = next;
-          return next;
-        });
+      .then(text => {
+        lastServerTextRef.current = text;
+        applyServer(JSON.parse(text));
         setLoaded(true);
       })
       .catch(() => { setLoaded(true); setSyncError(true); });
   }, [token]);
+
+  // 最新の内容を読み込み直す（画面を開きっぱなしの端末でも、他の人の変更が見えるように）
+  const refresh = () => {
+    if (!token || !loaded || dirtyRef.current || document.visibilityState === 'hidden') return;
+    fetch('/api/data', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => {
+        if (res.status === 401) { onUnauthorized && onUnauthorized(); throw new Error('unauthorized'); }
+        return res.ok ? res.text() : null;
+      })
+      .then(text => {
+        lastLoadRef.current = Date.now();
+        // 前回と同じ内容なら画面は更新しない。読み込み中に画面側で変更があったら、その変更を優先して今回は反映しない
+        if (!text || text === lastServerTextRef.current || dirtyRef.current) return;
+        lastServerTextRef.current = text;
+        const json = JSON.parse(text);
+        if (json && typeof json === 'object') applyServer(json);
+      })
+      .catch(() => {});
+  };
+  const refreshRef = useRef(refresh);
+  useEffect(() => { refreshRef.current = refresh; });
+  useEffect(() => {
+    if (!token || !loaded) return;
+    const onBack = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastLoadRef.current > REFRESH_MIN_GAP_MS) refreshRef.current();
+    };
+    document.addEventListener('visibilitychange', onBack);
+    window.addEventListener('focus', onBack);
+    const timer = setInterval(() => { if (Date.now() - lastLoadRef.current > REFRESH_INTERVAL_MS - 1000) refreshRef.current(); }, REFRESH_INTERVAL_MS);
+    return () => {
+      document.removeEventListener('visibilitychange', onBack);
+      window.removeEventListener('focus', onBack);
+      clearInterval(timer);
+    };
+  }, [token, loaded]);
 
   // 直前データと今のデータを比べ、消えたIDを「削除」として記録する
   const trackDeletions = (prev, next) => {
@@ -318,6 +389,8 @@ function useSyncedData(initial, token, onUnauthorized) {
 
     trackDeletions(prevDataRef.current, data);
     prevDataRef.current = data;
+    dirtyRef.current = true;
+    editSeqRef.current += 1;
 
     const timer = setTimeout(() => {
       const deleted = {};
@@ -325,10 +398,14 @@ function useSyncedData(initial, token, onUnauthorized) {
         const arr = [...deletedRef.current[k]];
         if (arr.length) deleted[k] = arr;
       });
+      const changes = buildChanges(data, syncedRef.current, deleted);
+      if (Object.keys(changes).length === 0) { dirtyRef.current = false; return; }
+      const sentSeq = editSeqRef.current;
+      const sentData = data;
       fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ data, deleted }),
+        body: JSON.stringify({ data: changes, deleted }),
       })
         .then(res => {
           if (res.status === 401) { onUnauthorized && onUnauthorized(); throw new Error('unauthorized'); }
@@ -337,16 +414,26 @@ function useSyncedData(initial, token, onUnauthorized) {
         })
         .then(resp => {
           setSyncError(false);
-          deletedRef.current = {};
+          // 送った削除だけを消す（送信中に増えた削除は次の保存で送る）
+          Object.keys(deleted).forEach(k => {
+            deleted[k].forEach(id => deletedRef.current[k] && deletedRef.current[k].delete(id));
+            if (deletedRef.current[k] && deletedRef.current[k].size === 0) delete deletedRef.current[k];
+          });
+          // 送信中にさらに変更があったときは、サーバーの内容で上書きせず、送った内容を基準にして次の保存へ進む
+          if (editSeqRef.current !== sentSeq) { syncedRef.current = sentData; return; }
           // サーバーがマージ済みの最新データを返したら、それで自分の状態を最新化
           if (resp && resp.data) {
             applyingServer.current = true;
+            lastLoadRef.current = Date.now();
             setData(prev => {
               const merged = { ...prev, ...resp.data };
               prevDataRef.current = merged;
+              syncedRef.current = merged;
               return merged;
             });
+            lastServerTextRef.current = '';
           }
+          dirtyRef.current = false;
         })
         .catch(() => setSyncError(true));
     }, 800);

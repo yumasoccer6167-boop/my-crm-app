@@ -471,7 +471,8 @@ def save_data():
         conn = get_conn()
         cur = conn.cursor()
 
-        cur.execute('SELECT data FROM app_state WHERE id = 1')
+        # 同時に保存されても、片方の変更が消えないよう行をロックして順番に処理する
+        cur.execute('SELECT data FROM app_state WHERE id = 1 FOR UPDATE')
         row = cur.fetchone()
         current = row[0] if row and row[0] else {}
 
