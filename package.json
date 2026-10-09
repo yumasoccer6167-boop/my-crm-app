@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "telema:import": "tsx scripts/telema/import-excel.ts",
     "telema:merge": "tsx scripts/telema/merge-duplicates.ts",
-    "telema:geocode": "tsx scripts/telema/geocode.ts"
+    "telema:geocode": "tsx scripts/telema/geocode.ts",
+    "telema:tag-phones": "tsx scripts/telema/tag-by-phone.ts",
+    "telema:contracts": "tsx scripts/telema/import-contracts.ts"
   },
   "dependencies": {
     "lucide-react": "^1.24.0",

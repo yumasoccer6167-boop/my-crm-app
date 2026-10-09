@@ -66,6 +66,26 @@ npm run telema:geocode -- --users --dry-run  # ユーザーだけ、確認のみ
 npm run telema:geocode -- --users            # ユーザーだけ反映（位置の無い施設すべては --users を外す）
 ```
 
+電話番号がCSVと一致する施設に、リスト種類・加盟協会をまとめて割り振る（CSVに「電話番号」列が必要。追加のみで、すでに付いているものは外さない）：
+
+```bash
+npm run telema:tag-phones -- リスト.csv --list-type 繋がり --association "協会A" --association "協会B"          # 照合結果の確認だけ
+npm run telema:tag-phones -- リスト.csv --list-type 繋がり --association "協会A" --association "協会B" --apply  # 割り振る
+```
+
+- リスト種類は登録済みのものだけ指定できる。加盟協会は無ければ `--apply` のときに作る
+- 一致しなかったCSVの行は一覧で表示する（有効な施設だけが対象。同じ電話番号の施設が複数あれば、すべてに付ける）
+
+契約一覧のCSV（会社名・商品名・申込み住所・申込み電話番号・営業担当・契約日）を、電話番号・住所で施設と照合して、各施設の「契約情報」に追加する：
+
+```bash
+npm run telema:contracts -- 契約一覧.csv --report /tmp/契約照合.tsv          # 照合結果の確認だけ（一致しない行・要確認の行は report に出る）
+npm run telema:contracts -- 契約一覧.csv --report /tmp/契約照合.tsv --apply  # 契約情報を追加する
+```
+
+- 電話番号・住所のどちらかで1施設に決まれば追加する。複数の施設に一致するときは会社名で絞り、決まらなければ「要確認」にして追加しない
+- 営業担当はCRMのメンバー名と一致したときだけ入れる（一致しなければ空欄）。同じ施設・商材・契約日がすでにあれば追加しない
+
 既存データの重複統合（電話番号と施設名が一致する施設、施設名と住所が一致する施設を1件にまとめる。つながり・訪問済みも引き継ぐ）：
 
 ```bash
