@@ -52,6 +52,8 @@ export type CompanyListItem = {
   assigned_user_id: number | null;
   assigned_user_name: string | null;
   updated_at: string;
+  /** 有効な契約情報の件数（ユーザーで0件なら、一覧に「契約情報未登録」を出す） */
+  contract_count: number;
   /** 加盟協会・リスト種類の名前（マスタの並び順） */
   associations: string[];
   list_types: string[];

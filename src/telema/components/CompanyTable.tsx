@@ -3,6 +3,11 @@ import type { CompanyListItem } from "../types";
 import { fmtShort, isOverdue } from "../lib/format";
 import { StatusBadge, Temperature } from "./ui";
 
+/** ユーザーなのに契約情報がまだ登録されていない施設の目印 */
+function NoContractBadge() {
+  return <span className="ml-1.5 whitespace-nowrap rounded bg-amber-50 px-1.5 align-middle text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-300">契約情報未登録</span>;
+}
+
 export function Rating({ rating, count }: { rating: number | null; count: number | null }) {
   if (rating == null && !count) return <span className="text-slate-300">—</span>;
   return (
@@ -108,6 +113,7 @@ export function CompanyTable({
                       {c.company_name}
                     </Link>
                     {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 align-middle text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
+                {!!c.is_user && c.contract_count === 0 && <NoContractBadge />}
                   </div>
                   <div className="truncate text-xs text-slate-500">
                     {[c.city, c.industry, c.organization_name].filter(Boolean).join(" · ")}
@@ -161,6 +167,7 @@ export function CompanyTable({
                   {c.company_name}
                 </Link>
                 {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 align-middle text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
+                {!!c.is_user && c.contract_count === 0 && <NoContractBadge />}
               </label>
               <StatusBadge label={c.status_label} category={c.status_category} />
             </div>

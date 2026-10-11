@@ -3,7 +3,7 @@ import json
 
 from flask import jsonify, request
 
-from .common import CONTRACT_SELECT, TAG_KINDS, audit, can_edit_company, company_visibility, jst_day_range
+from .common import CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, TAG_KINDS, audit, can_edit_company, company_visibility, jst_day_range
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
@@ -167,7 +167,7 @@ def list_companies():
               (SELECT ct.name FROM telema_contacts ct WHERE ct.company_id = c.id AND ct.is_active = 1 AND ct.name IS NOT NULL
                  ORDER BY ct.is_decision_maker DESC, ct.updated_at DESC LIMIT 1) AS contact_name,
               c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at,
-              {', '.join(k.names_column for k in TAG_KINDS)}
+              {CONTRACT_COUNT_COLUMN}, {', '.join(k.names_column for k in TAG_KINDS)}
             {frm} ORDER BY {order} LIMIT %s OFFSET %s''',
         [*params, q['per_page'], (q['page'] - 1) * q['per_page']],
     )

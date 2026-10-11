@@ -92,3 +92,19 @@ def test_選択肢の一覧と_営業は見える範囲の契約だけ(client):
         assert '不可視商材' not in {p['value'] for p in f['products']} and '不可視アポ' not in {a['value'] for a in f['appointments']}
     finally:
         client.set_my_role('admin')
+
+
+def test_施設一覧とマイページの一覧に契約件数が付く(client):
+    from datetime import datetime, timedelta, timezone
+    with_contract = make_company(client, '件数あり園')
+    without = make_company(client, '件数なし園')
+    add(client, with_contract, '件数商材A', '2025-01-01')
+    add(client, with_contract, '件数商材B', '2025-02-01')
+    gone = add(client, with_contract, '件数商材C', '2025-03-01')
+    client.api(f'/contracts/{gone["id"]}', {'is_active': False}, method='PATCH')     # 無効な契約は数えない
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    client.sql('UPDATE telema_companies SET next_call_at = %s, is_user = 1 WHERE id = ANY(%s)', (yesterday, [with_contract, without]))
+    counts = {i['company_name']: i['contract_count'] for i in client.api('/companies?q=件数&per_page=50')[1]['items']}
+    assert counts == {'件数あり園': 2, '件数なし園': 0}
+    today = {i['company_name']: i['contract_count'] for i in client.api('/dashboard')[1]['today']}
+    assert today['件数あり園'] == 2 and today['件数なし園'] == 0

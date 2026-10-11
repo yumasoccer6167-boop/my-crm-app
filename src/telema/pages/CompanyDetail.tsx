@@ -9,6 +9,7 @@ import { RelationsCard } from "../components/company/RelationsCard";
 import { SuccessCasesCard } from "../components/company/SuccessCasesCard";
 import { SummaryCard } from "../components/company/SummaryCard";
 import { TagsRow } from "../components/company/TagsRow";
+import { UserTenure } from "../components/company/UserTenure";
 import { Timeline } from "../components/company/Timeline";
 import { Button, Card, ErrorBox, Loading, selectCls, StatusBadge } from "../components/ui";
 import { api, unwrap } from "../lib/api";
@@ -163,6 +164,7 @@ export function CompanyDetail() {
             )}
           </div>
         </div>
+        {!!company.is_user && <UserTenure contracts={contracts} />}
         {patchError && <div className="mt-3"><ErrorBox message={patchError} /></div>}
       </section>
 

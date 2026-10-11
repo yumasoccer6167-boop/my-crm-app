@@ -9,6 +9,9 @@ JST = timezone(timedelta(hours=9))
 
 
 # 契約情報の取得（営業担当の表示名つき）。会社詳細と契約APIで共有する
+# 施設一覧に出す契約件数（有効な契約情報）。ユーザーなのに契約情報が未登録の施設を一覧で見分けるのに使う
+CONTRACT_COUNT_COLUMN = '(SELECT COUNT(*) FROM telema_contracts k WHERE k.company_id = c.id AND k.is_active = 1) AS contract_count'
+
 CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name
   FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id'''
 
