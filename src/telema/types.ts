@@ -232,6 +232,26 @@ export type CustomerImportBatch = {
   applied: boolean;
 };
 
+/** 契約一覧CSVの取り込み（管理者）。1回分（数百行）の結果 */
+export type ContractImportRow = { line: number; name: string; phone: string; address: string; product: string; date: string; sales: string };
+export type ContractImportBatch = {
+  rows: number;
+  added: number;
+  companies: number;
+  unmatched: number;
+  review: number;
+  existing: number;
+  duplicate: number;
+  no_product: number;
+  bad_date: number;
+  unmatched_rows: { line: number; name: string; phone: string; address: string; product: string; date: string }[];
+  review_rows: { line: number; name: string; phone: string; address: string; product: string; date: string; reason: string; candidates: string[] }[];
+  unknown_sales: Record<string, number>;
+  basis: Record<string, number>;
+  added_keys: string[];
+  applied: boolean;
+};
+
 /** 会員数が多くて、相関図に線を引かなかった加盟協会 */
 export type AutoSkipped = { id: number; name: string; count: number };
 

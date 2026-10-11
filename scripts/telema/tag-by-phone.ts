@@ -13,7 +13,7 @@
  */
 import { readFileSync } from "node:fs";
 import { normalizePhone } from "../../src/telema/shared/normalize";
-import { parseCsv } from "./csv";
+import { parseCsv } from "../../src/telema/shared/csv";
 import { connect, describeTarget } from "./db";
 
 // ---------- 引数 ----------

@@ -19,7 +19,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { isLikelySameFacility, normalizeAddress, normalizePhone, splitPrefectureCity } from "../../src/telema/shared/normalize";
-import { readTable } from "./csv";
+import { readTable } from "../../src/telema/shared/csv";
 import { connect, describeTarget } from "./db";
 
 const args = process.argv.slice(2);

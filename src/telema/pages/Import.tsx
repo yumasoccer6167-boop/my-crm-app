@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { ContractImportCard } from "../components/ContractImportCard";
 import { CustomerImportCard } from "../components/CustomerImportCard";
 import { Button, Card, ErrorBox, inputCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
@@ -60,6 +61,7 @@ export function ImportPage() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <CustomerImportCard />
+      <ContractImportCard />
       <Card title="Excel / CSV から取り込む">
         <div className="rounded-md border-2 border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
           次のステップ（STEP 7）で実装します。

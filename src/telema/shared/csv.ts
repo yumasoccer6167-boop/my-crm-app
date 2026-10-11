@@ -1,4 +1,4 @@
-// 管理者用CLIのCSV読み込み（ダブルクォート・クォート内の改行・カンマ、先頭のBOMに対応）
+// CSVの読み込み（ダブルクォート・クォート内の改行・カンマ、先頭のBOMに対応）。画面の取り込みと管理者用CLIで共通
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
