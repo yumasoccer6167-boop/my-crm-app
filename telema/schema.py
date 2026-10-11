@@ -464,6 +464,21 @@ ALTER TABLE telema_call_logs ADD CONSTRAINT telema_calls_visit_method CHECK ((re
 ALTER TABLE telema_call_logs ADD COLUMN visit_at TEXT;
 ALTER TABLE telema_call_logs ADD COLUMN precheck_at TEXT;
 """,
+    # 10: CRM本体の顧客リストからの取り込み（管理者）。取り込んだ顧客・記録の対応を持ち、同じものを二重に取り込まない
+    #     （CRMのIDは Date.now() 由来で桁が大きいので BIGINT）
+    r"""
+CREATE TABLE telema_crm_links (
+  crm_customer_id  BIGINT PRIMARY KEY,
+  company_id       INTEGER NOT NULL REFERENCES telema_companies(id),
+  created_at       TEXT NOT NULL DEFAULT telema_now()
+);
+CREATE TABLE telema_crm_record_links (
+  crm_record_id  BIGINT PRIMARY KEY,
+  kind           TEXT NOT NULL,      -- call / visit / contract / skipped
+  target_id      INTEGER,
+  created_at     TEXT NOT NULL DEFAULT telema_now()
+);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

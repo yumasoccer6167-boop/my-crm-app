@@ -9,6 +9,8 @@ import type {
   CallExtraction,
   CallLog,
   CallStatus,
+  CustomerImportBatch,
+  CustomerImportSummary,
   Company,
   CompanyDetailData,
   CompanyListData,
@@ -85,6 +87,7 @@ type Api = {
   ai: { status: { $get: Call<{ available: boolean }> } };
   admin: {
     "ai-usage": { $get: Call<AIUsageData> };
+    "customer-import": { $get: Call<CustomerImportSummary>; $post: Call<CustomerImportBatch> };
     "assignee-mapping": {
       $get: Call<{ column: string; items: AssigneeMappingItem[] }>;
       $post: Call<{ updated: number; counts: Record<string, number> }>;

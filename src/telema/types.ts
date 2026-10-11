@@ -213,6 +213,25 @@ export type GraphEdge = {
   auto: boolean;
 };
 
+/** CRM本体の顧客リストからの取り込み（管理者）。件数の概要と、1回分（数十〜数百件）の結果 */
+export type CustomerImportSummary = { customers: number; imported_customers: number; records: number; imported_records: number };
+export type CustomerImportBatch = {
+  processed: number;
+  created: number;
+  merged: number;
+  calls: number;
+  visits: number;
+  contracts: number;
+  skipped_records: number;
+  relations: number;
+  review: { crm_id: number; name: string; reason: string; candidates: { id: number; name: string }[] }[];
+  unknown_assignees: Record<string, number>;
+  next_after_id: number;
+  done: boolean;
+  remaining: number;
+  applied: boolean;
+};
+
 /** 会員数が多くて、相関図に線を引かなかった加盟協会 */
 export type AutoSkipped = { id: number; name: string; count: number };
 
