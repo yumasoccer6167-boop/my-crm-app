@@ -281,7 +281,7 @@ def get_company(id):
                WHERE cs.company_id = %s ORDER BY cs.created_at''', (id,)),
         'field_sources': d.all('SELECT field, source, source_ref, confidence, updated_at FROM telema_company_field_sources WHERE company_id = %s', (id,)),
         'siblings': d.all(
-            '''SELECT c.id, c.company_name, s.label AS status_label FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
+            '''SELECT c.id, c.company_name, c.is_user, s.label AS status_label FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
                WHERE c.organization_id = %s AND c.id <> %s AND c.is_active = 1 ORDER BY c.company_name LIMIT 50''', (org_id, id)) if org_id else [],
         'pending_suggestions': d.value("SELECT COUNT(*) FROM telema_ai_suggestions WHERE company_id = %s AND status = 'pending'", (id,)),
         'summary_suggestion': _summary_draft(d, id),

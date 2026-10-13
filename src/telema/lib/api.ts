@@ -31,6 +31,7 @@ import type {
   PrefectureStat,
   Section,
   RelationItem,
+  Sibling,
   SummarySuggestion,
   UserRow,
   VisitTarget,
@@ -70,6 +71,8 @@ type Api = {
       "list-types": { $patch: Call<ListType[]> };
       calls: { $get: Call<CallLog[]>; $post: Call<CallLog> };
       "association-peers": { $get: Call<AssociationPeers[]> };
+      siblings: { $post: Call<{ organization_id: number; siblings: Sibling[] }> };
+      "leave-organization": { $post: Call<{ ok: true }> };
       relations: { $get: Call<RelationItem[]>; $post: Call<Record<string, unknown> & { id: number }> };
       summarize: { $post: Call<SummarySuggestion> };
     };

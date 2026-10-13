@@ -6,6 +6,8 @@ import { ContactsCard } from "../components/company/ContactsCard";
 import { ContractsCard } from "../components/company/ContractsCard";
 import { FieldsCard } from "../components/company/FieldsCard";
 import { RelationsCard } from "../components/company/RelationsCard";
+import { SiblingsCard } from "../components/company/SiblingsCard";
+import { SiblingTabs } from "../components/company/SiblingTabs";
 import { SuccessCasesCard } from "../components/company/SuccessCasesCard";
 import { SummaryCard } from "../components/company/SummaryCard";
 import { TagsRow } from "../components/company/TagsRow";
@@ -69,6 +71,8 @@ export function CompanyDetail() {
 
   return (
     <div className="space-y-4">
+      {/* 姉妹園（同じ法人の施設）がある施設は、園名のボタンでカルテを切り替えられる */}
+      <SiblingTabs current={{ id: company.id, company_name: company.company_name, is_user: company.is_user ? 1 : 0 }} organizationName={(organization?.name as string | undefined) ?? null} siblings={siblings} />
       {/* ヘッダー：次に何をするか・現在の状態・担当者 */}
       <section className="rounded-lg bg-white p-4 ring-1 ring-slate-200">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -240,31 +244,7 @@ export function CompanyDetail() {
               </>
             }
           />
-          {organization && (
-            <Card title="法人">
-              <div className="text-sm">
-                <div className="font-medium">{String(organization.name)}</div>
-                <div className="text-xs text-slate-500">
-                  {[organization.corporation_type, organization.phone, organization.representative_name && `代表 ${organization.representative_name}`].filter(Boolean).join(" · ")}
-                </div>
-                {siblings.length > 0 && (
-                  <div className="mt-3">
-                    <div className="mb-1 text-xs text-slate-500">同じ法人の施設（{siblings.length}）</div>
-                    <ul className="space-y-1">
-                      {siblings.map((s) => (
-                        <li key={s.id} className="flex items-center justify-between gap-2">
-                          <Link to={`/companies/${s.id}`} className="truncate text-indigo-700 hover:underline">
-                            {s.company_name}
-                          </Link>
-                          {s.status_label && <span className="shrink-0 text-xs text-slate-500">{s.status_label}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </Card>
-          )}
+          <SiblingsCard companyId={company.id} organization={organization} siblings={siblings} editable={editable} onChanged={reloadAll} />
           <Card title="リスト取得元">
             {sources.length ? (
               <ul className="space-y-1 text-sm">

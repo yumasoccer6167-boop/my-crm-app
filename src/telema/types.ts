@@ -213,6 +213,9 @@ export type GraphEdge = {
   auto: boolean;
 };
 
+/** 姉妹園（同じ法人の他の施設） */
+export type Sibling = { id: number; company_name: string; is_user: number; status_label: string | null };
+
 /** CRM本体の顧客リストからの取り込み（管理者）。件数の概要と、1回分（数十〜数百件）の結果 */
 export type CustomerImportSummary = { customers: number; imported_customers: number; records: number; imported_records: number };
 export type CustomerImportBatch = {
@@ -270,7 +273,7 @@ export type CompanyDetailData = {
   contacts: Contact[];
   sources: { id: number; source_id: number | null; source_row: number | null; created_at: string; name: string | null; source_type: string | null; file_name: string | null }[];
   field_sources: FieldSource[];
-  siblings: { id: number; company_name: string; status_label: string | null }[];
+  siblings: Sibling[];
   pending_suggestions: number;
   summary_suggestion: SummarySuggestion | null;
   contracts: Contract[];
