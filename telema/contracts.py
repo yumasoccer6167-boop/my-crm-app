@@ -3,7 +3,7 @@ import re
 
 from flask import jsonify, request
 
-from .common import CONTRACT_SELECT, audit, can_edit_company, company_visibility
+from .common import ASSOCIATION, CONTRACT_SELECT, audit, can_edit_company, company_visibility
 from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found
 from .normalize import escape_like
@@ -133,6 +133,12 @@ def list_contracts():
     elif assigned:
         where.append('ct.assigned_user_id = %s')
         params.append(_arg_int('assigned'))
+    association = request.args.get('association')
+    if association == 'none':      # 加盟協会が1つも付いていない施設の契約
+        where.append(f'NOT EXISTS (SELECT 1 FROM {ASSOCIATION.link} l WHERE l.company_id = c.id)')
+    elif association:
+        where.append(f'EXISTS (SELECT 1 FROM {ASSOCIATION.link} l WHERE l.company_id = c.id AND l.{ASSOCIATION.fk} = %s)')
+        params.append(_arg_int('association'))
     appointment = (request.args.get('appointment') or '')[:100]
     if appointment == '__none__':
         where.append("COALESCE(ct.appointment_user_name, '') = ''")
@@ -156,7 +162,7 @@ def list_contracts():
     items = d.all(
         f'''SELECT ct.id, ct.company_id, c.company_name, o.name AS organization_name, c.prefecture, c.city, c.is_user,
                   ct.product_name, ct.product_url, ct.contract_date, ct.assigned_user_id, u.display_name AS assigned_user_name,
-                  ct.appointment_user_name
+                  ct.appointment_user_name, {ASSOCIATION.names_column}
              {_CONTRACT_FROM} WHERE {clause}
              ORDER BY ct.contract_date {order}, ct.id {order} LIMIT %s OFFSET %s''',
         [*params, per_page, (page - 1) * per_page])
@@ -174,6 +180,15 @@ def contract_facets():
         'products': d.all(f'SELECT ct.product_name AS value, COUNT(*) AS n {base} GROUP BY 1 ORDER BY n DESC, 1', vis_params),
         'assignees': d.all(
             f'SELECT ct.assigned_user_id AS id, u.display_name AS name, COUNT(*) AS n {base} AND ct.assigned_user_id IS NOT NULL GROUP BY 1, 2 ORDER BY n DESC, 2', vis_params),
+        # 加盟協会ごとの契約件数（施設に付いている協会ごと。複数の協会に入っている施設の契約は、それぞれに数える）
+        'associations': d.all(
+            f'''SELECT m.id, m.name, COUNT(*) AS n
+                  FROM {ASSOCIATION.master} m
+                  JOIN {ASSOCIATION.link} l ON l.{ASSOCIATION.fk} = m.id
+                  JOIN telema_contracts ct ON ct.company_id = l.company_id AND ct.is_active = 1
+                  JOIN telema_companies c ON c.id = ct.company_id AND c.is_active = 1
+                 WHERE m.is_active = 1 AND {vis_sql}
+                 GROUP BY m.id, m.name, m.sort_order ORDER BY m.sort_order, m.id''', vis_params),
         'appointments': d.all(
             f"SELECT ct.appointment_user_name AS value, COUNT(*) AS n {base} AND COALESCE(ct.appointment_user_name, '') <> '' GROUP BY 1 ORDER BY n DESC, 1", vis_params),
     })

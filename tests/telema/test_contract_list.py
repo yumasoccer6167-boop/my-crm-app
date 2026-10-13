@@ -108,3 +108,36 @@ def test_施設一覧とマイページの一覧に契約件数が付く(client)
     assert counts == {'件数あり園': 2, '件数なし園': 0}
     today = {i['company_name']: i['contract_count'] for i in client.api('/dashboard')[1]['today']}
     assert today['件数あり園'] == 2 and today['件数なし園'] == 0
+
+
+def join_assoc(client, cid, name):
+    existing = next((a['id'] for a in client.api('/associations')[1] if a['name'] == name), None)
+    aid = existing or client.api('/associations', {'name': name})[1]['id']
+    cur = [a['id'] for a in client.api(f'/companies/{cid}')[1]['associations']]
+    client.api(f'/companies/{cid}/associations', {'association_ids': [*cur, aid]}, method='PATCH')
+    return aid
+
+
+def test_加盟協会で絞り込め_一覧に協会名が付く_選択肢に件数が出る(client):
+    a = make_company(client, '協会絞込A園')
+    b = make_company(client, '協会絞込B園')
+    c = make_company(client, '協会絞込C園')          # どの協会にも入っていない
+    sagami = join_assoc(client, a, '絞込相模原協会')
+    join_assoc(client, b, '絞込相模原協会')
+    pref = join_assoc(client, a, '絞込県連合会')
+    for cid, p in ((a, 'P1'), (a, 'P2'), (b, 'P3'), (c, 'P4')):
+        add(client, cid, f'協会商材{p}', '2025-05-05')
+    names = lambda q: sorted(i['product_name'] for i in listing(client, q)['items'])   # noqa: E731
+    assert names(f'?q=協会絞込&association={sagami}') == ['協会商材P1', '協会商材P2', '協会商材P3']
+    assert names(f'?q=協会絞込&association={pref}') == ['協会商材P1', '協会商材P2']
+    assert names('?q=協会絞込&association=none') == ['協会商材P4']
+    assert names(f'?q=協会絞込&association={pref}&product=協会商材P2') == ['協会商材P2']
+    a_row = next(i for i in listing(client, '?q=協会絞込A')['items'] if i['product_name'] == '協会商材P1')
+    assert a_row['associations'] == ['絞込相模原協会', '絞込県連合会']
+    gone = add(client, a, '協会商材P5', '2025-06-06')
+    client.api(f'/contracts/{gone["id"]}', {'is_active': False}, method='PATCH')      # 無効な契約は件数に入れない
+    f = {x['name']: x['n'] for x in client.api('/contracts/facets')[1]['associations']}
+    assert f['絞込相模原協会'] == 3 and f['絞込県連合会'] == 2          # 複数の協会に入っている施設の契約は、それぞれに数える
+    assert client.api('/contracts?association=abc')[0] == 400
+    client.api(f'/associations/{pref}', {'is_active': False}, method='PATCH')
+    assert '絞込県連合会' not in {x['name'] for x in client.api('/contracts/facets')[1]['associations']}

@@ -6,7 +6,7 @@ import { Search, ExternalLink } from 'lucide-react';
 const PER_PAGE = 50;
 const inputCls = 'w-full rounded-md border-0 bg-white px-2.5 py-1.5 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none';
 const btnSecondary = 'inline-flex items-center justify-center gap-1 rounded-md bg-white px-3 py-1.5 text-sm font-medium text-slate-800 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300';
-const EMPTY = { q: '', product: '', assigned: '', appointment: '', dateFrom: '', dateTo: '', order: 'desc' };
+const EMPTY = { q: '', product: '', association: '', assigned: '', appointment: '', dateFrom: '', dateTo: '', order: 'desc' };
 
 const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : '');
 const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
@@ -36,12 +36,13 @@ export default function ContractListView({ token, onOpenTelemaCompany }) {
     const p = new URLSearchParams({ page: String(page), per_page: String(PER_PAGE), order: f.order });
     if (debouncedQ) p.set('q', debouncedQ);
     if (f.product) p.set('product', f.product);
+    if (f.association) p.set('association', f.association);
     if (f.assigned) p.set('assigned', f.assigned);
     if (f.appointment) p.set('appointment', f.appointment);
     if (f.dateFrom) p.set('date_from', f.dateFrom);
     if (f.dateTo) p.set('date_to', f.dateTo);
     return p.toString();
-  }, [page, debouncedQ, f.product, f.assigned, f.appointment, f.dateFrom, f.dateTo, f.order]);
+  }, [page, debouncedQ, f.product, f.association, f.assigned, f.appointment, f.dateFrom, f.dateTo, f.order]);
 
   useEffect(() => {
     let alive = true;
@@ -64,7 +65,7 @@ export default function ContractListView({ token, onOpenTelemaCompany }) {
 
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
-  const filtered = f.q || f.product || f.assigned || f.appointment || f.dateFrom || f.dateTo;
+  const filtered = f.q || f.product || f.association || f.assigned || f.appointment || f.dateFrom || f.dateTo;
 
   return (
     <div className="space-y-4">
@@ -87,6 +88,14 @@ export default function ContractListView({ token, onOpenTelemaCompany }) {
             <select value={f.product} onChange={e => set('product', e.target.value)} className={inputCls}>
               <option value="">すべて</option>
               {(facets?.products || []).map(p => <option key={p.value} value={p.value}>{p.value}（{p.n}）</option>)}
+            </select>
+          </label>
+          <label>
+            <Label>加盟協会</Label>
+            <select value={f.association} onChange={e => set('association', e.target.value)} className={inputCls}>
+              <option value="">すべて</option>
+              {(facets?.associations || []).map(a => <option key={a.id} value={a.id}>{a.name}（{a.n}）</option>)}
+              <option value="none">加盟協会なし</option>
             </select>
           </label>
           <label>
@@ -155,6 +164,11 @@ export default function ContractListView({ token, onOpenTelemaCompany }) {
                     <button type="button" onClick={() => onOpenTelemaCompany(c.company_id)} className="text-left font-medium text-indigo-700 hover:underline">{c.company_name}</button>
                     {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
                     {c.organization_name && <div className="text-xs text-slate-500">{c.organization_name}</div>}
+                    {(c.associations || []).length > 0 && (
+                      <div className="mt-0.5 flex flex-wrap gap-1">
+                        {c.associations.map(n => <span key={n} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800 ring-1 ring-inset ring-emerald-200">{n}</span>)}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 font-medium text-slate-800">{c.product_name}</td>
                   <td className="px-3 py-2">
