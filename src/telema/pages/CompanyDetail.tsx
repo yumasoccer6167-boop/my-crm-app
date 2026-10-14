@@ -177,7 +177,7 @@ export function CompanyDetail() {
           {editable ? (
             <CallEntry companyId={company.id} company={company} organization={organization} phone={phone} contacts={contacts} isUser={!!company.is_user} onSaved={reloadAll} />
           ) : (
-            <div className="rounded-md bg-slate-100 p-3 text-sm text-slate-600">他の営業担当の企業のため、架電・訪問の登録はできません</div>
+            <div className="rounded-md bg-slate-100 p-3 text-sm text-slate-600">他の営業担当の企業のため、閲覧のみです（架電・訪問などの登録・編集はできません）</div>
           )}
           <SummaryCard
             companyId={company.id}

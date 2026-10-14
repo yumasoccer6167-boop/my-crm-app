@@ -195,14 +195,13 @@ export function Companies() {
             <option value="">営業担当</option>
             <option value="me">自分</option>
             <option value="none">未割当</option>
-            {me.role !== "sales" &&
-              users
-                .filter((u) => u.is_active)
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
+            {users
+              .filter((u) => u.is_active)
+              .map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
           </select>
           <select {...sel("list_type")}>
             <option value="">リスト種類</option>
@@ -284,7 +283,7 @@ export function Companies() {
                 onClear={() => setSelected(new Set())}
               />
             )}
-            <CompanyTable items={data.items} showAssignee={me.role !== "sales"} selected={selected} onSelectedChange={setSelected} highlightId={highlightId} />
+            <CompanyTable items={data.items} showAssignee selected={selected} onSelectedChange={setSelected} highlightId={highlightId} />
             {pages > 1 && (
               <div className="mt-4 flex items-center justify-center gap-3 text-sm">
                 <Button size="sm" disabled={page <= 1} onClick={() => update({ page: String(page - 1) })}>

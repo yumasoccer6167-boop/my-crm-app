@@ -65,7 +65,15 @@ def audit(db, user_id, action, entity_type, entity_id, before=None, after=None):
 
 
 def company_visibility(user, alias='c'):
-    """会社の閲覧範囲。sales は「自分の担当」と「未割当（共有プール）」のみ。manager / admin は全件"""
+    """会社の閲覧（検索・詳細・一覧）の範囲。sales は「自分の担当」「未割当（共有プール）」に加えて、ユーザー（導入済み）の施設は誰の担当でも見られる。
+    manager / admin は全件。見られても編集できるかは can_edit_company（ユーザーでも他の人の担当なら、sales は閲覧のみ）"""
+    if user['role'] == 'sales':
+        return f'({alias}.assigned_user_id = %s OR {alias}.assigned_user_id IS NULL OR {alias}.is_user = 1)', [user['id']]
+    return '1 = 1', []
+
+
+def company_workload(user, alias='c'):
+    """自分が営業として動く範囲（今日やること・件数・訪問ルートの対象）。sales は「自分の担当」と「未割当」のみ。manager / admin は全件"""
     if user['role'] == 'sales':
         return f'({alias}.assigned_user_id = %s OR {alias}.assigned_user_id IS NULL)', [user['id']]
     return '1 = 1', []

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from flask import jsonify, request
 
-from .common import CONTRACT_COUNT_COLUMN, JST, TAG_KINDS, company_visibility, jst_day_range, jst_month_range
+from .common import CONTRACT_COUNT_COLUMN, JST, TAG_KINDS, company_workload, jst_day_range, jst_month_range
 from .context import ApiError, current_user, db
 from .routes import bp
 
@@ -20,7 +20,7 @@ LIST_FROM = '''FROM telema_companies c
 @bp.get('/dashboard')
 def get_dashboard():
     user = current_user()
-    vis_sql, vis_params = company_visibility(user)
+    vis_sql, vis_params = company_workload(user)       # 件数・今日の予定は、自分の担当と未割当（閲覧できるユーザー全員は含めない）
     today_start, today_end = jst_day_range(0)
     d = db()
     # 自分の担当 + 未割当 を「今日やること」の対象にする（manager/admin は全体を見る）
