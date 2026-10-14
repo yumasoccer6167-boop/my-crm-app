@@ -359,10 +359,14 @@ function useSyncedData(initial, token, onUnauthorized) {
     };
     document.addEventListener('visibilitychange', onBack);
     window.addEventListener('focus', onBack);
+    // 表示名の変更などで、サーバー側のデータが書き換わったとき（crm:refresh）はすぐに読み込み直す
+    const onRefresh = () => refreshRef.current();
+    window.addEventListener('crm:refresh', onRefresh);
     const timer = setInterval(() => { if (Date.now() - lastLoadRef.current > REFRESH_INTERVAL_MS - 1000) refreshRef.current(); }, REFRESH_INTERVAL_MS);
     return () => {
       document.removeEventListener('visibilitychange', onBack);
       window.removeEventListener('focus', onBack);
+      window.removeEventListener('crm:refresh', onRefresh);
       clearInterval(timer);
     };
   }, [token, loaded]);
@@ -3943,9 +3947,11 @@ function MembersManagement({ token, currentUser, departments, showAlert, showCon
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '保存に失敗しました');
-      showAlert(isNew ? 'メンバーを追加しました。' : 'メンバー情報を更新しました。');
+      showAlert(isNew ? 'メンバーを追加しました。' : data.renamed ? `メンバー情報を更新しました。顧客・記録の担当者 ${data.renamed} 件も、新しい名前に付け替えました。` : 'メンバー情報を更新しました。');
       setEditing(null);
       load();
+      window.dispatchEvent(new Event('crm:refresh'));
+      window.dispatchEvent(new Event('crm:members-changed'));
     } catch (err) {
       showAlert(err.message);
     }
@@ -4533,7 +4539,8 @@ function MyPageView({ user, token, onLogout, updateUser, personal, updatePersona
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || '変更に失敗しました。サーバー側に /api/me/name の追加が必要な可能性があります。');
       updateUser({ displayName: name });
-      showAlert('表示名を変更しました。');
+      window.dispatchEvent(new Event('crm:refresh'));
+      showAlert(data.renamed ? `表示名を変更しました。顧客・記録の担当者 ${data.renamed} 件も、新しい名前に付け替えました。` : '表示名を変更しました。');
     } catch (err) { showAlert(err.message); }
   };
 
@@ -4812,13 +4819,16 @@ export default function App() {
     (myPersonal.emailTemplates || []).map(t => ({ ...t, name: `【マイ】${t.name}` })),
   [myPersonal.emailTemplates]);
 
-  // メンバー一覧（担当者選択・絞り込み用）を取得
+  // メンバー一覧（担当者選択・絞り込み用）を取得。メンバーの表示名などが変わったとき（crm:members-changed）も読み直す
   useEffect(() => {
-    if (!token) return;
-    fetch('/api/members', { headers: { Authorization: `Bearer ${token}` } })
+    if (!token) return undefined;
+    const load = () => fetch('/api/members', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => { if (!res.ok) throw new Error(); return res.json(); })
       .then(list => setMembers(Array.isArray(list) ? list : []))
       .catch(() => setMembers([]));
+    load();
+    window.addEventListener('crm:members-changed', load);
+    return () => window.removeEventListener('crm:members-changed', load);
   }, [token]);
 
   // 既存データに今回追加したテレアポの結果フラグが無ければ一度だけ追記する

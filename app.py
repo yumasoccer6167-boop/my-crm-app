@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from flask import Flask, request, jsonify, send_from_directory
 import psycopg2
@@ -217,6 +218,35 @@ def change_own_password():
     return jsonify({'status': 'success'})
 
 
+def _compact_name(s):
+    return re.sub(r'[\s\u3000]', '', s or '')
+
+
+def cascade_rename(cur, uid, old_name, new_name):
+    """表示名を変えたとき、顧客・記録の「担当者」（名前の文字列）も新しい名前に付け替える。
+    名前を変えても同じアカウントとして扱われ、過去の顧客・記録が一覧から外れない。同じ名前のメンバーが他にいるときは、取り違えを避けて付け替えない。
+    空白（全角含む）の違いは同じ名前とみなす。呼び出し側のトランザクションの中で行う。付け替えた件数を返す"""
+    old, new = (old_name or '').strip(), (new_name or '').strip()
+    if not old or not new or old == new:
+        return 0
+    cur.execute('SELECT display_name FROM users WHERE id <> %s', (uid,))
+    if any(_compact_name(r[0]) == _compact_name(old) for r in cur.fetchall()):
+        return 0
+    cur.execute('SELECT data FROM app_state WHERE id = 1 FOR UPDATE')
+    row = cur.fetchone()
+    data = row[0] if row and row[0] else {}
+    changed = 0
+    for key in ('customers', 'records'):
+        for item in data.get(key) or []:
+            if isinstance(item, dict) and item.get('assignedTo') != new and _compact_name(item.get('assignedTo')) == _compact_name(old):
+                item['assignedTo'] = new
+                changed += 1
+    if changed:
+        cur.execute('INSERT INTO app_state_backups (data, note) VALUES (%s, %s)', (json.dumps(row[0]), f'表示名の変更前（{old} → {new}）'))
+        cur.execute('UPDATE app_state SET data = %s, updated_at = NOW() WHERE id = 1', (json.dumps(data),))
+    return changed
+
+
 @app.route('/api/me/name', methods=['PUT'])
 def change_own_name():
     user = get_current_user()
@@ -229,10 +259,11 @@ def change_own_name():
     conn = get_conn()
     cur = conn.cursor()
     cur.execute('UPDATE users SET display_name = %s WHERE id = %s', (display_name, user['id']))
+    renamed = cascade_rename(cur, user['id'], user.get('displayName'), display_name)
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({'status': 'success'})
+    return jsonify({'status': 'success', 'renamed': renamed})
 
 
 @app.route('/api/me/photo', methods=['PUT'])
@@ -334,8 +365,13 @@ def update_user(uid):
     cur = conn.cursor()
     if body.get('password'):
         cur.execute('UPDATE users SET password_hash = %s WHERE id = %s', (generate_password_hash(body['password']), uid))
+    renamed = 0
     if 'displayName' in body:
+        cur.execute('SELECT display_name FROM users WHERE id = %s', (uid,))
+        before = cur.fetchone()
         cur.execute('UPDATE users SET display_name = %s WHERE id = %s', (body['displayName'], uid))
+        if before:
+            renamed = cascade_rename(cur, uid, before[0], body['displayName'])
     if 'role' in body and body['role'] in VALID_ROLES:
         cur.execute('UPDATE users SET role = %s WHERE id = %s', (body['role'], uid))
     if 'department' in body:
@@ -349,7 +385,7 @@ def update_user(uid):
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({'status': 'success'})
+    return jsonify({'status': 'success', 'renamed': renamed})
 
 
 @app.route('/api/users/<int:uid>', methods=['DELETE'])
