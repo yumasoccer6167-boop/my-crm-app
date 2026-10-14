@@ -191,7 +191,7 @@ export function CompanyDetail() {
           {calls.error ? (
             <ErrorBox message={calls.error} onRetry={calls.reload} />
           ) : (
-            <Timeline calls={calls.data ?? []} contacts={contacts} company={company} organization={organization} nextCallAt={nextCallAt} nextAction={(company.next_action as string | null) ?? null} isUser={!!company.is_user} onChanged={reloadAll} />
+            <Timeline calls={calls.data ?? []} contacts={contacts} company={company} organization={organization} nextCallAt={nextCallAt} nextAction={(company.next_action as string | null) ?? null} isUser={!!company.is_user} editable={editable} onChanged={reloadAll} />
           )}
         </div>
 

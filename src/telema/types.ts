@@ -99,6 +99,9 @@ export type CallLog = {
   /** 結果が「時間設定」のときの、訪問する日時と事前確認の日時 */
   visit_at: string | null;
   precheck_at: string | null;
+  /** 対応済みにした時刻（日時を直すと外れる） */
+  visit_done_at: string | null;
+  precheck_done_at: string | null;
   company_id: number;
   contact_id: number | null;
   contact_name: string | null;
@@ -213,6 +216,23 @@ export type GraphEdge = {
 
 /** 同じ加盟協会の施設のまとまり（相関図では線ではなく「★ 協会名」のグループで表示）。2施設以上が加盟している協会だけ */
 export type AssociationGroup = { id: number; name: string; members: number[] };
+
+/** マイページの「今日の予定」（訪問予定・訪問前連絡予定・再コール）。id は、訪問・訪問前連絡は架電記録、再コールは施設のID */
+export type ScheduleKind = "visit" | "precheck" | "recall";
+export type ScheduleItem = {
+  id: number;
+  company_id: number;
+  company_name: string;
+  at: string;
+  raw_note: string | null;
+  contact_name: string | null;
+  phone: string | null;
+  is_user: number;
+  user_name: string | null;
+  /** 今日より前の、対応していない予定 */
+  overdue: boolean;
+};
+export type ScheduleToday = Record<ScheduleKind, ScheduleItem[]>;
 
 /** 姉妹園（同じ法人の他の施設） */
 export type Sibling = { id: number; company_name: string; is_user: number; status_label: string | null };

@@ -31,6 +31,7 @@ import type {
   PrefectureStat,
   Section,
   RelationItem,
+  ScheduleToday,
   Sibling,
   SummarySuggestion,
   UserRow,
@@ -89,6 +90,7 @@ type Api = {
       analyze: { $post: Call<{ ok: true; extraction: CallExtraction; next_call_at: string | null }> };
     };
   };
+  schedule: { today: { $get: Call<ScheduleToday> }; done: { $post: Call<{ done: number; skipped: number }> } };
   ai: { status: { $get: Call<{ available: boolean }> } };
   admin: {
     "ai-usage": { $get: Call<AIUsageData> };

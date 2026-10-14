@@ -204,6 +204,10 @@ def update_call(id):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には付けられません）')
 
     changes = {k: v for k, v in b.items() if call[k] != v}
+    # 訪問する日時・事前確認日時を直した（または外れた）ときは、「対応済み」も外す（新しい予定として、また表示される）
+    for k, done in (('visit_at', 'visit_done_at'), ('precheck_at', 'precheck_done_at')):
+        if k in changes and call[done] is not None:
+            changes[done] = None
     if not changes:
         return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (id,)))
 

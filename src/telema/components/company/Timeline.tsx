@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CallLog, Company, Contact, VisitMethod } from "../../types";
 import { fmtAppointmentDate } from "../../lib/appointment-format";
+import { markScheduleDone } from "../../lib/schedule";
 import { AppointmentCopy } from "./AppointmentCopy";
 import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput, isOverdue, toLocalInput } from "../../lib/format";
@@ -210,6 +211,7 @@ export function Timeline({
   nextCallAt,
   nextAction,
   isUser,
+  editable,
   onChanged,
 }: {
   calls: CallLog[];
@@ -221,6 +223,8 @@ export function Timeline({
   nextAction: string | null;
   /** ユーザー（導入済み）の施設なら、タイムラインを部署別（営業部・制作部・CS など）に切り替えて見られる */
   isUser: boolean;
+  /** この施設を編集できるか（担当している・未割当・管理者）。次回架電予定などを「対応済み」にできる */
+  editable: boolean;
   onChanged: () => void;
 }) {
   const { me, aiAvailable, sections } = useMasters();
@@ -247,6 +251,17 @@ export function Timeline({
     } finally {
       setRunning(null);
       onChanged();
+    }
+  }
+
+  /** 予定（次回架電・訪問する日時・事前確認日時）を対応済みにする。表示から消える */
+  async function markDone(kind: "recall" | "visit" | "precheck", id: number) {
+    try {
+      const r = await markScheduleDone([{ kind, id }]);
+      if (r.done === 0) alert("対応済みにできませんでした（すでに対応済みか、担当外の予定です）");
+      onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -305,6 +320,11 @@ export function Timeline({
             <span className={`absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4 ring-white ${isOverdue(nextCallAt) ? "bg-rose-500" : "bg-indigo-500"}`} />
             <div className="text-sm font-semibold text-indigo-800">
               {fmtDateTime(nextCallAt)} 次回架電予定{isOverdue(nextCallAt) && <span className="ml-2 text-xs text-rose-600">期限超過</span>}
+              {editable && (
+                <Button size="sm" variant="ghost" className="ml-2 text-indigo-700" onClick={() => markDone("recall", company.id)}>
+                  対応済み
+                </Button>
+              )}
             </div>
             {nextAction && <p className="mt-0.5 text-sm text-slate-700">{nextAction}</p>}
           </li>
@@ -352,9 +372,26 @@ export function Timeline({
                 <>
                   {cl.ai_summary && <p className="mt-1 rounded bg-indigo-50 px-2 py-1 text-sm text-indigo-900">AI要約：{cl.ai_summary}</p>}
                   {(cl.visit_at || cl.precheck_at) && (
-                    <p className="mt-1 text-sm text-amber-800">
-                      {cl.visit_at && <span className="mr-3">訪問 {fmtAppointmentDate(cl.visit_at)}</span>}
-                      {cl.precheck_at && <span>事前確認 {fmtAppointmentDate(cl.precheck_at)}</span>}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-3 text-sm text-amber-800">
+                      {([
+                        ["visit", "訪問", cl.visit_at, cl.visit_done_at],
+                        ["precheck", "事前確認", cl.precheck_at, cl.precheck_done_at],
+                      ] as const).map(([kindKey, label, when, doneAt]) =>
+                        when ? (
+                          <span key={kindKey} className={doneAt ? "text-slate-400 line-through" : ""}>
+                            {label} {fmtAppointmentDate(when)}
+                            {doneAt ? (
+                              <span className="ml-1 no-underline">（対応済み）</span>
+                            ) : (
+                              (editable || cl.user_id === me.id) && (
+                                <button type="button" className="ml-1.5 rounded px-1.5 text-xs text-indigo-700 hover:bg-indigo-50" onClick={() => markDone(kindKey, cl.id)}>
+                                  対応済み
+                                </button>
+                              )
+                            )}
+                          </span>
+                        ) : null,
+                      )}
                     </p>
                   )}
                   {cl.raw_note && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{cl.raw_note}</p>}

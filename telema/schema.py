@@ -479,6 +479,11 @@ CREATE TABLE telema_crm_record_links (
   created_at     TEXT NOT NULL DEFAULT telema_now()
 );
 """,
+    # 11: 訪問する日時・事前確認日時（時間設定の記録）の「対応済み」。付けた時刻を持ち、日時を直したら外す。再コール（次回架電）の対応済みは、次回架電を空にする
+    r"""
+ALTER TABLE telema_call_logs ADD COLUMN visit_done_at TEXT;
+ALTER TABLE telema_call_logs ADD COLUMN precheck_done_at TEXT;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

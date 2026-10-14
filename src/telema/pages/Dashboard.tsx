@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { CallStatsCard } from "../components/CallStatsCard";
 import { CompanyTable } from "../components/CompanyTable";
+import { TodaySchedule } from "../components/TodaySchedule";
 import { Card, Empty, ErrorBox, Loading } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import { useApi } from "../lib/useApi";
@@ -32,6 +33,9 @@ export function Dashboard() {
 
   return (
     <div className="space-y-5">
+      {/* 0. 今日の予定（自分）：訪問予定・訪問前連絡予定・再コール。対応済みにすると消える */}
+      <TodaySchedule onChanged={() => void reload()} />
+
       {/* 1. 次に何をするか */}
       <Card
         title={
