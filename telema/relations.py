@@ -1,51 +1,29 @@
 """施設どうしのつながり（担当者の知り合い関係）と相関図。"""
 from flask import jsonify, request
 
-from .common import audit, can_edit_company, company_visibility
+from .common import ASSOCIATION, audit, can_edit_company, company_visibility
 from .context import ApiError, body, current_user, db, forbidden, not_found
 from .routes import bp
 from .validate import Bool, Int, Str, parse, parse_id
 
 
-# 同じ加盟協会の施設どうしは、登録しなくても自動でつながる（相関図の線・カルテのつながり）。保存はせず、加盟協会の登録から都度つくる
-# （協会を付け外しすればつながりも増減する）。会員数が多い協会は線が膨大になるため、相関図には線を引かない（カルテには一覧で出す）
-AUTO_EDGE_MAX_MEMBERS = 60
+# 同じ加盟協会の施設は、相関図で線ではなく「★ 協会名」のまとまり（グループ）として表示する。保存はせず、加盟協会の登録から都度つくる
+# （協会を付け外しすればまとまりも増減する）。1施設だけの協会は、まとまりにならないので出さない
 AUTO_PEERS_LIMIT = 100
 
 
-def _auto_edges(user):
-    """同じ加盟協会の施設の組（source < target）。同じ組が複数の協会に加盟していれば協会名をまとめる。
-    すでに手動のつながりがある組は手動の方を使うので出さない。戻り値: (線の一覧, 会員数が多くて線を引かなかった協会)"""
-    d = db()
-    vis_a, pa = company_visibility(user, 'a')
-    vis_b, pb = company_visibility(user, 'b')
-    rows = d.all(
-        f'''WITH members AS (
-             SELECT ca.association_id, ca.company_id FROM telema_company_associations ca
-               JOIN telema_associations t ON t.id = ca.association_id AND t.is_active = 1
-               JOIN telema_companies c ON c.id = ca.company_id AND c.is_active = 1
-           ), sizes AS (SELECT association_id, COUNT(*) AS n FROM members GROUP BY association_id)
-           SELECT m1.company_id AS source, m2.company_id AS target, array_agg(t.name ORDER BY t.sort_order, t.id) AS names
-             FROM members m1
-             JOIN members m2 ON m2.association_id = m1.association_id AND m2.company_id > m1.company_id
-             JOIN sizes z ON z.association_id = m1.association_id AND z.n <= %s
-             JOIN telema_associations t ON t.id = m1.association_id
-             JOIN telema_companies a ON a.id = m1.company_id
-             JOIN telema_companies b ON b.id = m2.company_id
-            WHERE {vis_a} AND {vis_b}
-              AND NOT EXISTS (SELECT 1 FROM telema_company_relations r
-                               WHERE r.company_a_id = m1.company_id AND r.company_b_id = m2.company_id AND r.is_active = 1)
-            GROUP BY 1, 2 ORDER BY 1, 2''',
-        [AUTO_EDGE_MAX_MEMBERS, *pa, *pb])
-    # 線の id は保存していないので、負の連番（手動のつながりの id と重ならない）
-    edges = [{'id': -(i + 1), 'source': r['source'], 'target': r['target'], 'source_contact_name': None, 'target_contact_name': None,
-              'label': '、'.join(r['names']), 'notes': None, 'auto': True} for i, r in enumerate(rows)]
-    skipped = d.all(
-        '''SELECT t.id, t.name, COUNT(*) AS count FROM telema_company_associations ca
-             JOIN telema_associations t ON t.id = ca.association_id AND t.is_active = 1
+def _association_groups(user):
+    """見える範囲の施設で、2施設以上が加盟している有効な協会。戻り値: [{id, name, members:[施設ID]}]（協会マスタの並び順）"""
+    vis_sql, vis_params = company_visibility(user, 'c')
+    rows = db().all(
+        f'''SELECT t.id, t.name, array_agg(ca.company_id ORDER BY ca.company_id) AS members
+             FROM {ASSOCIATION.master} t
+             JOIN {ASSOCIATION.link} ca ON ca.{ASSOCIATION.fk} = t.id
              JOIN telema_companies c ON c.id = ca.company_id AND c.is_active = 1
-            GROUP BY t.id, t.name HAVING COUNT(*) > %s ORDER BY t.sort_order, t.id''', (AUTO_EDGE_MAX_MEMBERS,))
-    return edges, skipped
+            WHERE t.is_active = 1 AND {vis_sql}
+            GROUP BY t.id, t.name, t.sort_order HAVING COUNT(*) >= 2
+            ORDER BY t.sort_order, t.id''', vis_params)
+    return [{'id': r['id'], 'name': r['name'], 'members': r['members']} for r in rows]
 
 
 def _visible_companies(user, ids):
@@ -105,7 +83,7 @@ def company_relations(id):
 
 @bp.get('/companies/<id>/association-peers')
 def association_peers(id):
-    """同じ加盟協会の施設（自動のつながり）。協会ごとに、見える範囲の施設を最大 AUTO_PEERS_LIMIT 件まで返す"""
+    """同じ加盟協会の施設。協会ごとに、見える範囲の施設を最大 AUTO_PEERS_LIMIT 件まで返す"""
     id = parse_id(id)
     user = current_user()
     d = db()
@@ -124,10 +102,7 @@ def association_peers(id):
         peers = d.all(
             f'''SELECT o.id, o.company_name, o.address, o.is_user, s.label AS status_label, s.category AS status_category {base}
                 ORDER BY o.company_name_normalized, o.id LIMIT %s''', [*params, AUTO_PEERS_LIMIT])
-        size = d.value('SELECT COUNT(*) FROM telema_company_associations ca JOIN telema_companies c ON c.id = ca.company_id AND c.is_active = 1 '
-                       'WHERE ca.association_id = %s', (a['id'],))
-        out.append({'association_id': a['id'], 'association_name': a['name'], 'total': total, 'peers': peers,
-                    'in_graph': size <= AUTO_EDGE_MAX_MEMBERS})
+        out.append({'association_id': a['id'], 'association_name': a['name'], 'total': total, 'peers': peers})
     return jsonify(out)
 
 
@@ -219,9 +194,9 @@ def relation_graph():
             LEFT JOIN telema_contacts cb ON cb.id = r.contact_b_id
             WHERE r.is_active = 1 AND a.is_active = 1 AND b.is_active = 1 AND {vis_a} AND {vis_b}''',
         [*pa, *pb])
-    auto, skipped = _auto_edges(user)
-    edges = [{**e, 'auto': False} for e in edges] + auto
-    ids = list({i for e in edges for i in (e['source'], e['target'])})
+    groups = _association_groups(user)
+    # 協会のまとまりに入っている施設も、点として出す（つながりが無くても、協会ごとにまとまって見える）
+    ids = list({i for e in edges for i in (e['source'], e['target'])} | {m for g in groups for m in g['members']})
     vis_sql, vis_params = company_visibility(user)
     nodes = d.all(
         f'''SELECT c.id, c.company_name, c.address, c.prefecture, c.city, {_key_contact("name")} AS contact_name, {_key_contact("role")} AS contact_role,
@@ -231,4 +206,4 @@ def relation_graph():
               AND (c.id = ANY(%s) {"OR c.is_user = 1" if customers == '1' else ''})
             ORDER BY c.company_name_normalized LIMIT 2000''',
         [*vis_params, ids])
-    return jsonify({'nodes': nodes, 'edges': edges, 'auto_skipped': skipped})
+    return jsonify({'nodes': nodes, 'edges': edges, 'association_groups': groups})

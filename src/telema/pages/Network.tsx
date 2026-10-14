@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link, useSearchParams } from "react-router";
-import type { GraphEdge } from "../types";
+import type { AssociationGroup, GraphEdge } from "../types";
 import { UserTag } from "../components/CompanyPicker";
 import { ConnectForm, type PickedCompany } from "../components/ConnectForm";
 import { NetworkList } from "../components/NetworkList";
@@ -32,13 +32,14 @@ const BG = "#ffffff";
 const CROSS_LINE = "#f97316";
 
 type View = { k: number; x: number; y: number };
-type Sim = { nodes: SimNode[]; byId: Map<number, SimNode>; links: SimLink[]; groups: Map<string, Group>; alpha: number };
+type Cluster = { id: number; name: string; nodes: SimNode[] };
+type Sim = { nodes: SimNode[]; byId: Map<number, SimNode>; links: SimLink[]; groups: Map<string, Group>; clusters: Cluster[]; alpha: number };
 
 export function Network() {
   const [params, setParams] = useSearchParams();
   const customers = params.get("customers") !== "0";
   const graph = useApi(() => unwrap(api.relations.graph.$get({ query: { customers: customers ? "1" : "0" } })), [customers]);
-  // 同じ加盟協会による自動のつながりを図に出すか。選んだ状態はこのブラウザに覚えておく
+  // 同じ加盟協会の施設を、「★ 協会名」のグループとして図に出すか（線では結ばない）。選んだ状態はこのブラウザに覚えておく
   const [showAssoc, setShowAssoc] = useState(() => {
     try {
       return localStorage.getItem("telema:network-assoc") !== "0";
@@ -47,14 +48,19 @@ export function Network() {
     }
   });
   const raw = graph.data;
-  const assocEdgeCount = raw?.edges.filter((e) => e.auto).length ?? 0;
-  // オフのときは、加盟協会の線を外す。その線だけでつながっていた施設は点からも外す（ユーザーは「つながりの無いユーザーも表示」に従う）
+  const assocGroupCount = raw?.association_groups.length ?? 0;
+  // オフのときは、加盟協会のグループを外す。グループに入っているだけで、つながりの線が無い施設は点からも外す（ユーザーは「つながりの無いユーザーも表示」に従う）
   const data = useMemo(() => {
     if (!raw || showAssoc) return raw;
-    const edges = raw.edges.filter((e) => !e.auto);
-    const linked = new Set(edges.flatMap((e) => [e.source, e.target]));
-    return { ...raw, edges, nodes: raw.nodes.filter((n) => linked.has(n.id) || (customers && !!n.is_user)) };
+    const linked = new Set(raw.edges.flatMap((e) => [e.source, e.target]));
+    return { ...raw, association_groups: [] as AssociationGroup[], nodes: raw.nodes.filter((n) => linked.has(n.id) || (customers && !!n.is_user)) };
   }, [raw, showAssoc, customers]);
+  // 施設ごとの加盟協会（★ で表示するもの）
+  const starOf = useMemo(() => {
+    const m = new Map<number, string[]>();
+    for (const g of data?.association_groups ?? []) for (const id of g.members) m.set(id, [...(m.get(id) ?? []), g.name]);
+    return m;
+  }, [data]);
   const focus = Number(params.get("focus")) || null;
   const all = useMemo(() => new Map((data?.nodes ?? []).map((n) => [n.id, n])), [data]);
   // 表示する都道府県（"all" は全体）。カルテから開いたときはその施設の都道府県
@@ -73,7 +79,7 @@ export function Network() {
   const [size, setSize] = useState({ w: 1000, h: 700 });
   const sizeRef = useRef(size);
   sizeRef.current = size;
-  const sim = useRef<Sim>({ nodes: [], byId: new Map(), links: [], groups: new Map(), alpha: 0 });
+  const sim = useRef<Sim>({ nodes: [], byId: new Map(), links: [], groups: new Map(), clusters: [], alpha: 0 });
   const drag = useRef<{ kind: "pan" | "node" | "pref"; id?: number; pref?: string; sx: number; sy: number; vx: number; vy: number; moved: boolean } | null>(
     null,
   );
@@ -198,7 +204,7 @@ export function Network() {
       // 全体表示は配置が決まっているので力学計算をしない
       cancelAnimationFrame(raf.current);
       running.current = false;
-      sim.current = { nodes: [], byId: new Map(), links: [], groups: new Map(bubbles.list.map((b) => [b.key, b])), alpha: 0 };
+      sim.current = { nodes: [], byId: new Map(), links: [], groups: new Map(bubbles.list.map((b) => [b.key, b])), clusters: [], alpha: 0 };
       needsFit.current = true;
       fitView();
       return;
@@ -221,7 +227,11 @@ export function Network() {
       const t = byId.get(e.target);
       return s && t ? [{ s, t }] : [];
     });
-    sim.current = { nodes, byId, links, groups, alpha: 1 };
+    // 加盟協会のまとまり（この画面に出ている点が2つ以上あるものだけ）
+    const clusters = (data?.association_groups ?? [])
+      .map((g) => ({ id: g.id, name: g.name, nodes: g.members.flatMap((id) => (byId.get(id) && !byId.get(id)!.ghost ? [byId.get(id)!] : [])) }))
+      .filter((c) => c.nodes.length >= 2);
+    sim.current = { nodes, byId, links, groups, clusters, alpha: 1 };
     needsFit.current = true;
     fitView();
     restart();
@@ -246,7 +256,7 @@ export function Network() {
     let frame = 0;
     const loop = () => {
       const s = sim.current;
-      for (let i = 0; i < 3; i++) step(s.nodes, s.links, s.groups, s.alpha);
+      for (let i = 0; i < 3; i++) step(s.nodes, s.links, s.groups, s.alpha, s.clusters.map((c) => c.nodes));
       fitGroups(s.nodes, s.groups);
       s.alpha *= 0.97;
       // 利用者が動かすまでは、配置が広がるのに合わせて全体が収まるように追従する
@@ -536,7 +546,7 @@ export function Network() {
           />
           つながりの無いユーザーも表示
         </label>
-        <label className="flex items-center gap-1.5 text-sm text-slate-700" title="基本情報の加盟協会が同じ施設どうしを、自動で線につなぎます">
+        <label className="flex items-center gap-1.5 text-sm text-slate-700" title="基本情報の加盟協会が同じ施設を、線ではなく「★ 協会名」のグループにまとめて表示します">
           <input
             type="checkbox"
             checked={showAssoc}
@@ -549,7 +559,7 @@ export function Network() {
               }
             }}
           />
-          加盟協会のつながりを表示{assocEdgeCount > 0 && <span className="text-xs text-slate-500">（{assocEdgeCount}本）</span>}
+          ★ 加盟協会のグループを表示{assocGroupCount > 0 && <span className="text-xs text-slate-500">（{assocGroupCount}協会）</span>}
         </label>
         <Button size="sm" variant="primary" className="ml-auto" onClick={() => setConnect({ initial: sel })}>
           ＋つなぐ
@@ -787,6 +797,31 @@ export function Network() {
                         </g>
                       );
                     })}
+                    {/* 加盟協会のグループ：同じ協会の施設を囲み、「★ 協会名」を添える（線では結ばない） */}
+                    {s.clusters.map((c) => {
+                      const cx = c.nodes.reduce((t, n) => t + n.x, 0) / c.nodes.length;
+                      const cy = c.nodes.reduce((t, n) => t + n.y, 0) / c.nodes.length;
+                      const r = Math.max(...c.nodes.map((n) => Math.hypot(n.x - cx, n.y - cy))) + 22 / Math.sqrt(view.k);
+                      const faded = sel && !c.nodes.some((n) => n.id === sel.id);
+                      return (
+                        <g key={`assoc-${c.id}`} opacity={faded ? 0.25 : 1} pointerEvents="none">
+                          <circle cx={cx} cy={cy} r={r} fill="rgba(245,158,11,0.08)" stroke="#f59e0b" strokeWidth={1.4 / view.k} strokeDasharray={`${6 / view.k} ${4 / view.k}`} />
+                          <text
+                            x={cx}
+                            y={cy - r - 5 / view.k}
+                            textAnchor="middle"
+                            fontSize={12 / view.k}
+                            fontWeight={600}
+                            fill="#b45309"
+                            stroke={BG}
+                            strokeWidth={3 / view.k}
+                            paintOrder="stroke"
+                          >
+                            ★ {c.name}（{c.nodes.length}）
+                          </text>
+                        </g>
+                      );
+                    })}
                     {sub.edges.map((e) => {
                       const a = s.byId.get(e.source);
                       const b = s.byId.get(e.target);
@@ -844,9 +879,14 @@ export function Network() {
                           className="cursor-pointer"
                           onPointerDown={(e) => onPointerDown(e, n.id)}
                         >
-                          <title>{[n.company_name, n.contact_name && `担当 ${n.contact_name}`, n.address].filter(Boolean).join("\n")}</title>
+                          <title>{[n.company_name, n.contact_name && `担当 ${n.contact_name}`, n.address, starOf.has(n.id) && `★ ${starOf.get(n.id)!.join("、")}`].filter(Boolean).join("\n")}</title>
                           {/* つながりの多い点は光らせる */}
                           {t > 0.3 && <circle r={r * (1.6 + 1.4 * t)} fill={color} opacity={0.1 + 0.15 * t} />}
+                          {starOf.has(n.id) && (
+                            <text x={r + 2 / view.k} y={-r} fontSize={11 / view.k} fill="#f59e0b" stroke={BG} strokeWidth={2 / view.k} paintOrder="stroke">
+                              ★
+                            </text>
+                          )}
                           {customer && <circle r={r + 2.5 / view.k} fill="none" stroke={CUSTOMER_RING} strokeWidth={1.5 / view.k} />}
                           <circle
                             r={r}
@@ -884,11 +924,6 @@ export function Network() {
             {bubbles
               ? "県のバブルをクリックでその県の相関図・ドラッグで移動・ホイールで拡大縮小"
               : "ドラッグで移動・ホイールで拡大縮小・点をクリックで詳細・県名をクリックでその県の相関図"}
-            {showAssoc && (data?.auto_skipped.length ?? 0) > 0 && (
-              <div className="mt-0.5 text-amber-700">
-                会員数が多い加盟協会（{data!.auto_skipped.map((a) => `${a.name} ${a.count}件`).join("・")}）は、線が多すぎるため相関図には引いていません（各施設のカルテで確認できます）
-              </div>
-            )}
           </div>
           <div className="absolute right-2 top-2 flex gap-1.5">
             {sub.nodes.length > 0 && (
@@ -926,6 +961,15 @@ export function Network() {
                     <span className="text-slate-400">未判明</span>
                   )}
                 </div>
+                {starOf.has(sel.id) && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {starOf.get(sel.id)!.map((name) => (
+                      <span key={name} className="rounded bg-amber-50 px-1.5 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+                        ★ {name}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="text-xs text-slate-500">{sel.address ?? "住所未登録"}</div>
                 <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
                   <Link to={`/companies/${sel.id}`} className="text-indigo-700 hover:underline">
@@ -1019,6 +1063,41 @@ export function Network() {
                           </li>
                         );
                       })}
+                  </ul>
+                </div>
+              )}
+              {showAssoc && (data?.association_groups.length ?? 0) > 0 && (
+                <div>
+                  <div className="mb-1.5 text-xs text-slate-500">★ 加盟協会（{pref === "all" ? "全体" : pref}）</div>
+                  <ul className="max-h-48 space-y-1.5 overflow-y-auto pr-1 text-xs">
+                    {data!.association_groups.flatMap((g) => {
+                      const members = g.members.map((id) => all.get(id)).filter((n): n is NonNullable<typeof n> => !!n && (pref === "all" || prefOf(n) === pref));
+                      if (members.length === 0) return [];
+                      const byPref = new Map<string, number>();
+                      for (const n of members) byPref.set(prefOf(n), (byPref.get(prefOf(n)) ?? 0) + 1);
+                      return [
+                        <li key={g.id}>
+                          <div className="font-medium text-amber-800">
+                            ★ {g.name} <span className="font-normal tabular-nums text-slate-500">{members.length}施設</span>
+                          </div>
+                          {pref === "all" && (
+                            <div className="text-slate-500">
+                              {[...byPref]
+                                .sort((a, b) => prefOrder(a[0]) - prefOrder(b[0]))
+                                .map(([p, n], i) => (
+                                  <span key={p}>
+                                    {i > 0 && "・"}
+                                    <button type="button" className="text-indigo-700 hover:underline" onClick={() => selectPref(p)}>
+                                      {p}
+                                    </button>
+                                    {n}
+                                  </span>
+                                ))}
+                            </div>
+                          )}
+                        </li>,
+                      ];
+                    })}
                   </ul>
                 </div>
               )}

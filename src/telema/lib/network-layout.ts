@@ -144,7 +144,11 @@ export function layoutFocused(pref: string, n: number, others: Map<string, numbe
  * - 同じ円の中のつながりはばねで引き合う（県をまたぐ線は配置に使わず、描くだけ）
  * - 点は自分の円の中心に引き寄せられる
  */
-export function step(nodes: SimNode[], links: Link[], groups: Map<string, Group>, alpha: number) {
+/**
+ * clusters は同じ加盟協会の施設のまとまり。線は引かず、まとまりの中心へ緩く引き寄せて、近くに集まるようにする
+ * （複数の協会に入っている施設は、それぞれの中心の間に落ち着く）
+ */
+export function step(nodes: SimNode[], links: Link[], groups: Map<string, Group>, alpha: number, clusters: SimNode[][] = []) {
   const buckets = new Map<string, SimNode[]>();
   for (const n of nodes) {
     const b = buckets.get(n.group);
@@ -178,6 +182,15 @@ export function step(nodes: SimNode[], links: Link[], groups: Map<string, Group>
     s.vy += dy * f;
     t.vx -= dx * f;
     t.vy -= dy * f;
+  }
+  for (const c of clusters) {
+    if (c.length < 2) continue;
+    const cx = c.reduce((s, n) => s + n.x, 0) / c.length;
+    const cy = c.reduce((s, n) => s + n.y, 0) / c.length;
+    for (const n of c) {
+      n.vx += (cx - n.x) * 0.05 * alpha;
+      n.vy += (cy - n.y) * 0.05 * alpha;
+    }
   }
   for (const n of nodes) {
     const g = groups.get(n.group);

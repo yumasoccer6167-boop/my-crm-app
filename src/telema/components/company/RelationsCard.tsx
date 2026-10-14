@@ -181,7 +181,7 @@ export function RelationsCard({ companyId, contacts, editable }: { companyId: nu
           <div key={g.association_id} className="rounded-md bg-slate-50 p-2 text-sm ring-1 ring-inset ring-slate-200">
             <button type="button" className="block w-full text-left" onClick={() => setOpenPeers(openPeers === g.association_id ? null : g.association_id)} aria-expanded={openPeers === g.association_id}>
               <span className="flex items-center justify-between gap-2 text-xs text-slate-600">
-                <span>同じ加盟協会の園 {g.total}件（自動でつながっています）</span>
+                <span>★ 同じ加盟協会の園 {g.total}件（相関図ではグループで表示）</span>
                 <span className="shrink-0 text-slate-400">{openPeers === g.association_id ? "閉じる" : "開く"}</span>
               </span>
               <span className="mt-1 inline-block break-words rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] text-indigo-700">{g.association_name}</span>
@@ -198,7 +198,6 @@ export function RelationsCard({ companyId, contacts, editable }: { companyId: nu
                   </li>
                 ))}
                 {g.total > g.peers.length && <li className="text-xs text-slate-500">ほか {g.total - g.peers.length}件（先頭 {g.peers.length}件を表示）</li>}
-                {!g.in_graph && <li className="text-xs text-amber-700">会員数が多いため、相関図には線を引いていません</li>}
               </ul>
             )}
           </div>

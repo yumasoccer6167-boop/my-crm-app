@@ -22,8 +22,8 @@ import type {
   DashboardData,
   MonthlyCallsData,
   Facet,
+  AssociationGroup,
   AssociationPeers,
-  AutoSkipped,
   GraphEdge,
   GraphNode,
   ListSource,
@@ -100,7 +100,7 @@ type Api = {
     };
   };
   relations: {
-    graph: { $get: Call<{ nodes: GraphNode[]; edges: GraphEdge[]; auto_skipped: AutoSkipped[] }> };
+    graph: { $get: Call<{ nodes: GraphNode[]; edges: GraphEdge[]; association_groups: AssociationGroup[] }> };
     ":id": { $patch: Call<Record<string, unknown>> };
   };
 };
