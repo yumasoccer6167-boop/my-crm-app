@@ -7,7 +7,7 @@ export function SiblingTabs({ current, organizationName, siblings }: { current: 
   const all = [{ id: current.id, company_name: current.company_name, is_user: current.is_user }, ...siblings].sort((a, b) => a.company_name.localeCompare(b.company_name, "ja"));
   return (
     <nav aria-label="同じ法人の施設" className="flex flex-wrap items-center gap-1.5 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200">
-      <span className="mr-1 text-xs text-slate-500">{organizationName ? `${organizationName}の施設` : "同じ法人の施設"}</span>
+      <span className="mr-1 text-xs text-slate-500">{organizationName ? `${organizationName}の施設` : "姉妹園"}</span>
       {all.map((s) => {
         const active = s.id === current.id;
         return (

@@ -1,6 +1,7 @@
-"""姉妹園（同じ法人の施設）を手動でまとめる／外す。
-施設は法人（telema_organizations）に属し、同じ法人の施設どうしが姉妹園。取り込み時に法人名から自動でまとまるが、表記が違うなどでまとまっていない施設を、カルテから手動でまとめられる。
-まとめても施設（カルテ）は別々のまま残り、カルテ上部のボタンで切り替えられる。"""
+"""姉妹園（同じ法人の施設）を、既存のカルテどうしで連携させる／外す。
+施設は法人（telema_organizations）に属し、同じ法人の施設どうしが姉妹園。取り込み時に法人名から自動でまとまるが、表記が違うなどでまとまっていない施設を、カルテから手動で連携できる。
+連携は既存のカルテどうしを結ぶだけで、法人名の入力は要らない（どちらにも法人がなければ、名前のない法人としてまとめる。法人名は後から付けられる）。
+連携しても施設（カルテ）は別々のまま残り、カルテ上部のボタンで切り替えられる。"""
 from flask import jsonify
 
 from .common import audit, can_edit_company
@@ -46,10 +47,8 @@ def add_sibling(id):
             _set_org(d, user, me['id'], None, other['organization_id'])
             return jsonify({'organization_id': other['organization_id'], 'siblings': _members(d, other['organization_id'], me['id'])})
         name = (b.get('organization_name') or '').strip()
-        if not name:
-            raise ApiError(400, 'validation_error', '法人名を入力してください（どちらの施設にも法人が登録されていません）')
         norm = normalize_company_name(name)
-        found = d.first('SELECT id FROM telema_organizations WHERE name_normalized = %s LIMIT 1', (norm,))
+        found = d.first('SELECT id FROM telema_organizations WHERE name_normalized = %s LIMIT 1', (norm,)) if norm else None
         org_id = found['id'] if found else d.value('INSERT INTO telema_organizations (name, name_normalized) VALUES (%s, %s) RETURNING id', (name, norm))
         _set_org(d, user, me['id'], None, org_id)
     if other['organization_id'] == org_id:
@@ -72,3 +71,21 @@ def leave_organization(id):
     if company['organization_id'] is not None:
         _set_org(d, user, id, company['organization_id'], None)
     return jsonify({'ok': True})
+
+
+@bp.post('/companies/<id>/organization-name')
+def set_organization_name(id):
+    """姉妹園としてまとまっている法人に、法人名を付ける・直す（名前のない法人に後から名前を付けられる）"""
+    id = parse_id(id)
+    b = parse({'name': Str(min=1, max=200)}, body())
+    user, d = current_user(), db()
+    company = load_visible_company(id)
+    if not can_edit_company(user, company['assigned_user_id']):
+        raise forbidden()
+    org_id = company['organization_id']
+    if org_id is None:
+        raise ApiError(400, 'validation_error', '法人が連携されていません（先に姉妹園を連携してください）')
+    before = d.first('SELECT name FROM telema_organizations WHERE id = %s', (org_id,))
+    d.run('UPDATE telema_organizations SET name = %s, name_normalized = %s, updated_at = telema_now() WHERE id = %s', (b['name'], normalize_company_name(b['name']), org_id))
+    audit(d, user['id'], 'update', 'organization', org_id, {'name': before['name']}, {'name': b['name']})
+    return jsonify({'organization_id': org_id, 'name': b['name']})

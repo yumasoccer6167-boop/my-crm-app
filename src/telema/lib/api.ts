@@ -73,6 +73,7 @@ type Api = {
       "association-peers": { $get: Call<AssociationPeers[]> };
       siblings: { $post: Call<{ organization_id: number; siblings: Sibling[] }> };
       "leave-organization": { $post: Call<{ ok: true }> };
+      "organization-name": { $post: Call<{ organization_id: number; name: string }> };
       relations: { $get: Call<RelationItem[]>; $post: Call<Record<string, unknown> & { id: number }> };
       summarize: { $post: Call<SummarySuggestion> };
     };
