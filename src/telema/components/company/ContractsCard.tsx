@@ -31,8 +31,8 @@ export function ContractsCard({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // sales は営業担当に自分しか選べない（サーバーも同じ決まり）
-  const assignees = me.role === "sales" ? users.filter((u) => u.id === me.id) : users.filter((u) => u.is_active);
+  // 営業担当は、一般（sales）でも他のメンバーを選べる。無効になったメンバーでも、いまその契約の営業担当なら選択肢に残す
+  const assignees = users.filter((u) => u.is_active || u.id === draft?.assigned_user_id);
 
   function start(c?: Contract) {
     setError(null);

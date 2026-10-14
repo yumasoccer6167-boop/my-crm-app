@@ -21,11 +21,9 @@ CONTRACT_BODY = {
 
 
 def _check_assignee(d, user, assigned_user_id):
-    """営業担当は CRM の実在するメンバーのみ。sales は自分以外を担当にできない（施設の担当営業の変更と同じ決まり）"""
+    """営業担当は CRM の実在するメンバーなら誰でも選べる（sales も他の営業担当を選べる。契約を取った人を記録するため、施設の担当営業の変更とは別）"""
     if assigned_user_id is None:
         return
-    if user['role'] == 'sales' and assigned_user_id != user['id']:
-        raise ApiError(403, 'forbidden', '営業担当は自分自身のみ選択できます')
     if not d.first('SELECT 1 FROM users WHERE id = %s', (assigned_user_id,)):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（assigned_user_id: 営業担当が見つかりません）')
 

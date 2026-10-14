@@ -146,7 +146,7 @@ def test_契約情報の入力エラー(client):
     assert client.api(f'/companies/{cid}')[1]['contracts'] == []
 
 
-def test_salesは自分の担当と未割当の会社にだけ契約を登録でき_営業担当は自分のみ(client):
+def test_salesは自分の担当と未割当の会社にだけ契約を登録でき_営業担当は他のメンバーも選べる(client):
     me = client.api('/me')[1]['id']
     other = client.add_user('契約の別営業')
     mine = make_company(client, '自分の担当園', assigned=me)
@@ -157,10 +157,13 @@ def test_salesは自分の担当と未割当の会社にだけ契約を登録で
         ok = client.api(f'/companies/{mine}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-01', 'assigned_user_id': me})
         assert ok[0] == 201
         assert client.api(f'/companies/{pool}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-01'})[0] == 201
-        # 他人の担当会社は見えない（404）。自分の会社でも営業担当を他人にはできない
+        # 他人の担当会社は見えない（404）
         assert client.api(f'/companies/{theirs}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-01'})[0] == 404
-        assert client.api(f'/companies/{mine}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-01', 'assigned_user_id': other})[0] == 403
-        assert client.api(f'/contracts/{ok[1]["id"]}', {'assigned_user_id': other}, method='PATCH')[0] == 403
+        # 営業担当は、自分以外のメンバーも選べる（契約を取った人を記録する）。実在しないメンバーは選べない
+        other_contract = client.api(f'/companies/{mine}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-02', 'assigned_user_id': other})
+        assert other_contract[0] == 201 and other_contract[1]['assigned_user_id'] == other
+        assert client.api(f'/contracts/{ok[1]["id"]}', {'assigned_user_id': other}, method='PATCH')[1]['assigned_user_id'] == other
+        assert client.api(f'/contracts/{ok[1]["id"]}', {'assigned_user_id': 999999}, method='PATCH')[0] == 400
     finally:
         client.set_my_role('admin')
     # 管理者は他人の担当会社にも営業担当を指定して登録できる
