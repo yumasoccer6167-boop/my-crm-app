@@ -32,6 +32,7 @@ import type {
   Section,
   RelationItem,
   ScheduleToday,
+  NearbyUsers,
   Sibling,
   SummarySuggestion,
   UserRow,
@@ -72,6 +73,7 @@ type Api = {
       "list-types": { $patch: Call<ListType[]> };
       calls: { $get: Call<CallLog[]>; $post: Call<CallLog> };
       "association-peers": { $get: Call<AssociationPeers[]> };
+      "nearby-users": { $get: Call<NearbyUsers> };
       siblings: { $post: Call<{ organization_id: number; siblings: Sibling[] }> };
       "leave-organization": { $post: Call<{ ok: true }> };
       "organization-name": { $post: Call<{ organization_id: number; name: string }> };

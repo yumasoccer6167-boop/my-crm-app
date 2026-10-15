@@ -6,6 +6,7 @@ import { ContactsCard } from "../components/company/ContactsCard";
 import { ContractsCard } from "../components/company/ContractsCard";
 import { FieldsCard } from "../components/company/FieldsCard";
 import { RelationsCard } from "../components/company/RelationsCard";
+import { NearbyUsersCard } from "../components/company/NearbyUsersCard";
 import { SiblingsCard } from "../components/company/SiblingsCard";
 import { SiblingTabs } from "../components/company/SiblingTabs";
 import { SuccessCasesCard } from "../components/company/SuccessCasesCard";
@@ -244,6 +245,7 @@ export function CompanyDetail() {
               </>
             }
           />
+          <NearbyUsersCard companyId={company.id} />
           <SiblingsCard companyId={company.id} organization={organization} siblings={siblings} editable={editable} onChanged={reloadAll} />
           <Card title="リスト取得元">
             {sources.length ? (

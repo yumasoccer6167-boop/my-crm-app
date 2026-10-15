@@ -234,6 +234,14 @@ export type ScheduleItem = {
 };
 export type ScheduleToday = Record<ScheduleKind, ScheduleItem[]>;
 
+/** 同じ市区町村のユーザー（カルテに自動で表示） */
+export type NearbyUsers = {
+  prefecture: string | null;
+  city: string | null;
+  total: number;
+  items: { id: number; company_name: string; city: string | null; organization_name: string | null; address: string | null; chairman_name: string | null; principal_name: string | null }[];
+};
+
 /** 姉妹園（同じ法人の他の施設） */
 export type Sibling = { id: number; company_name: string; is_user: number; status_label: string | null };
 
