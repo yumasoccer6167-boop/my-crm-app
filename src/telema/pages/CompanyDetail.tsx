@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { TEMPERATURES } from "../shared/constants";
 import { CallEntry } from "../components/company/CallEntry";
+import { ChairCrown } from "../components/CompanyTable";
 import { ContactsCard } from "../components/company/ContactsCard";
 import { ContractsCard } from "../components/company/ContractsCard";
 import { FieldsCard } from "../components/company/FieldsCard";
@@ -87,6 +88,7 @@ export function CompanyDetail() {
             </Link>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-slate-900">{company.company_name}</h1>
+              {contacts.some((c) => c.is_association_chair) && <ChairCrown />}
               {/* ユーザー（導入済み）は営業ステータスとは別に持つ */}
               <label
                 className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${company.is_user ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-slate-50 text-slate-500 ring-slate-200"} ${editable ? "cursor-pointer" : ""}`}

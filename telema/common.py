@@ -12,6 +12,12 @@ JST = timezone(timedelta(hours=9))
 # 施設一覧に出す契約件数（有効な契約情報）。ユーザーなのに契約情報が未登録の施設を一覧で見分けるのに使う
 CONTRACT_COUNT_COLUMN = '(SELECT COUNT(*) FROM telema_contracts k WHERE k.company_id = c.id AND k.is_active = 1) AS contract_count'
 
+# 施設一覧に出す「協会会長がいる施設」の印（施設または法人の有効な担当者に、協会会長がいる）。一覧で王冠マークを出すのに使う
+ASSOCIATION_CHAIR_COLUMN = (
+    'EXISTS (SELECT 1 FROM telema_contacts kc WHERE kc.is_active = 1 AND kc.is_association_chair = 1 '
+    'AND (kc.company_id = c.id OR (kc.company_id IS NULL AND kc.organization_id = c.organization_id))) AS has_association_chair'
+)
+
 CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name
   FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id'''
 

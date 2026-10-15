@@ -54,6 +54,8 @@ export type CompanyListItem = {
   updated_at: string;
   /** 有効な契約情報の件数（ユーザーで0件なら、一覧に「契約情報未登録」を出す） */
   contract_count: number;
+  /** 協会会長の担当者がいる施設（一覧で王冠マークを出す） */
+  has_association_chair: boolean;
   /** 加盟協会・リスト種類の名前（マスタの並び順） */
   associations: string[];
   list_types: string[];
@@ -79,6 +81,8 @@ export type Contact = {
   phone: string | null;
   email: string | null;
   is_decision_maker: number;
+  /** 協会会長（決裁者とは別）。施設一覧では王冠マークで目印にする */
+  is_association_chair: number;
   notes: string | null;
   source: string;
   confidence: number | null;

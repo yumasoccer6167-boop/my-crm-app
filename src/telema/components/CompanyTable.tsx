@@ -1,7 +1,17 @@
+import { Crown } from "lucide-react";
 import { Link } from "react-router";
 import type { CompanyListItem } from "../types";
 import { fmtShort, isOverdue } from "../lib/format";
 import { StatusBadge, Temperature } from "./ui";
+
+/** 協会会長（担当者に協会会長がいる施設）の目印。王冠マーク */
+export function ChairCrown() {
+  return (
+    <span className="ml-1.5 inline-flex shrink-0 items-center align-middle text-amber-500" title="協会会長" role="img" aria-label="協会会長">
+      <Crown className="h-4 w-4" aria-hidden />
+    </span>
+  );
+}
 
 /** ユーザーなのに契約情報がまだ登録されていない施設の目印 */
 function NoContractBadge() {
@@ -112,6 +122,7 @@ export function CompanyTable({
                     <Link to={`/companies/${c.id}`} className="truncate font-medium text-indigo-700 hover:underline">
                       {c.company_name}
                     </Link>
+                    {c.has_association_chair && <ChairCrown />}
                     {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 align-middle text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
                 {!!c.is_user && c.contract_count === 0 && <NoContractBadge />}
                   </div>
@@ -166,6 +177,7 @@ export function CompanyTable({
                 <Link to={`/companies/${c.id}`} className="font-medium text-indigo-700">
                   {c.company_name}
                 </Link>
+                {c.has_association_chair && <ChairCrown />}
                 {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 align-middle text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
                 {!!c.is_user && c.contract_count === 0 && <NoContractBadge />}
               </label>
