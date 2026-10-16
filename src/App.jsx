@@ -4907,7 +4907,12 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-[100dvh] bg-slate-50 text-slate-800 font-sans overflow-hidden">
+    // 画面全体の枠は、スクロールさせない。overflow-hidden のままだと、中の要素にフォーカスが当たったとき（協会の選択など）にブラウザがこの枠ごと
+    // スクロールして、画面の下に白い余白が出ることがある。overflow-clip にして、念のためスクロールされても戻す。スクロールするのは中の main だけ
+    <div
+      className="flex h-[100dvh] bg-slate-50 text-slate-800 font-sans overflow-clip"
+      onScroll={(e) => { if (e.currentTarget.scrollTop !== 0 || e.currentTarget.scrollLeft !== 0) e.currentTarget.scrollTo(0, 0); }}
+    >
       {/* モバイルヘッダー */}
       <header className="md:hidden fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-slate-800 text-white z-30">
         <button onClick={() => setMenuOpen(true)} className="p-1 relative">
