@@ -219,6 +219,8 @@ export function CompanyDetail() {
           <RelationsCard companyId={company.id} contacts={contacts} editable={editable} />
           <FieldsCard
             title="基本情報"
+            withOrganization
+            organization={organization}
             fields={["company_name", "name_kana", "phone", "phone_alt", "postal_code", "address", "website", "industry", "employee_count", "google_rating", "google_review_count", "map_url", "facility_code", "corporate_number", "notes"]}
             company={company}
             sources={field_sources}

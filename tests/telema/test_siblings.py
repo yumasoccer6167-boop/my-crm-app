@@ -70,3 +70,28 @@ def test_姉妹園から外しても施設は残り_権限と入力を検証す�
         assert client.api(f'/companies/{theirs}/leave-organization', {})[0] in (403, 404)
     finally:
         client.set_my_role('admin')
+
+
+def test_基本情報の会社名を入れると_同じ会社名の施設どうしが姉妹園になる(client):
+    a, b, c = make_company(client, '会社名A園'), make_company(client, '会社名B園'), make_company(client, '会社名C園')
+    before_name = client.sql('SELECT company_name FROM telema_companies WHERE id = %s', (a,))[0]['company_name']
+    # 会社名だけを入れても保存できる（施設名は変わらない）
+    assert client.api(f'/companies/{a}', {'organization_name': '学校法人会社名会'}, method='PATCH')[0] == 200
+    assert detail(client, a)['organization']['name'] == '学校法人会社名会' and detail(client, a)['company']['company_name'] == before_name
+    # 同じ会社名（表記ゆれ込み）を別の施設に入れると、同じ会社にまとまる。会社は増えない
+    assert client.api(f'/companies/{b}', {'organization_name': '学校法人　会社名会'}, method='PATCH')[0] == 200
+    assert org_of(client, a) == org_of(client, b) and [s['company_name'] for s in detail(client, a)['siblings']] == ['会社名B園']
+    assert client.sql("SELECT COUNT(*) AS n FROM telema_organizations WHERE name_normalized = %s", (client.sql('SELECT name_normalized AS n FROM telema_organizations WHERE id = %s', (org_of(client, a),))[0]['n'],))[0]['n'] == 1
+    # 姉妹園がいる会社の名前は、この施設の会社名を変えても他の施設は変わらない（この施設だけが別の会社に移る）
+    assert client.api(f'/companies/{b}', {'organization_name': '学校法人別名会'}, method='PATCH')[0] == 200
+    assert org_of(client, a) != org_of(client, b) and detail(client, a)['organization']['name'] == '学校法人会社名会'
+    # この施設だけの会社は、名前をその場で直す（空の会社が残らない）
+    org_b = org_of(client, b)
+    assert client.api(f'/companies/{b}', {'organization_name': '学校法人改名会'}, method='PATCH')[0] == 200
+    assert org_of(client, b) == org_b and detail(client, b)['organization']['name'] == '学校法人改名会'
+    # 空にすると、どの会社にも属さない。施設名ほか既存の情報はそのまま
+    assert client.api(f'/companies/{b}', {'organization_name': None}, method='PATCH')[0] == 200
+    assert org_of(client, b) is None and detail(client, b)['company']['company_name'] == '会社名B園'
+    # 会社名と施設名を一緒に変えられる
+    assert client.api(f'/companies/{c}', {'organization_name': '学校法人会社名会', 'company_name': '会社名C園（新）'}, method='PATCH')[0] == 200
+    assert org_of(client, c) == org_of(client, a) and detail(client, c)['company']['company_name'] == '会社名C園（新）'

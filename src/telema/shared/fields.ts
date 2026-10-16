@@ -3,7 +3,7 @@
 export type FieldGroup = "basic" | "sales";
 
 export const COMPANY_FIELDS = {
-  company_name: { label: "会社名・施設名", group: "basic" },
+  company_name: { label: "施設名", group: "basic" },
   name_kana: { label: "ふりがな", group: "basic" },
   facility_code: { label: "事業所番号", group: "basic" },
   corporate_number: { label: "法人番号", group: "basic" },

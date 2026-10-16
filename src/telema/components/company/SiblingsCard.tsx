@@ -47,9 +47,9 @@ export function SiblingsCard({
       onChanged();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // 相手が別の法人に属しているときは、移してよいか確認して、もう一度送る
-      if (msg.includes("別の法人") && confirm(msg)) await link(true);
-      else if (!msg.includes("別の法人")) setError(msg);
+      // 相手が別の会社に属しているときは、移してよいか確認して、もう一度送る
+      if (msg.includes("別の会社") && confirm(msg)) await link(true);
+      else if (!msg.includes("別の会社")) setError(msg);
     } finally {
       setBusy(false);
     }
@@ -103,7 +103,7 @@ export function SiblingsCard({
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <div className="font-medium">{orgNameText || <span className="text-xs font-normal text-slate-400">法人名は未登録（姉妹園として連携しています）</span>}</div>
+                <div className="font-medium">{orgNameText || <span className="text-xs font-normal text-slate-400">会社名は未登録（姉妹園として連携しています）</span>}</div>
                 {editable && (
                   <button
                     type="button"
@@ -113,7 +113,7 @@ export function SiblingsCard({
                       setEditingName(true);
                     }}
                   >
-                    {orgNameText ? "法人名を直す" : "法人名を付ける"}
+                    {orgNameText ? "会社名を直す" : "会社名を付ける"}
                   </button>
                 )}
               </div>
@@ -123,7 +123,7 @@ export function SiblingsCard({
             </div>
           </div>
         ) : (
-          <p className="text-xs text-slate-400">姉妹園（同じ法人の施設）は、既存のカルテどうしを連携させて登録します。新しい施設を作る必要はありません。</p>
+          <p className="text-xs text-slate-400">姉妹園（同じ会社の施設）は、既存のカルテどうしを連携させて登録します。新しい施設を作る必要はありません。基本情報の「会社名」に同じ名前を入れた施設どうしも、姉妹園になります。</p>
         )}
 
         {siblings.length > 0 && (
@@ -152,11 +152,11 @@ export function SiblingsCard({
 
         {adding && (
           <div className="space-y-2 rounded-md bg-slate-50 p-3 ring-1 ring-inset ring-slate-200">
-            <div className="text-xs text-slate-600">連携したい既存のカルテ（姉妹園）を選んでください。この施設と同じ法人として連携します。</div>
+            <div className="text-xs text-slate-600">連携したい既存のカルテ（姉妹園）を選んでください。この施設と同じ会社として連携します。</div>
             {picked ? (
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-medium text-slate-900">{picked.company_name}</span>
-                {picked.organization_name && <span className="text-xs text-slate-500">（法人: {picked.organization_name}）</span>}
+                {picked.organization_name && <span className="text-xs text-slate-500">（会社: {picked.organization_name}）</span>}
                 <button type="button" className="text-xs text-slate-500 hover:underline" onClick={() => setPicked(null)}>
                   選び直す
                 </button>
@@ -166,7 +166,7 @@ export function SiblingsCard({
             )}
             {canName && (
               <label className="block text-xs text-slate-600">
-                法人名（任意。あとからでも付けられます）
+                会社名（任意。あとからでも付けられます）
                 <input className={`${inputCls} mt-1`} value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="例：学校法人○○学園" />
               </label>
             )}

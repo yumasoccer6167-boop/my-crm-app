@@ -55,7 +55,7 @@ def add_sibling(id):
         return jsonify({'organization_id': org_id, 'siblings': _members(d, org_id, me['id'])})
     if other['organization_id'] is not None and not b.get('force'):
         old = d.first('SELECT name FROM telema_organizations WHERE id = %s', (other['organization_id'],))
-        raise ApiError(409, 'conflict', f'この施設は別の法人「{old["name"]}」（{_count(d, other["organization_id"])}施設）に属しています。この施設の法人へ移しますか？')
+        raise ApiError(409, 'conflict', f'この施設は別の会社「{old["name"]}」（{_count(d, other["organization_id"])}施設）に属しています。この施設の会社へ移しますか？')
     _set_org(d, user, other['id'], other['organization_id'], org_id)
     return jsonify({'organization_id': org_id, 'siblings': _members(d, org_id, me['id'])})
 
@@ -84,7 +84,7 @@ def set_organization_name(id):
         raise forbidden()
     org_id = company['organization_id']
     if org_id is None:
-        raise ApiError(400, 'validation_error', '法人が連携されていません（先に姉妹園を連携してください）')
+        raise ApiError(400, 'validation_error', '会社が連携されていません（先に姉妹園を連携するか、基本情報の会社名を入れてください）')
     before = d.first('SELECT name FROM telema_organizations WHERE id = %s', (org_id,))
     d.run('UPDATE telema_organizations SET name = %s, name_normalized = %s, updated_at = telema_now() WHERE id = %s', (b['name'], normalize_company_name(b['name']), org_id))
     audit(d, user['id'], 'update', 'organization', org_id, {'name': before['name']}, {'name': b['name']})

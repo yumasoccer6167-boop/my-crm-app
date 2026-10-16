@@ -307,6 +307,37 @@ def _company_out(row):
     return row
 
 
+def organization_id_for_name(d, name):
+    """会社名（法人名）から法人を探す。同じ名前の法人があればそれを、なければ作る。同じ会社名の施設どうしは姉妹園になる"""
+    norm = normalize_company_name(name)
+    found = d.first('SELECT id FROM telema_organizations WHERE name_normalized = %s LIMIT 1', (norm,)) if norm else None
+    return found['id'] if found else d.value('INSERT INTO telema_organizations (name, name_normalized) VALUES (%s, %s) RETURNING id', (name, norm))
+
+
+def change_company_organization(d, user, company, name):
+    """基本情報の「会社名」の変更。同じ名前の会社があればその姉妹園になり、なければ新しい会社名になる。空にするとどの会社にも属さない。
+    この施設だけが属している会社は、名前をその場で直す（姉妹園が1件もない会社が残らないように）。ほかの施設もいる会社の名前は変えず、この施設だけが移る"""
+    name = (name or '').strip()
+    current = company['organization_id']
+    if not name:
+        new = None
+    else:
+        norm = normalize_company_name(name)
+        found = d.first('SELECT id FROM telema_organizations WHERE name_normalized = %s LIMIT 1', (norm,))
+        if found:
+            new = found['id']
+        elif current is not None and d.value('SELECT COUNT(*) FROM telema_companies WHERE organization_id = %s AND is_active = 1', (current,)) <= 1:
+            before = d.first('SELECT name FROM telema_organizations WHERE id = %s', (current,))
+            d.run('UPDATE telema_organizations SET name = %s, name_normalized = %s, updated_at = telema_now() WHERE id = %s', (name, norm, current))
+            audit(d, user['id'], 'update', 'organization', current, {'name': before['name']}, {'name': name})
+            return
+        else:
+            new = organization_id_for_name(d, name)
+    if new != current:
+        d.run('UPDATE telema_companies SET organization_id = %s, updated_at = telema_now() WHERE id = %s', (new, company['id']))
+        audit(d, user['id'], 'update', 'company_organization', company['id'], {'organization_id': current}, {'organization_id': new})
+
+
 @bp.post('/companies')
 def create_company():
     raw = body()
@@ -318,12 +349,7 @@ def create_company():
         b['is_user'] = int(b['is_user'])
     user = current_user()
     d = db()
-    organization_id = None
-    if organization_name:
-        norm = normalize_company_name(organization_name)
-        found = d.first('SELECT id FROM telema_organizations WHERE name_normalized = %s LIMIT 1', (norm,))
-        organization_id = found['id'] if found else d.value(
-            'INSERT INTO telema_organizations (name, name_normalized) VALUES (%s, %s) RETURNING id', (organization_name, norm))
+    organization_id = organization_id_for_name(d, organization_name) if organization_name else None
     values = {
         **b,
         **derived_columns(b),
@@ -405,7 +431,7 @@ def bulk_delete():
 @bp.patch('/companies/<id>')
 def update_company(id):
     id = parse_id(id)
-    b = parse(COMPANY_PATCH, body(), partial=True)
+    b = parse({**COMPANY_PATCH, 'organization_name': Str(max=200, nullable=True)}, body(), partial=True)
     if 'is_user' in b:
         b['is_user'] = int(b['is_user'])
     user = current_user()
@@ -414,11 +440,13 @@ def update_company(id):
         raise forbidden()
     if 'assigned_user_id' in b and user['role'] == 'sales' and b['assigned_user_id'] not in (user['id'], None):
         raise ApiError(403, 'forbidden', '担当営業の変更は自分自身への割当のみ可能です')
+    d = db()
+    if 'organization_name' in b:
+        change_company_organization(d, user, before, b.pop('organization_name'))      # 会社名（法人名）。同じ会社名の施設どうしが姉妹園になる
     values = {**b, **derived_columns(b)}
     cols = list(values)
     if not cols:
-        return jsonify(before)
-    d = db()
+        return jsonify(_company_out(d.first('SELECT * FROM telema_companies WHERE id = %s', (id,))))
     changed_fields = [k for k in b if k in COMPANY_FIELDS and before.get(k) != values[k]]
     row = d.first(
         f'UPDATE telema_companies SET {", ".join(f"{k} = %s" for k in cols)}, updated_at = telema_now() WHERE id = %s RETURNING *',
