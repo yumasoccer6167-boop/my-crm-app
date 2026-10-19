@@ -3,7 +3,7 @@ import json
 
 from flask import jsonify, request
 
-from .common import ASSOCIATION_CHAIR_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, TAG_KINDS, audit, can_edit_company, company_visibility, jst_day_range
+from .common import ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, TAG_KINDS, audit, can_edit_company, company_visibility, jst_day_range
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
@@ -167,7 +167,7 @@ def list_companies():
               (SELECT ct.name FROM telema_contacts ct WHERE ct.company_id = c.id AND ct.is_active = 1 AND ct.name IS NOT NULL
                  ORDER BY ct.is_decision_maker DESC, ct.updated_at DESC LIMIT 1) AS contact_name,
               c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at,
-              {CONTRACT_COUNT_COLUMN}, {ASSOCIATION_CHAIR_COLUMN}, {', '.join(k.names_column for k in TAG_KINDS)}
+              {CONTRACT_COUNT_COLUMN}, {ASSOCIATION_CHAIR_COLUMN}, {ASSOCIATION_OFFICER_COLUMN}, {', '.join(k.names_column for k in TAG_KINDS)}
             {frm} ORDER BY {order} LIMIT %s OFFSET %s''',
         [*params, q['per_page'], (q['page'] - 1) * q['per_page']],
     )
@@ -473,6 +473,7 @@ CONTACT_BODY = {
     'email': Email(nullable=True),
     'is_decision_maker': Bool(),
     'is_association_chair': Bool(),     # 協会会長（決裁者とは別。一覧で王冠マークの目印になる）
+    'is_association_officer': Bool(),   # 協会役員（協会会長とは別。一覧で銀の王冠の目印になる）
     'notes': _text(1000),
 }
 
@@ -487,10 +488,10 @@ def create_contact(id):
         raise forbidden()
     d = db()
     row = d.first(
-        '''INSERT INTO telema_contacts (company_id, organization_id, name, department, role, phone, email, is_decision_maker, is_association_chair, notes, source)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'manual') RETURNING *''',
+        '''INSERT INTO telema_contacts (company_id, organization_id, name, department, role, phone, email, is_decision_maker, is_association_chair, is_association_officer, notes, source)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'manual') RETURNING *''',
         (id, company['organization_id'], b.get('name'), b.get('department'), b.get('role'), b.get('phone'), b.get('email'),
-         int(bool(b.get('is_decision_maker'))), int(bool(b.get('is_association_chair'))), b.get('notes')),
+         int(bool(b.get('is_decision_maker'))), int(bool(b.get('is_association_chair'))), int(bool(b.get('is_association_officer'))), b.get('notes')),
     )
     audit(d, user['id'], 'create', 'contact', row['id'], None, row)
     return jsonify(row), 201
@@ -512,7 +513,7 @@ def update_contact(id):
     elif user['role'] == 'sales':
         raise forbidden()
     values = dict(b)
-    for flag in ('is_decision_maker', 'is_association_chair'):
+    for flag in ('is_decision_maker', 'is_association_chair', 'is_association_officer'):
         if flag in b:
             values[flag] = int(b[flag])
     if 'is_active' in b:

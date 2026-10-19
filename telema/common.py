@@ -18,6 +18,12 @@ ASSOCIATION_CHAIR_COLUMN = (
     'AND (kc.company_id = c.id OR (kc.company_id IS NULL AND kc.organization_id = c.organization_id))) AS has_association_chair'
 )
 
+# 同じく「協会役員がいる施設」の印。銀の王冠で出す
+ASSOCIATION_OFFICER_COLUMN = (
+    'EXISTS (SELECT 1 FROM telema_contacts ko WHERE ko.is_active = 1 AND ko.is_association_officer = 1 '
+    'AND (ko.company_id = c.id OR (ko.company_id IS NULL AND ko.organization_id = c.organization_id))) AS has_association_officer'
+)
+
 CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name
   FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id'''
 

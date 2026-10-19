@@ -488,6 +488,10 @@ ALTER TABLE telema_call_logs ADD COLUMN precheck_done_at TEXT;
     r"""
 ALTER TABLE telema_contacts ADD COLUMN is_association_chair INTEGER NOT NULL DEFAULT 0;
 """,
+    # 13: 先方担当者の「協会役員」。協会会長とは別に付けられ、施設一覧では銀の王冠で目印にする
+    r"""
+ALTER TABLE telema_contacts ADD COLUMN is_association_officer INTEGER NOT NULL DEFAULT 0;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

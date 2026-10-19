@@ -131,6 +131,7 @@ CALL_PATCH = {
     'visit_method': Enum(['visit', 'zoom']),
     'visit_at': IsoDatetime(nullable=True),
     'precheck_at': IsoDatetime(nullable=True),
+    'user_id': Int(min=1),     # この記録の担当者（誰の架電・訪問として数えるか）。一般以上は誰でも付け替えられる
     'next_call_at': IsoDatetime(nullable=True),     # 施設の次回架電（履歴ではなく施設の予定。架電の記録を直すときに、あわせて足せる）
 }
 
@@ -168,7 +169,7 @@ def _sync_company_status(d, user, call, changes):
 
 @bp.patch('/calls/<id>')
 def update_call(id):
-    """過去の架電履歴を直す（日時・結果・話した相手・メモ・部署・訪問日時・事前確認日時）。無効化と同じく、sales は自分の架電だけ直せる。
+    """過去の架電履歴を直す（日時・結果・話した相手・メモ・部署・訪問日時・事前確認日時・担当者）。無効化と同じく、sales は自分の架電だけ直せる。
     結果を直したのが最新の結果の記録なら、施設のステータスもその結果にそろえる（古い記録なら変えない）。
     次回架電は、next_call_at が送られて今の予定と違うときだけ、施設の次回架電を書き換える（架電の記録のみ。訪問には付けられない）。最終架電日時と件数は再計算する"""
     id = parse_id(id)
@@ -184,6 +185,8 @@ def update_call(id):
 
     if b.get('result_status_id') is not None and not d.first('SELECT 1 FROM telema_call_statuses WHERE id = %s', (b['result_status_id'],)):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（result_status_id: ステータスが見つかりません）')
+    if 'user_id' in b and not d.first('SELECT 1 FROM users WHERE id = %s', (b['user_id'],)):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（user_id: ユーザーが見つかりません）')
     if b.get('contact_id') is not None and not d.first(
             'SELECT 1 FROM telema_contacts WHERE id = %s AND is_active = 1 AND (company_id = %s OR (company_id IS NULL AND organization_id = %s))',
             (b['contact_id'], company['id'], company['organization_id'])):

@@ -41,7 +41,8 @@ function CallEditForm({
   onSaved: () => void;
   onCancel: () => void;
 }) {
-  const { statuses, sections } = useMasters();
+  const { statuses, sections, users } = useMasters();
+  const [userId, setUserId] = useState<number | null>(call.user_id);
   const [calledAt, setCalledAt] = useState(toLocalInput(call.called_at));
   const [statusId, setStatusId] = useState<number | null>(call.result_status_id);
   const [contactId, setContactId] = useState<number | null>(call.contact_id);
@@ -78,6 +79,7 @@ function CallEditForm({
             raw_note: note,
             called_at: iso,
             contact_id: contactId,
+            ...(userId != null && userId !== call.user_id ? { user_id: userId } : {}),
             ...(isVisit
               ? { visit_method: visitMethod }
               : { result_status_id: statusId, visit_at: isAppointment ? fromLocalInput(visitAt) : null, precheck_at: isAppointment ? fromLocalInput(precheckAt) : null }),
@@ -112,6 +114,18 @@ function CallEditForm({
             ))}
           </select>
         </div>
+      </div>
+
+      <div>
+        <div className="mb-1 text-xs text-slate-500">担当者（この記録を誰の{isVisit ? "訪問" : "架電"}にするか）</div>
+        <select value={userId ?? ""} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : null)} className={`${inputCls} sm:max-w-xs`}>
+          {call.user_id == null && <option value="">（未設定）</option>}
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {isUser && (

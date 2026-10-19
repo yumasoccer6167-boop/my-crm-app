@@ -56,6 +56,7 @@ export type CompanyListItem = {
   contract_count: number;
   /** 協会会長の担当者がいる施設（一覧で王冠マークを出す） */
   has_association_chair: boolean;
+  has_association_officer: boolean;
   /** 加盟協会・リスト種類の名前（マスタの並び順） */
   associations: string[];
   list_types: string[];
@@ -83,6 +84,7 @@ export type Contact = {
   is_decision_maker: number;
   /** 協会会長（決裁者とは別）。施設一覧では王冠マークで目印にする */
   is_association_chair: number;
+  is_association_officer: number;
   notes: string | null;
   source: string;
   confidence: number | null;

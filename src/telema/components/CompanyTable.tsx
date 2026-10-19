@@ -13,6 +13,15 @@ export function ChairCrown() {
   );
 }
 
+/** 協会役員（担当者に協会役員がいる施設）の目印。銀の王冠マーク */
+export function OfficerCrown() {
+  return (
+    <span className="ml-1.5 inline-flex shrink-0 items-center align-middle text-slate-400" title="協会役員" role="img" aria-label="協会役員">
+      <Crown className="h-4 w-4" aria-hidden />
+    </span>
+  );
+}
+
 /** ユーザーなのに契約情報がまだ登録されていない施設の目印 */
 function NoContractBadge() {
   return <span className="ml-1.5 whitespace-nowrap rounded bg-amber-50 px-1.5 align-middle text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-300">契約情報未登録</span>;
@@ -122,7 +131,7 @@ export function CompanyTable({
                     <Link to={`/companies/${c.id}`} className="truncate font-medium text-indigo-700 hover:underline">
                       {c.company_name}
                     </Link>
-                    {c.has_association_chair && <ChairCrown />}
+                    {c.has_association_chair && <ChairCrown />}{c.has_association_officer && <OfficerCrown />}
                     {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 align-middle text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
                 {!!c.is_user && c.contract_count === 0 && <NoContractBadge />}
                   </div>
@@ -178,6 +187,7 @@ export function CompanyTable({
                   {c.company_name}
                 </Link>
                 {c.has_association_chair && <ChairCrown />}
+                {c.has_association_officer && <OfficerCrown />}
                 {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 align-middle text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
                 {!!c.is_user && c.contract_count === 0 && <NoContractBadge />}
               </label>

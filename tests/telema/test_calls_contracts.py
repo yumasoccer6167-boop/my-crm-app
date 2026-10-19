@@ -276,3 +276,17 @@ def test_再コールの記録を直すとき_次回架電もあわせて足せ�
     # 訪問の記録には付けられない
     visit = client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '訪問'})[1]
     assert client.api(f'/calls/{visit["id"]}', {'next_call_at': '2026-10-20T01:00:00Z'}, method='PATCH')[0] == 400
+
+
+def test_架電の記録の担当者を付け替えられる(client):
+    cid = make_company(client, '担当者付け替え園')
+    other = client.add_user('別の担当者', 'sales')
+    call = client.api(f'/companies/{cid}/calls', {'raw_note': 'メモ'})[1]
+    status, row = client.api(f'/calls/{call["id"]}', {'user_id': other}, method='PATCH')
+    assert status == 200 and row['user_id'] == other and row['user_name'] == '別の担当者'
+    assert len(client.sql("SELECT 1 FROM telema_audit_logs WHERE entity_type = 'call_log' AND entity_id = %s AND action = 'update'", (call['id'],))) >= 1
+    assert client.api(f'/calls/{call["id"]}', {'user_id': 999999}, method='PATCH')[0] == 400
+    assert client.api(f'/calls/{call["id"]}', {'user_id': None}, method='PATCH')[0] == 400
+    # 訪問の記録も付け替えられる
+    visit = client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '訪問'})[1]
+    assert client.api(f'/calls/{visit["id"]}', {'user_id': other}, method='PATCH')[1]['user_id'] == other
