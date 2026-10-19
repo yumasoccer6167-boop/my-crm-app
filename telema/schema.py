@@ -492,6 +492,20 @@ ALTER TABLE telema_contacts ADD COLUMN is_association_chair INTEGER NOT NULL DEF
     r"""
 ALTER TABLE telema_contacts ADD COLUMN is_association_officer INTEGER NOT NULL DEFAULT 0;
 """,
+    # 14: 訪問記録の「訪問の内容」（ユーザー訪問・初回訪問・営業）。訪問の記録ごとに1つ付ける。マスタは設定画面で管理者が増やせる。既存の訪問記録は未設定のまま
+    r"""
+CREATE TABLE telema_visit_purposes (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  is_active   INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL DEFAULT telema_now(),
+  updated_at  TEXT NOT NULL DEFAULT telema_now()
+);
+INSERT INTO telema_visit_purposes (name, sort_order) VALUES ('ユーザー訪問', 10), ('初回訪問', 20), ('営業', 30);
+
+ALTER TABLE telema_call_logs ADD COLUMN visit_purpose_id INTEGER REFERENCES telema_visit_purposes(id);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

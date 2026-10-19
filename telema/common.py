@@ -65,7 +65,9 @@ TAG_KINDS = (ASSOCIATION, LIST_TYPE)
 
 # 部署（営業部・制作部・CS など）。タイムラインの記録ごとに1つ付ける（施設への紐付けではなく、架電履歴の列 section_id）
 SECTION = MasterKind(key='section', slug='sections', label='部署', master='telema_sections')
-MASTER_KINDS = (*TAG_KINDS, SECTION)
+# 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問の記録ごとに1つ付ける（架電履歴の列 visit_purpose_id）
+VISIT_PURPOSE = MasterKind(key='visit_purpose', slug='visit-purposes', label='訪問の内容', master='telema_visit_purposes')
+MASTER_KINDS = (*TAG_KINDS, SECTION, VISIT_PURPOSE)
 
 
 def audit(db, user_id, action, entity_type, entity_id, before=None, after=None):

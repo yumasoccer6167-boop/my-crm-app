@@ -47,10 +47,12 @@ export function CallEntry({
   isUser: boolean;
   onSaved: () => void;
 }) {
-  const { statuses, sections, aiAvailable } = useMasters();
+  const { statuses, sections, visitPurposes, aiAvailable } = useMasters();
   const [sectionId, setSectionId] = useState<number | null>(() => defaultSection(sections));
   const [kind, setKind] = useState<RecordType>("call");
   const [visitMethod, setVisitMethod] = useState<VisitMethod>("visit");
+  // 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問記録だけ。もう一度押すと外れる
+  const [purposeId, setPurposeId] = useState<number | null>(null);
   // 記録の日時。基本は「この記録を書いている時間」で、自分で変えるまでは現在時刻に追従し、保存するときも保存時点の時刻にする
   const [recordedAt, setRecordedAt] = useState(() => toLocalInput(new Date().toISOString()));
   const [atEdited, setAtEdited] = useState(false);
@@ -106,7 +108,7 @@ export function CallEntry({
         api.companies[":id"].calls.$post({
           param: { id: String(companyId) },
           json: isVisit
-            ? { ...common, record_type: "visit", visit_method: visitMethod }
+            ? { ...common, record_type: "visit", visit_method: visitMethod, visit_purpose_id: purposeId }
             : {
                 ...common,
                 result_status_id: statusId ?? undefined,
@@ -213,6 +215,27 @@ export function CallEntry({
                   </button>
                 ))}
               {sections.every((s) => !s.is_active) && <span className="text-xs text-slate-400">部署が未登録です（「設定」で追加できます）</span>}
+            </div>
+          </div>
+        )}
+
+        {isVisit && (
+          <div>
+            <div className="mb-1 text-xs text-slate-500">訪問の内容（現場の内容）</div>
+            <div className="flex flex-wrap gap-1.5">
+              {visitPurposes
+                .filter((p) => p.is_active)
+                .map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPurposeId(purposeId === p.id ? null : p.id)}
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${purposeId === p.id ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              {visitPurposes.every((p) => !p.is_active) && <span className="text-xs text-slate-400">訪問の内容が未登録です（「設定」で追加できます）</span>}
             </div>
           </div>
         )}

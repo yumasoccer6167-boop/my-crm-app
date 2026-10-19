@@ -41,7 +41,8 @@ function CallEditForm({
   onSaved: () => void;
   onCancel: () => void;
 }) {
-  const { statuses, sections, users } = useMasters();
+  const { statuses, sections, users, visitPurposes } = useMasters();
+  const [purposeId, setPurposeId] = useState<number | null>(call.visit_purpose_id);
   const [userId, setUserId] = useState<number | null>(call.user_id);
   const [calledAt, setCalledAt] = useState(toLocalInput(call.called_at));
   const [statusId, setStatusId] = useState<number | null>(call.result_status_id);
@@ -81,7 +82,7 @@ function CallEditForm({
             contact_id: contactId,
             ...(userId != null && userId !== call.user_id ? { user_id: userId } : {}),
             ...(isVisit
-              ? { visit_method: visitMethod }
+              ? { visit_method: visitMethod, ...(purposeId !== call.visit_purpose_id ? { visit_purpose_id: purposeId } : {}) }
               : { result_status_id: statusId, visit_at: isAppointment ? fromLocalInput(visitAt) : null, precheck_at: isAppointment ? fromLocalInput(precheckAt) : null }),
             ...(isUser ? { section_id: sectionId } : {}),
             ...(!isVisit && nextCall !== toLocalInput(nextCallAt) ? { next_call_at: nextCall ? fromLocalInput(nextCall) : null } : {}),
@@ -144,6 +145,28 @@ function CallEditForm({
                 >
                   {s.name}
                   {!s.is_active && "（無効）"}
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {isVisit && (
+        <div>
+          <div className="mb-1 text-xs text-slate-500">訪問の内容（現場の内容）</div>
+          <div className="flex flex-wrap gap-1.5">
+            {visitPurposes
+              // 無効にした内容でも、この記録が今その内容なら選択肢に残す
+              .filter((p) => p.is_active || p.id === call.visit_purpose_id)
+              .map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPurposeId(purposeId === p.id ? null : p.id)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${purposeId === p.id ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                >
+                  {p.name}
+                  {!p.is_active && "（無効）"}
                 </button>
               ))}
           </div>
@@ -403,6 +426,9 @@ export function Timeline({
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium tabular-nums text-slate-800">{fmtDateTime(cl.called_at)}</span>
                 <KindBadge call={cl} />
+                {cl.visit_purpose_name && (
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200">{cl.visit_purpose_name}</span>
+                )}
                 {cl.result_label && <StatusBadge label={cl.result_label} category={cl.result_category} />}
                 {/* 「全体」では、どの部署の記録かが分かるよう部署名を出す（部署のタブの中では、タブで分かるので出さない） */}
                 {isUser && activeTab === ALL_TAB && cl.section_name && (

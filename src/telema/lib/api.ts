@@ -30,6 +30,7 @@ import type {
   ListType,
   PrefectureStat,
   Section,
+  VisitPurpose,
   RelationItem,
   ScheduleToday,
   NearbyUsers,
@@ -51,6 +52,7 @@ type Api = {
   associations: { $get: Call<Association[]>; $post: Call<Association>; ":id": { $patch: Call<Association> } };
   "list-types": { $get: Call<ListType[]>; $post: Call<ListType>; ":id": { $patch: Call<ListType> } };
   sections: { $get: Call<Section[]>; $post: Call<Section>; ":id": { $patch: Call<Section> } };
+  "visit-purposes": { $get: Call<VisitPurpose[]>; $post: Call<VisitPurpose>; ":id": { $patch: Call<VisitPurpose> } };
   "list-sources": { $get: Call<ListSource[]> };
   "visit-targets": { $get: Call<VisitTarget[]> };
   dashboard: { $get: Call<DashboardData>; "calls-monthly": { $get: Call<MonthlyCallsData> } };

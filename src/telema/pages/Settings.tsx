@@ -11,7 +11,7 @@ import { useMasters } from "../lib/masters";
 const ROLE_LABEL = { admin: "管理者", manager: "マネージャー", sales: "営業" } as const;
 
 export function Settings() {
-  const { me, statuses, users, associations, listTypes, sections, reload } = useMasters();
+  const { me, statuses, users, associations, listTypes, sections, visitPurposes, reload } = useMasters();
   const isAdmin = me.role === "admin";
   const [error, setError] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState({ label: "", category: "in_progress" });
@@ -121,6 +121,14 @@ export function Settings() {
         items={sections}
         create={(name) => unwrap(api.sections.$post({ json: { name } }))}
         update={(id, patch) => unwrap(api.sections[":id"].$patch({ param: { id: String(id) }, json: patch }))}
+      />
+
+      <TagsSettingsCard
+        title="訪問の内容"
+        description="訪問記録に付ける、現場の内容です（例：ユーザー訪問、初回訪問、営業）。訪問記録を追加するときに選べます。無効にした内容は新しく選べなくなりますが、すでに付いている記録には残ります。"
+        items={visitPurposes}
+        create={(name) => unwrap(api["visit-purposes"].$post({ json: { name } }))}
+        update={(id, patch) => unwrap(api["visit-purposes"][":id"].$patch({ param: { id: String(id) }, json: patch }))}
       />
 
       {isAdmin && <AssigneeMappingCard />}

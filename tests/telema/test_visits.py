@@ -130,3 +130,34 @@ def test_架電を直したり無効化したりしても_再計算に訪問は�
     client.api(f'/calls/{b["id"]}/deactivate', {})
     c = company(client, cid)
     assert c['call_count'] == 0 and c['last_called_at'] is None
+
+
+def test_訪問記録に訪問の内容を付けられ_設定で増やせる(client):
+    cid = client.sql("INSERT INTO telema_companies (company_name, company_name_normalized) VALUES ('訪問内容園', '訪問内容園') RETURNING id")[0]['id']
+    status, rows = client.api('/visit-purposes')
+    assert status == 200 and [r['name'] for r in rows] == ['ユーザー訪問', '初回訪問', '営業']
+    first = next(r['id'] for r in rows if r['name'] == '初回訪問')
+    status, v = client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '面談', 'visit_purpose_id': first})
+    assert status == 201 and v['visit_purpose_id'] == first and v['visit_purpose_name'] == '初回訪問'
+    assert client.api(f'/companies/{cid}/calls')[1][0]['visit_purpose_name'] == '初回訪問'
+    # 付けなくても保存できる。架電には付けられない
+    assert client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'zoom', 'raw_note': 'zoom'})[1]['visit_purpose_id'] is None
+    call = client.api(f'/companies/{cid}/calls', {'raw_note': '架電'})[1]
+    assert client.api(f'/companies/{cid}/calls', {'raw_note': '架電', 'visit_purpose_id': first})[0] == 400
+    assert client.api(f'/calls/{call["id"]}', {'visit_purpose_id': first}, method='PATCH')[0] == 400
+    assert client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'visit_purpose_id': 999999})[0] == 400
+    # 編集で変えられる・外せる
+    sales = next(r['id'] for r in rows if r['name'] == '営業')
+    assert client.api(f'/calls/{v["id"]}', {'visit_purpose_id': sales}, method='PATCH')[1]['visit_purpose_name'] == '営業'
+    assert client.api(f'/calls/{v["id"]}', {'visit_purpose_id': None}, method='PATCH')[1]['visit_purpose_id'] is None
+    # 設定で追加・無効化。無効にした内容は新しく選べないが、すでに付いている記録には残る
+    new = client.api('/visit-purposes', {'name': '調査訪問'})[1]
+    v2 = client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'visit_purpose_id': new['id']})[1]
+    assert client.api(f'/visit-purposes/{new["id"]}', {'is_active': False}, method='PATCH')[1]['is_active'] == 0
+    assert client.api(f'/calls/{v2["id"]}', {'raw_note': '直した'}, method='PATCH')[1]['visit_purpose_name'] == '調査訪問'
+    assert client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'visit_purpose_id': new['id']})[0] == 400
+    client.set_my_role('manager')
+    try:
+        assert client.api('/visit-purposes', {'name': '管理者以外'})[0] == 403
+    finally:
+        client.set_my_role('admin')

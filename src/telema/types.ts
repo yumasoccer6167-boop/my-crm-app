@@ -102,6 +102,9 @@ export type CallLog = {
   id: number;
   record_type: RecordType;
   visit_method: VisitMethod | null;
+  /** 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問の記録だけ。null は未設定 */
+  visit_purpose_id: number | null;
+  visit_purpose_name: string | null;
   /** 結果が「時間設定」のときの、訪問する日時と事前確認の日時 */
   visit_at: string | null;
   precheck_at: string | null;
@@ -155,6 +158,8 @@ export type Association = Tag;
 export type ListType = Tag;
 /** 部署（営業部・制作部・CS など。設定画面で管理者が増やせるマスタ。タイムラインの記録ごとに付ける） */
 export type Section = Tag;
+/** 訪問の内容（ユーザー訪問・初回訪問・営業。設定画面で管理者が増やせるマスタ。訪問の記録ごとに付ける） */
+export type VisitPurpose = Tag;
 
 /** 架電メモから抽出する項目（仕様書 11章＋つながりやすい時間・推奨ステータス） */
 export type CallExtraction = {

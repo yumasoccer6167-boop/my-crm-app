@@ -18,6 +18,8 @@ CALL_BODY = {
     'next_action': Str(max=500, nullable=True, optional=True),
     # どの部署の記録か（営業部・制作部・CS など。ユーザーの施設でタイムラインを部署別に見るため）。省略・null は未分類
     'section_id': Int(nullable=True, optional=True),
+    # 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問の記録だけに付けられる。省略・null は未設定
+    'visit_purpose_id': Int(nullable=True, optional=True),
     # 記録の種類。省略は架電。訪問（visit）のときは方法（visit＝訪問／zoom）が必須
     'record_type': Enum(['call', 'visit'], default='call'),
     'visit_method': Enum(['visit', 'zoom'], nullable=True, optional=True),
@@ -32,17 +34,29 @@ _APPOINTMENT_ONLY = {'visit_at': '訪問日時', 'precheck_at': '事前確認日
 _CALL_ONLY = {'result_status_id': '結果', 'next_call_at': '次回架電', 'next_action': '次回アクション', 'phone_number': '電話番号', **{k: v for k, v in _APPOINTMENT_ONLY.items()}}
 
 CALL_SELECT = '''SELECT cl.*, ct.name AS contact_name, u.display_name AS user_name, s.label AS result_label, s.category AS result_category,
-    sec.name AS section_name
+    sec.name AS section_name, vp.name AS visit_purpose_name
   FROM telema_call_logs cl
   LEFT JOIN telema_contacts ct ON ct.id = cl.contact_id
   LEFT JOIN users u ON u.id = cl.user_id
   LEFT JOIN telema_call_statuses s ON s.id = cl.result_status_id
-  LEFT JOIN telema_sections sec ON sec.id = cl.section_id'''
+  LEFT JOIN telema_sections sec ON sec.id = cl.section_id
+  LEFT JOIN telema_visit_purposes vp ON vp.id = cl.visit_purpose_id'''
 
 
 def _is_appointment(d, status_id):
     """結果が「時間設定」（ステータス区分 appointment）か"""
     return bool(status_id) and bool(d.first("SELECT 1 FROM telema_call_statuses WHERE id = %s AND category = 'appointment'", (status_id,)))
+
+
+def _check_visit_purpose(d, purpose_id, current_purpose_id=None):
+    """訪問の内容は実在するものだけ。無効にしたものを新しく付けることはできない（その記録にすでに付いているものなら、そのまま残せる）"""
+    if purpose_id is None or purpose_id == current_purpose_id:
+        return
+    vp = d.first('SELECT is_active FROM telema_visit_purposes WHERE id = %s', (purpose_id,))
+    if not vp:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_purpose_id: 訪問の内容が見つかりません）')
+    if not vp['is_active']:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_purpose_id: 無効な訪問の内容は選べません）')
 
 
 def _check_section(d, section_id, current_section_id=None):
@@ -75,6 +89,9 @@ def create_call(id):
 
     _check_section(d, b.get('section_id'))
     is_visit = b['record_type'] == 'visit'
+    _check_visit_purpose(d, b.get('visit_purpose_id'))
+    if not is_visit and b.get('visit_purpose_id') is not None:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_purpose_id: 架電の記録には付けられません）')
     if is_visit:
         if not b.get('visit_method'):
             raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 訪問かZoomを選んでください）')
@@ -88,11 +105,11 @@ def create_call(id):
     called_at = b.get('called_at') or now_iso()
     call_id = d.value(
         '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id,
-                                          record_type, visit_method, visit_at, precheck_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                                          record_type, visit_method, visit_at, precheck_at, visit_purpose_id)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b.get('contact_id'), user['id'], called_at, None if is_visit else (b.get('phone_number') or company['phone']), b.get('result_status_id'),
          b['raw_note'], 'pending' if b['raw_note'].strip() and not is_visit else 'skipped', b.get('section_id'),
-         b['record_type'], b.get('visit_method'), b.get('visit_at'), b.get('precheck_at')),
+         b['record_type'], b.get('visit_method'), b.get('visit_at'), b.get('precheck_at'), b.get('visit_purpose_id')),
     )
     # 履歴を先に確定させる（この後の会社更新で失敗しても架電メモは残す）
     d.commit()
@@ -129,6 +146,7 @@ CALL_PATCH = {
     'contact_id': Int(nullable=True),
     'section_id': Int(nullable=True),
     'visit_method': Enum(['visit', 'zoom']),
+    'visit_purpose_id': Int(nullable=True),
     'visit_at': IsoDatetime(nullable=True),
     'precheck_at': IsoDatetime(nullable=True),
     'user_id': Int(min=1),     # この記録の担当者（誰の架電・訪問として数えるか）。一般以上は誰でも付け替えられる
@@ -196,6 +214,10 @@ def update_call(id):
     # 記録の種類は変えられない。方法（訪問／Zoom）は訪問だけ、結果は架電だけ
     if call['record_type'] == 'visit' and b.get('result_status_id') is not None:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には結果は付けられません）')
+    if 'visit_purpose_id' in b:
+        _check_visit_purpose(d, b['visit_purpose_id'], call['visit_purpose_id'])
+        if call['record_type'] == 'call' and b['visit_purpose_id'] is not None:
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_purpose_id: 架電の記録には付けられません）')
     if call['record_type'] == 'call' and 'visit_method' in b:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 架電の記録には付けられません）')
 
