@@ -10,7 +10,7 @@ import { VISIT_METHODS } from "../../lib/record-kind";
 import { defaultSection, saveLastSection } from "../../lib/section-pref";
 import { Button, Card, CATEGORY_STYLE, ErrorBox, inputCls } from "../ui";
 
-const QUICK = [
+export const QUICK = [
   { kind: "today15", label: "今日15時" },
   { kind: "tomorrow", label: "明日" },
   { kind: "days3", label: "3日後" },

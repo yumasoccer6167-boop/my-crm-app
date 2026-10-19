@@ -252,3 +252,27 @@ def test_訪問記録は施設のステータスに関わらない(client):
     v = client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '訪問'})[1]
     client.api(f'/calls/{v["id"]}', {'raw_note': '直した', 'visit_method': 'zoom'}, method='PATCH')
     assert company(client, cid)['status_id'] == recall
+
+
+def test_再コールの記録を直すとき_次回架電もあわせて足せる(client):
+    cid = make_company(client, '次回架電追加園')
+    recall = client.status_id('再コール')
+    call = client.api(f'/companies/{cid}/calls', {'raw_note': '担当者不在', 'result_status_id': recall})[1]
+    assert company(client, cid)['next_call_at'] is None
+    # 記録を直すときに次回架電も足せる（施設の予定になる）。記録そのものには次回架電の列は無い
+    status, row = client.api(f'/calls/{call["id"]}', {'raw_note': '担当者不在（出張）', 'next_call_at': '2026-10-20T01:00:00Z'}, method='PATCH')
+    assert status == 200 and row['raw_note'] == '担当者不在（出張）'
+    assert company(client, cid)['next_call_at'] == '2026-10-20T01:00:00.000Z'
+    # 送らなければ、今の予定はそのまま。次回架電だけを直しても保存できる（記録は変わらない）
+    assert client.api(f'/calls/{call["id"]}', {'raw_note': 'さらに修正'}, method='PATCH')[0] == 200
+    assert company(client, cid)['next_call_at'] == '2026-10-20T01:00:00.000Z'
+    assert client.api(f'/calls/{call["id"]}', {'next_call_at': '2026-10-22T01:00:00Z'}, method='PATCH')[0] == 200
+    assert company(client, cid)['next_call_at'] == '2026-10-22T01:00:00.000Z'
+    # 予定を消せる。変更の履歴も残る
+    assert client.api(f'/calls/{call["id"]}', {'next_call_at': None}, method='PATCH')[0] == 200
+    assert company(client, cid)['next_call_at'] is None
+    assert len(client.sql("SELECT 1 FROM telema_audit_logs WHERE entity_type = 'company' AND entity_id = %s AND action = 'update'", (cid,))) >= 3
+    assert client.api(f'/calls/{call["id"]}', {'next_call_at': '昨日'}, method='PATCH')[0] == 400
+    # 訪問の記録には付けられない
+    visit = client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '訪問'})[1]
+    assert client.api(f'/calls/{visit["id"]}', {'next_call_at': '2026-10-20T01:00:00Z'}, method='PATCH')[0] == 400

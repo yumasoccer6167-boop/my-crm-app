@@ -3,8 +3,9 @@ import type { CallLog, Company, Contact, VisitMethod } from "../../types";
 import { fmtAppointmentDate } from "../../lib/appointment-format";
 import { markScheduleDone } from "../../lib/schedule";
 import { AppointmentCopy } from "./AppointmentCopy";
+import { QUICK } from "./CallEntry";
 import { api, unwrap } from "../../lib/api";
-import { fmtDateTime, fromLocalInput, isOverdue, toLocalInput } from "../../lib/format";
+import { fmtDateTime, fromLocalInput, isOverdue, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
 import { callsOfKind, KIND_FILTERS, type KindFilter, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
 import { ALL_TAB, callsInTab, timelineTabs } from "../../lib/timeline-tabs";
@@ -23,17 +24,20 @@ function KindBadge({ call }: { call: CallLog }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${KIND_BADGE[key]}`}>{label}</span>;
 }
 
-/** 過去の架電・訪問の記録を直すフォーム。会社の現在のステータス・次回架電は、ここでは変わらない */
+/** 過去の架電・訪問の記録を直すフォーム。施設の現在のステータスは、最新の結果を直したときだけ変わる。次回架電は、ここで変えたときだけ施設の予定に反映する */
 function CallEditForm({
   call,
   contacts,
   isUser,
+  nextCallAt,
   onSaved,
   onCancel,
 }: {
   call: CallLog;
   contacts: Contact[];
   isUser: boolean;
+  /** 施設の今の次回架電（施設全体の予定。ここで直すと施設の予定が変わる） */
+  nextCallAt: string | null;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -46,6 +50,7 @@ function CallEditForm({
   const [visitAt, setVisitAt] = useState(toLocalInput(call.visit_at));
   const [precheckAt, setPrecheckAt] = useState(toLocalInput(call.precheck_at));
   const [note, setNote] = useState(call.raw_note);
+  const [nextCall, setNextCall] = useState(toLocalInput(nextCallAt));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +82,7 @@ function CallEditForm({
               ? { visit_method: visitMethod }
               : { result_status_id: statusId, visit_at: isAppointment ? fromLocalInput(visitAt) : null, precheck_at: isAppointment ? fromLocalInput(precheckAt) : null }),
             ...(isUser ? { section_id: sectionId } : {}),
+            ...(!isVisit && nextCall !== toLocalInput(nextCallAt) ? { next_call_at: nextCall ? fromLocalInput(nextCall) : null } : {}),
           },
         }),
       );
@@ -179,6 +185,25 @@ function CallEditForm({
         </div>
       )}
 
+      {!isVisit && (
+        <div>
+          <div className="mb-1 text-xs text-slate-500">次回架電（施設の予定。ここで変えると施設の次回架電が変わります）</div>
+          <div className="mb-1.5 flex flex-wrap gap-1">
+            {QUICK.map((q) => (
+              <Button key={q.kind} size="sm" onClick={() => setNextCall(toLocalInput(quickDate(q.kind)))}>
+                {q.label}
+              </Button>
+            ))}
+            {nextCall && (
+              <Button size="sm" variant="ghost" onClick={() => setNextCall("")}>
+                予定を消す
+              </Button>
+            )}
+          </div>
+          <input type="datetime-local" value={nextCall} onChange={(e) => setNextCall(e.target.value)} className={`${inputCls} sm:max-w-xs`} />
+        </div>
+      )}
+
       <div>
         <div className="mb-1 text-xs text-slate-500">メモ</div>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={4} className={`${inputCls} resize-y leading-relaxed`} />
@@ -188,7 +213,7 @@ function CallEditForm({
       <p className="text-xs text-slate-500">
         {isVisit
           ? "訪問の記録は、施設のステータス・次回架電には影響しません。"
-          : "結果の付いた記録で一番新しいものの結果を直すと、施設のステータスもその結果に変わります（古い記録なら変わりません）。次回架電はそのままです。"}
+          : "結果の付いた記録で一番新しいものの結果を直すと、施設のステータスもその結果に変わります（古い記録なら変わりません）。次回架電は、変えたときだけ施設の予定に反映されます。"}
       </p>
       {error && <ErrorBox message={`保存できませんでした：${error}`} />}
       <div className="flex justify-end gap-2">
@@ -362,6 +387,7 @@ export function Timeline({
                   call={cl}
                   contacts={contacts}
                   isUser={isUser}
+                  nextCallAt={nextCallAt}
                   onCancel={() => setEditingId(null)}
                   onSaved={() => {
                     setEditingId(null);

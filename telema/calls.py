@@ -131,6 +131,7 @@ CALL_PATCH = {
     'visit_method': Enum(['visit', 'zoom']),
     'visit_at': IsoDatetime(nullable=True),
     'precheck_at': IsoDatetime(nullable=True),
+    'next_call_at': IsoDatetime(nullable=True),     # 施設の次回架電（履歴ではなく施設の予定。架電の記録を直すときに、あわせて足せる）
 }
 
 # メモを直したら、古いメモから作ったAI整理は内容と食い違うので消して再整理できる状態に戻す
@@ -168,7 +169,8 @@ def _sync_company_status(d, user, call, changes):
 @bp.patch('/calls/<id>')
 def update_call(id):
     """過去の架電履歴を直す（日時・結果・話した相手・メモ・部署・訪問日時・事前確認日時）。無効化と同じく、sales は自分の架電だけ直せる。
-    結果を直したのが最新の結果の記録なら、施設のステータスもその結果にそろえる（古い記録なら変えない）。次回架電などは書き換えない。最終架電日時と件数は再計算する"""
+    結果を直したのが最新の結果の記録なら、施設のステータスもその結果にそろえる（古い記録なら変えない）。
+    次回架電は、next_call_at が送られて今の予定と違うときだけ、施設の次回架電を書き換える（架電の記録のみ。訪問には付けられない）。最終架電日時と件数は再計算する"""
     id = parse_id(id)
     b = parse(CALL_PATCH, body(), partial=True)
     user = current_user()
@@ -203,11 +205,18 @@ def update_call(id):
     elif call['record_type'] == 'visit' and any(b.get(k) is not None for k in _APPOINTMENT_ONLY):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には付けられません）')
 
+    if 'next_call_at' in b and call['record_type'] == 'visit':
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には次回架電は付けられません）')
+    next_call_given = 'next_call_at' in b
+    next_call = b.pop('next_call_at', None)
     changes = {k: v for k, v in b.items() if call[k] != v}
     # 訪問する日時・事前確認日時を直した（または外れた）ときは、「対応済み」も外す（新しい予定として、また表示される）
     for k, done in (('visit_at', 'visit_done_at'), ('precheck_at', 'precheck_done_at')):
         if k in changes and call[done] is not None:
             changes[done] = None
+    if next_call_given and next_call != company['next_call_at']:
+        d.run('UPDATE telema_companies SET next_call_at = %s, updated_at = telema_now() WHERE id = %s', (next_call, company['id']))
+        audit(d, user['id'], 'update', 'company', company['id'], {'next_call_at': company['next_call_at']}, {'next_call_at': next_call})
     if not changes:
         return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (id,)))
 
