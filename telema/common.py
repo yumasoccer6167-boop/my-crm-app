@@ -24,6 +24,16 @@ ASSOCIATION_OFFICER_COLUMN = (
     'AND (ko.company_id = c.id OR (ko.company_id IS NULL AND ko.organization_id = c.organization_id))) AS has_association_officer'
 )
 
+# 施設の「訪問ステータス」（架電のステータスとは別）。一番新しい訪問記録（訪問の内容が付いているもの）の訪問の内容。施設一覧・カルテに出し、一覧では絞り込みにも使う
+LATEST_VISIT_PURPOSE_ID = (
+    "(SELECT v.visit_purpose_id FROM telema_call_logs v WHERE v.company_id = c.id AND v.is_active = 1 AND v.record_type = 'visit' "
+    "AND v.visit_purpose_id IS NOT NULL ORDER BY v.called_at DESC, v.id DESC LIMIT 1)"
+)
+VISIT_STATUS_COLUMN = (
+    f'{LATEST_VISIT_PURPOSE_ID} AS visit_purpose_id, '
+    f'(SELECT vp.name FROM telema_visit_purposes vp WHERE vp.id = {LATEST_VISIT_PURPOSE_ID}) AS visit_purpose_name'
+)
+
 CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name
   FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id'''
 

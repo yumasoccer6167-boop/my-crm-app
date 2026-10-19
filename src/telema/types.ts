@@ -57,6 +57,9 @@ export type CompanyListItem = {
   /** 協会会長の担当者がいる施設（一覧で王冠マークを出す） */
   has_association_chair: boolean;
   has_association_officer: boolean;
+  /** 訪問ステータス（架電のステータスとは別）。一番新しい訪問記録の訪問の内容。無ければ null */
+  visit_purpose_id: number | null;
+  visit_purpose_name: string | null;
   /** 加盟協会・リスト種類の名前（マスタの並び順） */
   associations: string[];
   list_types: string[];

@@ -22,6 +22,12 @@ export function OfficerCrown() {
   );
 }
 
+/** 訪問ステータス（一番新しい訪問記録の訪問の内容）。架電のステータスとは別に出す */
+export function VisitStatusBadge({ name }: { name: string | null }) {
+  if (!name) return <span className="text-slate-300">—</span>;
+  return <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200">{name}</span>;
+}
+
 /** ユーザーなのに契約情報がまだ登録されていない施設の目印 */
 function NoContractBadge() {
   return <span className="ml-1.5 whitespace-nowrap rounded bg-amber-50 px-1.5 align-middle text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-300">契約情報未登録</span>;
@@ -104,7 +110,8 @@ export function CompanyTable({
               )}
               <th className="py-2 pr-3 font-medium">会社・施設</th>
               <th className="px-3 py-2 font-medium">電話</th>
-              <th className="px-3 py-2 font-medium">ステータス</th>
+              <th className="px-3 py-2 font-medium">架電ステータス</th>
+              <th className="px-3 py-2 font-medium">訪問ステータス</th>
               <th className="px-3 py-2 text-center font-medium">温度</th>
               <th className="px-3 py-2 font-medium">口コミ</th>
               <th className="px-3 py-2 font-medium">担当者</th>
@@ -151,6 +158,9 @@ export function CompanyTable({
                 <td className="px-3 py-2">
                   <StatusBadge label={c.status_label} category={c.status_category} />
                 </td>
+                <td className="px-3 py-2">
+                  <VisitStatusBadge name={c.visit_purpose_name} />
+                </td>
                 <td className="px-3 py-2 text-center">
                   <Temperature value={c.temperature} />
                 </td>
@@ -191,7 +201,10 @@ export function CompanyTable({
                 {!!c.is_user && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 align-middle text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
                 {!!c.is_user && c.contract_count === 0 && <NoContractBadge />}
               </label>
-              <StatusBadge label={c.status_label} category={c.status_category} />
+              <span className="flex shrink-0 items-center gap-1">
+                <StatusBadge label={c.status_label} category={c.status_category} />
+                {c.visit_purpose_name && <VisitStatusBadge name={c.visit_purpose_name} />}
+              </span>
             </div>
             <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
               <span>{[c.city, c.industry].filter(Boolean).join(" · ")}</span>

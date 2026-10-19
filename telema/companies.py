@@ -3,7 +3,7 @@ import json
 
 from flask import jsonify, request
 
-from .common import ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, TAG_KINDS, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
+from .common import ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, LATEST_VISIT_PURPOSE_ID, TAG_KINDS, VISIT_STATUS_COLUMN, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
@@ -54,6 +54,9 @@ def _list_query():
     q['q'] = (get('q') or '').strip()[:100] or None
     q['status_id'] = num('status_id', True)
     q['category'] = (get('category') or '')[:20] or None
+    # 訪問ステータス（一番新しい訪問記録の訪問の内容）の id、または 'none'（訪問の内容が付いた訪問記録が無い施設）
+    visit_purpose = get('visit_purpose')
+    q['visit_purpose'] = visit_purpose if visit_purpose in (None, 'none') else num('visit_purpose', True, lo=1)
     q['user'] = get('user')
     if q['user'] not in (None, '1', '0'):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（user: 1 か 0 で指定してください）')
@@ -109,6 +112,11 @@ def list_companies():
     elif q['category']:
         where.append('s.category = %s')
         params.append(q['category'])
+    if q['visit_purpose'] == 'none':
+        where.append(f'{LATEST_VISIT_PURPOSE_ID} IS NULL')
+    elif q['visit_purpose'] is not None:
+        where.append(f'{LATEST_VISIT_PURPOSE_ID} = %s')
+        params.append(q['visit_purpose'])
     if q['user'] is not None:
         where.append('c.is_user = %s')
         params.append(int(q['user']))
@@ -167,7 +175,7 @@ def list_companies():
               (SELECT ct.name FROM telema_contacts ct WHERE ct.company_id = c.id AND ct.is_active = 1 AND ct.name IS NOT NULL
                  ORDER BY ct.is_decision_maker DESC, ct.updated_at DESC LIMIT 1) AS contact_name,
               c.last_called_at, c.next_call_at, c.call_count, c.assigned_user_id, u.display_name AS assigned_user_name, c.updated_at,
-              {CONTRACT_COUNT_COLUMN}, {ASSOCIATION_CHAIR_COLUMN}, {ASSOCIATION_OFFICER_COLUMN}, {', '.join(k.names_column for k in TAG_KINDS)}
+              {CONTRACT_COUNT_COLUMN}, {ASSOCIATION_CHAIR_COLUMN}, {ASSOCIATION_OFFICER_COLUMN}, {VISIT_STATUS_COLUMN}, {', '.join(k.names_column for k in TAG_KINDS)}
             {frm} ORDER BY {order} LIMIT %s OFFSET %s''',
         [*params, q['per_page'], (q['page'] - 1) * q['per_page']],
     )
@@ -268,6 +276,7 @@ def get_company(id):
     company = load_visible_company(id)
     d = db()
     org_id = company['organization_id']
+    company.update(d.first(f'SELECT {VISIT_STATUS_COLUMN} FROM telema_companies c WHERE c.id = %s', (id,)))      # 訪問ステータス（架電のステータスとは別）
     return jsonify({
         'company': company,
         'organization': d.first('SELECT * FROM telema_organizations WHERE id = %s', (org_id,)) if org_id else None,

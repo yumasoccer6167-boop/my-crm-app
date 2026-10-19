@@ -10,7 +10,7 @@ import { PREFECTURES } from "../shared/prefectures";
 import type { Association, ListType, Tag } from "../types";
 import { useApi } from "../lib/useApi";
 
-const FILTER_KEYS = ["q", "source_id", "user", "category", "status_id", "industry", "prefecture", "city", "assigned", "list_type", "association", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
+const FILTER_KEYS = ["q", "source_id", "user", "category", "status_id", "visit_purpose", "industry", "prefecture", "city", "assigned", "list_type", "association", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
 
 const SORT_OPTIONS = [
   { value: "next_call_at:asc", label: "次回架電が近い順" },
@@ -24,7 +24,7 @@ const SORT_OPTIONS = [
 ];
 
 export function Companies() {
-  const { statuses, users, associations, listTypes, me } = useMasters();
+  const { statuses, users, associations, listTypes, visitPurposes, me } = useMasters();
   const [params, setParams] = useSearchParams();
   const query = Object.fromEntries(FILTER_KEYS.flatMap((k) => (params.get(k) ? [[k, params.get(k)!]] : []))) as Record<string, string>;
   const [q, setQ] = useState(query.q ?? "");
@@ -127,7 +127,7 @@ export function Companies() {
             <option value="0">ユーザー以外</option>
           </select>
           <select {...sel("status_id")}>
-            <option value="">ステータス</option>
+            <option value="">架電ステータス</option>
             {statuses
               .filter((s) => s.is_active && (!query.category || s.category === query.category))
               .map((s) => (
@@ -135,6 +135,17 @@ export function Companies() {
                   {s.label}
                 </option>
               ))}
+          </select>
+          <select {...sel("visit_purpose")}>
+            <option value="">訪問ステータス</option>
+            {visitPurposes
+              .filter((v) => v.is_active || String(v.id) === query.visit_purpose)
+              .map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            <option value="none">訪問なし（未設定）</option>
           </select>
           <select {...sel("next_call")}>
             <option value="">次回架電</option>
@@ -442,7 +453,7 @@ function BulkActionBar({
   async function changeStatus() {
     const status_id = statusTarget === "none" ? null : Number(statusTarget);
     const label = status_id == null ? "未設定" : `「${statuses.find((s) => s.id === status_id)?.label}」`;
-    if (!confirm(`選択した${count}件のステータスを${label}に変更します。よろしいですか？`)) return;
+    if (!confirm(`選択した${count}件の架電ステータスを${label}に変更します。よろしいですか？`)) return;
     setSaving(true);
     setError(null);
     try {
@@ -478,7 +489,7 @@ function BulkActionBar({
         <>
           {/* 担当者に割り振る前に、リストのステータスをそろえられる */}
           <select value={statusTarget} onChange={(e) => setStatusTarget(e.target.value)} className={selectCls} aria-label="変更するステータス">
-            <option value="">ステータスを選ぶ</option>
+            <option value="">架電ステータスを選ぶ</option>
             {statuses
               .filter((s) => s.is_active)
               .map((s) => (
@@ -489,7 +500,7 @@ function BulkActionBar({
             <option value="none">（未設定に戻す）</option>
           </select>
           <Button variant="primary" size="sm" disabled={!statusTarget || saving} onClick={changeStatus}>
-            一括ステータス変更
+            架電ステータス一括変更
           </Button>
           <select value={target} onChange={(e) => setTarget(e.target.value)} className={selectCls}>
             <option value="">営業担当を選ぶ</option>

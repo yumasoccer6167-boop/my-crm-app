@@ -161,3 +161,37 @@ def test_訪問記録に訪問の内容を付けられ_設定で増やせる(cli
         assert client.api('/visit-purposes', {'name': '管理者以外'})[0] == 403
     finally:
         client.set_my_role('admin')
+
+
+def test_訪問ステータスは架電のステータスとは別で_一覧とカルテに出て_絞り込める(client):
+    def make(name):
+        return client.sql("INSERT INTO telema_companies (company_name, company_name_normalized, search_text) VALUES (%s, %s, %s) RETURNING id", (name, name, name))[0]['id']
+
+    purposes = {r['name']: r['id'] for r in client.api('/visit-purposes')[1]}
+    visit = lambda cid, purpose, **kw: client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '面談', 'visit_purpose_id': purposes.get(purpose), **kw})[1]
+    a, b, c, d = (make(f'訪問ステータス園{x}') for x in 'ABCD')
+    recall = client.status_id('再コール')
+    client.api(f'/companies/{a}/calls', {'raw_note': '架電', 'result_status_id': recall})
+    old = visit(a, '初回訪問', called_at='2026-09-01T01:00:00Z')
+    visit(a, '営業', called_at='2026-09-02T01:00:00Z')                       # 一番新しい訪問の内容が、訪問ステータスになる
+    visit(b, '初回訪問')
+    visit(c, None)                                                              # 内容を付けない訪問は、訪問ステータスにならない
+    client.api(f'/companies/{d}/calls', {'raw_note': '架電のみ'})
+    by_name = lambda q='訪問ステータス園': {i['company_name'][-1]: i for i in client.api(f'/companies?q={q}&per_page=50')[1]['items']}
+    items = by_name()
+    assert {k: v['visit_purpose_name'] for k, v in items.items()} == {'A': '営業', 'B': '初回訪問', 'C': None, 'D': None}
+    assert items['A']['status_label'] == '再コール'                           # 架電のステータスは、訪問では変わらない
+    assert items['B']['status_label'] is None
+    assert client.api(f'/companies/{a}')[1]['company']['visit_purpose_name'] == '営業'
+    assert client.api(f'/companies/{d}')[1]['company']['visit_purpose_name'] is None
+    # 絞り込み：訪問の内容ごと・訪問なし（未設定）
+    names = lambda qs: sorted(i['company_name'][-1] for i in client.api(f'/companies?q=訪問ステータス園&per_page=50&{qs}')[1]['items'])
+    assert names(f"visit_purpose={purposes['営業']}") == ['A'] and names(f"visit_purpose={purposes['初回訪問']}") == ['B']
+    assert names('visit_purpose=none') == ['C', 'D']
+    assert client.api('/companies?visit_purpose=abc')[0] == 400
+    # 一番新しい訪問を無効にすると、その前の訪問の内容に戻る。マイページ（ダッシュボード）の一覧にも出る
+    latest = next(x for x in client.api(f'/companies/{a}/calls')[1] if x['visit_purpose_name'] == '営業')
+    assert client.api(f'/calls/{latest["id"]}/deactivate', {})[0] == 200 and by_name()['A']['visit_purpose_name'] == '初回訪問' and old['id']
+    from datetime import datetime, timedelta, timezone
+    client.sql('UPDATE telema_companies SET next_call_at = %s WHERE id = %s', ((datetime.now(timezone.utc) - timedelta(days=1)).isoformat(), a))
+    assert {i['company_name'][-1]: i['visit_purpose_name'] for i in client.api('/dashboard')[1]['today']}['A'] == '初回訪問'

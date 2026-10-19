@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { TEMPERATURES } from "../shared/constants";
 import { CallEntry } from "../components/company/CallEntry";
-import { ChairCrown, OfficerCrown } from "../components/CompanyTable";
+import { ChairCrown, OfficerCrown, VisitStatusBadge } from "../components/CompanyTable";
 import { ContactsCard } from "../components/company/ContactsCard";
 import { ContractsCard } from "../components/company/ContractsCard";
 import { FieldsCard } from "../components/company/FieldsCard";
@@ -116,16 +116,22 @@ export function CompanyDetail() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-6">
           <div>
             <div className="text-xs text-slate-500">次回架電</div>
             <div className={`font-semibold ${isOverdue(nextCallAt) ? "text-rose-600" : "text-slate-900"}`}>{fmtShort(nextCallAt)}</div>
             {company.next_action ? <div className="text-xs text-slate-600">{String(company.next_action)}</div> : null}
           </div>
           <div>
-            <div className="text-xs text-slate-500">ステータス</div>
+            <div className="text-xs text-slate-500">架電ステータス</div>
             <div className="mt-0.5">
               <StatusBadge label={status?.label ?? null} category={status?.category ?? null} />
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-500">訪問ステータス</div>
+            <div className="mt-0.5">
+              <VisitStatusBadge name={(company.visit_purpose_name as string | null | undefined) ?? null} />
             </div>
           </div>
           <div>
