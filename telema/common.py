@@ -76,6 +76,25 @@ def audit(db, user_id, action, entity_type, entity_id, before=None, after=None):
     )
 
 
+# リストを担当者に割り振ったときに自動で付けるステータス。アプリの設定・管理で登録したものを名前で探す（無いときは、ステータスは変えない）
+LIST_ASSIGN_STATUS_LABEL = '未アプローチ'
+
+
+def record_list_assign(d, user, company_id, before_user_id, target_user_id, set_status=True):
+    """リストの担当者への割り振り（担当者が付いた・別の担当者に替わった）を記録する。タイムラインに「リスト割り振り」として出る。
+    set_status なら、ステータスを「未アプローチ」にする。ただし、すでに進んでいる施設（ステータスが「未対応」の区分以外）は、そのままにする。
+    担当者を外したとき（target が None）は何もしない"""
+    if target_user_id is None or target_user_id == before_user_id:
+        return
+    status_id = d.value('SELECT id FROM telema_call_statuses WHERE label = %s', (LIST_ASSIGN_STATUS_LABEL,)) if set_status else None
+    if status_id is not None and not d.value(
+            "SELECT 1 FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id WHERE c.id = %s AND (c.status_id IS NULL OR s.category = 'not_started')", (company_id,)):
+        status_id = None       # すでに進んでいる施設は、ステータスを変えない
+    if status_id is not None:
+        d.run('UPDATE telema_companies SET status_id = %s, updated_at = telema_now() WHERE id = %s', (status_id, company_id))
+    audit(d, user['id'], 'list_assign', 'company', company_id, {'assigned_user_id': before_user_id}, {'assigned_user_id': target_user_id, 'status_id': status_id})
+
+
 def company_visibility(user, alias='c'):
     """会社の閲覧（検索・詳細・一覧）の範囲。sales は「自分の担当」「未割当（共有プール）」に加えて、ユーザー（導入済み）の施設は誰の担当でも見られる。
     manager / admin は全件。見られても編集できるかは can_edit_company（ユーザーでも他の人の担当なら、sales は閲覧のみ）"""

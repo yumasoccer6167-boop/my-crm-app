@@ -61,6 +61,7 @@ type Api = {
     duplicates: { $get: Call<DuplicateCandidate[]> };
     facets: { $get: Call<{ industries: Facet[]; prefectures: Facet[]; cities: Facet[] }> };
     "bulk-assign": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
+    "bulk-status": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
     "bulk-associations": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
     "bulk-list-types": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
     "bulk-delete": { $post: Call<{ deleted: number; not_found: number }> };

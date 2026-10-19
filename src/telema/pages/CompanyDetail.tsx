@@ -41,7 +41,7 @@ export function CompanyDetail() {
 
   if (detail.error) return <ErrorBox message={detail.error} onRetry={detail.reload} />;
   if (!detail.data) return <Loading />;
-  const { company, organization, contacts, contracts, associations, list_types, sources, field_sources, siblings, summary_suggestion } = detail.data;
+  const { company, organization, contacts, contracts, associations, list_types, sources, field_sources, siblings, summary_suggestion, assignments } = detail.data;
   const status = statuses.find((s) => s.id === company.status_id);
   const editable = me.role !== "sales" || company.assigned_user_id == null || company.assigned_user_id === me.id;
   const keyContact = contacts[0];
@@ -195,7 +195,7 @@ export function CompanyDetail() {
           {calls.error ? (
             <ErrorBox message={calls.error} onRetry={calls.reload} />
           ) : (
-            <Timeline calls={calls.data ?? []} contacts={contacts} company={company} organization={organization} nextCallAt={nextCallAt} nextAction={(company.next_action as string | null) ?? null} isUser={!!company.is_user} editable={editable} onChanged={reloadAll} />
+            <Timeline calls={calls.data ?? []} assignments={assignments ?? []} contacts={contacts} company={company} organization={organization} nextCallAt={nextCallAt} nextAction={(company.next_action as string | null) ?? null} isUser={!!company.is_user} editable={editable} onChanged={reloadAll} />
           )}
         </div>
 

@@ -416,7 +416,9 @@ function BulkActionBar({
   onDone: () => void;
   onClear: () => void;
 }) {
+  const { statuses } = useMasters();
   const [target, setTarget] = useState("");
+  const [statusTarget, setStatusTarget] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -429,6 +431,23 @@ function BulkActionBar({
     try {
       await unwrap(api.companies["bulk-assign"].$post({ json: { company_ids: ids, assigned_user_id } }));
       setTarget("");
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function changeStatus() {
+    const status_id = statusTarget === "none" ? null : Number(statusTarget);
+    const label = status_id == null ? "未設定" : `「${statuses.find((s) => s.id === status_id)?.label}」`;
+    if (!confirm(`選択した${count}件のステータスを${label}に変更します。よろしいですか？`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await unwrap(api.companies["bulk-status"].$post({ json: { company_ids: ids, status_id } }));
+      setStatusTarget("");
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -457,6 +476,21 @@ function BulkActionBar({
       <span className="font-medium text-indigo-900">{count}件を選択中</span>
       {canAssign && (
         <>
+          {/* 担当者に割り振る前に、リストのステータスをそろえられる */}
+          <select value={statusTarget} onChange={(e) => setStatusTarget(e.target.value)} className={selectCls} aria-label="変更するステータス">
+            <option value="">ステータスを選ぶ</option>
+            {statuses
+              .filter((s) => s.is_active)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            <option value="none">（未設定に戻す）</option>
+          </select>
+          <Button variant="primary" size="sm" disabled={!statusTarget || saving} onClick={changeStatus}>
+            一括ステータス変更
+          </Button>
           <select value={target} onChange={(e) => setTarget(e.target.value)} className={selectCls}>
             <option value="">営業担当を選ぶ</option>
             {users.map((u) => (

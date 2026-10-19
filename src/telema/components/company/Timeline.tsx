@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { CallLog, Company, Contact, VisitMethod } from "../../types";
+import type { Assignment, CallLog, Company, Contact, VisitMethod } from "../../types";
 import { fmtAppointmentDate } from "../../lib/appointment-format";
 import { markScheduleDone } from "../../lib/schedule";
 import { AppointmentCopy } from "./AppointmentCopy";
@@ -242,8 +242,17 @@ function CallEditForm({
   );
 }
 
+/** 「2026年10月19日」の形（日本時間）。リスト割り振りの表示に使う */
+function fmtJaDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+type Entry = { t: string; cl: CallLog; a?: undefined } | { t: string; a: Assignment; cl?: undefined };
+
 export function Timeline({
   calls,
+  assignments,
   contacts,
   company,
   organization,
@@ -254,6 +263,8 @@ export function Timeline({
   onChanged,
 }: {
   calls: CallLog[];
+  /** リストを担当者に割り振った記録。「リスト割り振り」として、記録と日時順に並べて出す */
+  assignments: Assignment[];
   contacts: Contact[];
   /** 「時間設定」の記録から、カレンダー・アジェンダ登録用の文面を作るのに使う */
   company: Company;
@@ -280,6 +291,9 @@ export function Timeline({
   const shown = callsOfKind(isUser ? callsInTab(calls, activeTab) : calls, kind);
   // 次回架電予定は施設全体の予定。部署のタブと、訪問だけの表示には出さない
   const showNext = !!nextCallAt && (!isUser || activeTab === ALL_TAB) && kind !== "visit";
+  // リスト割り振りは施設全体の出来事。「すべて」の種類の、部署のタブでは「全体」だけに出す
+  const shownAssignments = kind === "all" && (!isUser || activeTab === ALL_TAB) ? assignments : [];
+  const entries: Entry[] = [...shown.map((cl): Entry => ({ t: cl.called_at, cl })), ...shownAssignments.map((a): Entry => ({ t: a.at, a }))].sort((x, y) => (x.t < y.t ? 1 : x.t > y.t ? -1 : 0));
 
   async function analyze(id: number) {
     setRunning(id);
@@ -368,7 +382,20 @@ export function Timeline({
             {nextAction && <p className="mt-0.5 text-sm text-slate-700">{nextAction}</p>}
           </li>
         )}
-        {shown.map((cl) => {
+        {entries.map((it) => {
+          if (it.a) {
+            const a = it.a;
+            return (
+              <li key={`assign-${a.id}`} className="relative">
+                <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full bg-emerald-500 ring-4 ring-white" />
+                <div className="text-sm font-medium text-emerald-800">
+                  {fmtJaDate(a.at)}、リスト割り振り
+                  {a.assignee_name && <span className="ml-2 text-xs font-normal text-slate-500">担当：{a.assignee_name}</span>}
+                </div>
+              </li>
+            );
+          }
+          const cl = it.cl;
           const canModify = me.role !== "sales" || cl.user_id === me.id;
           return (
             <li key={cl.id} className="group relative">

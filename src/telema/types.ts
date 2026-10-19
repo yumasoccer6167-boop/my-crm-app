@@ -310,7 +310,11 @@ export type CompanyDetailData = {
   contracts: Contract[];
   associations: Association[];
   list_types: ListType[];
+  /** リストを担当者に割り振った記録（タイムラインに「リスト割り振り」として出す） */
+  assignments: Assignment[];
 };
+
+export type Assignment = { id: number; at: string; assignee_name: string | null };
 
 /** 施設のAIサマリーの提案（ai_suggestions の suggestion_type = 'summary'） */
 export type SummarySuggestion = { id: number; summary: string; next_action: string | null; calls: number; model: string | null; created_at: string };

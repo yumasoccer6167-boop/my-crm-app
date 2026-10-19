@@ -3,7 +3,7 @@ import json
 
 from flask import jsonify, request
 
-from .common import ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, TAG_KINDS, audit, can_edit_company, company_visibility, jst_day_range
+from .common import ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, TAG_KINDS, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
@@ -283,6 +283,11 @@ def get_company(id):
         'siblings': d.all(
             '''SELECT c.id, c.company_name, c.is_user, s.label AS status_label FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
                WHERE c.organization_id = %s AND c.id <> %s AND c.is_active = 1 ORDER BY c.company_name LIMIT 50''', (org_id, id)) if org_id else [],
+        # タイムラインに出す「リスト割り振り」（担当者に割り振った日時と、割り振られた担当者）
+        'assignments': d.all(
+            '''SELECT a.id, a.created_at AS at, u.display_name AS assignee_name FROM telema_audit_logs a
+               LEFT JOIN users u ON u.id = (a.after_json::json->>'assigned_user_id')::int
+               WHERE a.action = 'list_assign' AND a.entity_type = 'company' AND a.entity_id = %s ORDER BY a.created_at DESC, a.id DESC LIMIT 50''', (id,)),
         'pending_suggestions': d.value("SELECT COUNT(*) FROM telema_ai_suggestions WHERE company_id = %s AND status = 'pending'", (id,)),
         'summary_suggestion': _summary_draft(d, id),
         'contracts': d.all(f'{CONTRACT_SELECT} WHERE ct.company_id = %s AND ct.is_active = 1 ORDER BY ct.contract_date DESC, ct.id DESC', (id,)),
@@ -409,6 +414,26 @@ def bulk_assign():
     for r in changed:
         d.run('UPDATE telema_companies SET assigned_user_id = %s, updated_at = telema_now() WHERE id = %s', (target_user, r['id']))
         audit(d, user['id'], 'assign', 'company', r['id'], {'assigned_user_id': r['assigned_user_id']}, {'assigned_user_id': target_user})
+        record_list_assign(d, user, r['id'], r['assigned_user_id'], target_user)      # 担当者に割り振ったら、ステータスを「未アプローチ」にして、タイムラインに残す
+    return jsonify({'updated': len(changed), 'unchanged': len(before) - len(changed), 'not_found': len(ids) - len(before)})
+
+
+@bp.post('/companies/bulk-status')
+def bulk_status():
+    """ステータスの一括変更（manager/admin のみ。担当者への割り振りの前に、リストのステータスをそろえるのに使う）。status_id = null で未設定に戻す"""
+    require_role('manager', 'admin')
+    b = parse({'company_ids': IntList(min_len=1, max_len=500), 'status_id': Int(min=1, nullable=True)}, body())
+    user = current_user()
+    d = db()
+    status_id = b['status_id']
+    if status_id is not None and not d.first('SELECT id FROM telema_call_statuses WHERE id = %s', (status_id,)):
+        raise not_found('ステータス')
+    ids = list(dict.fromkeys(b['company_ids']))
+    before = d.all('SELECT id, status_id FROM telema_companies WHERE is_active = 1 AND id = ANY(%s)', (ids,))
+    changed = [r for r in before if r['status_id'] != status_id]
+    for r in changed:
+        d.run('UPDATE telema_companies SET status_id = %s, updated_at = telema_now() WHERE id = %s', (status_id, r['id']))
+        audit(d, user['id'], 'update', 'company', r['id'], {'status_id': r['status_id']}, {'status_id': status_id})
     return jsonify({'updated': len(changed), 'unchanged': len(before) - len(changed), 'not_found': len(ids) - len(before)})
 
 
@@ -452,6 +477,9 @@ def update_company(id):
         f'UPDATE telema_companies SET {", ".join(f"{k} = %s" for k in cols)}, updated_at = telema_now() WHERE id = %s RETURNING *',
         [*[values[k] for k in cols], id],
     )
+    if 'assigned_user_id' in b:
+        record_list_assign(d, user, id, before['assigned_user_id'], b['assigned_user_id'], set_status='status_id' not in b)
+        row = d.first('SELECT * FROM telema_companies WHERE id = %s', (id,))
     for f in changed_fields:
         d.run(
             '''INSERT INTO telema_company_field_sources (company_id, field, source, source_ref, confidence, updated_by, updated_at)
