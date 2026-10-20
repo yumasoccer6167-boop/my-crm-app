@@ -95,3 +95,26 @@ def test_基本情報の会社名を入れると_同じ会社名の施設どう�
     # 会社名と施設名を一緒に変えられる
     assert client.api(f'/companies/{c}', {'organization_name': '学校法人会社名会', 'company_name': '会社名C園（新）'}, method='PATCH')[0] == 200
     assert org_of(client, c) == org_of(client, a) and detail(client, c)['company']['company_name'] == '会社名C園（新）'
+
+
+def test_姉妹園のうち本部を登録できる(client):
+    a, b, c = make_company(client, '本部A園'), make_company(client, '本部B園'), make_company(client, '本部C園')
+    lonely = make_company(client, '連携なし本部園')
+    assert client.api(f'/companies/{lonely}/headquarters', {'is_headquarters': True})[0] == 400          # 会社に属していない施設は本部にできない
+    client.api(f'/companies/{a}/siblings', {'company_id': b})
+    client.api(f'/companies/{a}/siblings', {'company_id': c})
+    status, body = client.api(f'/companies/{b}/headquarters', {'is_headquarters': True})
+    assert status == 200 and body['is_headquarters'] == 1
+    flags = lambda cid: {s['company_name']: s['is_headquarters'] for s in detail(client, cid)['siblings']}
+    assert detail(client, b)['company']['is_headquarters'] == 1 and flags(a) == {'本部B園': 1, '本部C園': 0}      # 姉妹園の一覧にも出る
+    assert [s['company_name'] for s in detail(client, a)['siblings']][0] == '本部B園'                              # 本部が先頭
+    # 本部は1施設だけ。別の施設を本部にすると、これまでの本部は外れる
+    assert client.api(f'/companies/{c}/headquarters', {'is_headquarters': True})[0] == 200
+    assert detail(client, b)['company']['is_headquarters'] == 0 and detail(client, c)['company']['is_headquarters'] == 1
+    assert client.sql('SELECT COUNT(*) AS n FROM telema_companies WHERE organization_id = %s AND is_headquarters = 1', (org_of(client, a),))[0]['n'] == 1
+    # 外せる。連携を解除する（会社から外れる）と、本部ではなくなる
+    assert client.api(f'/companies/{c}/headquarters', {'is_headquarters': False})[1]['is_headquarters'] == 0
+    client.api(f'/companies/{a}/headquarters', {'is_headquarters': True})
+    assert client.api(f'/companies/{a}/leave-organization', {})[0] == 200 and detail(client, a)['company']['is_headquarters'] == 0
+    assert len(client.sql("SELECT 1 FROM telema_audit_logs WHERE entity_type = 'company_headquarters'")) >= 4
+    assert client.api(f'/companies/{b}/headquarters', {})[0] == 400

@@ -79,6 +79,7 @@ type Api = {
       "nearby-users": { $get: Call<NearbyUsers> };
       siblings: { $post: Call<{ organization_id: number; siblings: Sibling[] }> };
       "leave-organization": { $post: Call<{ ok: true }> };
+      headquarters: { $post: Call<{ is_headquarters: number; siblings: Sibling[] }> };
       "organization-name": { $post: Call<{ organization_id: number; name: string }> };
       relations: { $get: Call<RelationItem[]>; $post: Call<Record<string, unknown> & { id: number }> };
       summarize: { $post: Call<SummarySuggestion> };

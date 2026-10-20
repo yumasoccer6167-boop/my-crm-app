@@ -9,7 +9,7 @@ import { FieldsCard } from "../components/company/FieldsCard";
 import { RelationsCard } from "../components/company/RelationsCard";
 import { NearbyUsersCard } from "../components/company/NearbyUsersCard";
 import { SiblingsCard } from "../components/company/SiblingsCard";
-import { SiblingTabs } from "../components/company/SiblingTabs";
+import { HeadquartersBadge, SiblingTabs } from "../components/company/SiblingTabs";
 import { SuccessCasesCard } from "../components/company/SuccessCasesCard";
 import { SummaryCard } from "../components/company/SummaryCard";
 import { TagsRow } from "../components/company/TagsRow";
@@ -74,7 +74,7 @@ export function CompanyDetail() {
   return (
     <div className="space-y-4">
       {/* 姉妹園（同じ法人の施設）がある施設は、園名のボタンでカルテを切り替えられる */}
-      <SiblingTabs current={{ id: company.id, company_name: company.company_name, is_user: company.is_user ? 1 : 0 }} organizationName={(organization?.name as string | undefined) ?? null} siblings={siblings} />
+      <SiblingTabs current={{ id: company.id, company_name: company.company_name, is_user: company.is_user ? 1 : 0, is_headquarters: company.is_headquarters ? 1 : 0 }} organizationName={(organization?.name as string | undefined) ?? null} siblings={siblings} />
       {/* ヘッダー：次に何をするか・現在の状態・担当者 */}
       <section className="rounded-lg bg-white p-4 ring-1 ring-slate-200">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -88,6 +88,7 @@ export function CompanyDetail() {
             </Link>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-slate-900">{company.company_name}</h1>
+              {!!company.is_headquarters && <HeadquartersBadge className="py-0.5 text-xs" />}
               {contacts.some((c) => c.is_association_chair) && <ChairCrown />}
               {contacts.some((c) => c.is_association_officer) && <OfficerCrown />}
               {/* ユーザー（導入済み）は営業ステータスとは別に持つ */}
@@ -257,7 +258,7 @@ export function CompanyDetail() {
             }
           />
           <NearbyUsersCard companyId={company.id} />
-          <SiblingsCard companyId={company.id} organization={organization} siblings={siblings} editable={editable} onChanged={reloadAll} />
+          <SiblingsCard companyId={company.id} isHeadquarters={!!company.is_headquarters} organization={organization} siblings={siblings} editable={editable} onChanged={reloadAll} />
           <Card title="リスト取得元">
             {sources.length ? (
               <ul className="space-y-1 text-sm">

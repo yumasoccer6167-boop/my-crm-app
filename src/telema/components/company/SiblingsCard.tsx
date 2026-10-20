@@ -3,17 +3,21 @@ import { Link } from "react-router";
 import type { CompanyListItem, Sibling } from "../../types";
 import { api, unwrap } from "../../lib/api";
 import { CompanyPicker } from "../CompanyPicker";
+import { HeadquartersBadge } from "./SiblingTabs";
 import { Button, Card, ErrorBox, inputCls, StatusBadge } from "../ui";
 
 /** 姉妹園（同じ法人の施設）の連携。既存のカルテどうしを、法人名の入力なしで連携させる／外す。施設（カルテ）は別々のまま残る。法人名は任意で、あとから付けられる */
 export function SiblingsCard({
   companyId,
+  isHeadquarters,
   organization,
   siblings,
   editable,
   onChanged,
 }: {
   companyId: number;
+  /** この施設が本部か */
+  isHeadquarters: boolean;
   organization: Record<string, unknown> | null;
   siblings: Sibling[];
   editable: boolean;
@@ -60,6 +64,18 @@ export function SiblingsCard({
     try {
       await unwrap(api.companies[":id"]["organization-name"].$post({ param: { id: String(companyId) }, json: { name: nameDraft.trim() } }));
       setEditingName(false);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /** 施設を本部にする／外す。本部は会社ごとに1施設だけ（別の施設を本部にすると、これまでの本部は外れる） */
+  async function setHeadquarters(id: number, name: string, value: boolean) {
+    if (value && !confirm(`「${name}」を本部にします。この会社の本部は1施設だけなので、これまでの本部は外れます。よろしいですか？`)) return;
+    setError(null);
+    try {
+      await unwrap(api.companies[":id"].headquarters.$post({ param: { id: String(id) }, json: { is_headquarters: value } }));
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -126,6 +142,18 @@ export function SiblingsCard({
           <p className="text-xs text-slate-400">姉妹園（同じ会社の施設）は、既存のカルテどうしを連携させて登録します。新しい施設を作る必要はありません。基本情報の「会社名」に同じ名前を入れた施設どうしも、姉妹園になります。</p>
         )}
 
+        {organization && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">この施設</span>
+            {isHeadquarters ? <HeadquartersBadge /> : <span className="text-xs text-slate-400">本部ではありません</span>}
+            {editable && (
+              <button type="button" className="text-xs text-indigo-700 hover:underline" onClick={() => setHeadquarters(companyId, "この施設", !isHeadquarters)}>
+                {isHeadquarters ? "本部を外す" : "本部にする"}
+              </button>
+            )}
+          </div>
+        )}
+
         {siblings.length > 0 && (
           <div>
             <div className="mb-1 text-xs text-slate-500">連携している姉妹園（{siblings.length}）</div>
@@ -136,6 +164,12 @@ export function SiblingsCard({
                     {s.company_name}
                   </Link>
                   <span className="flex shrink-0 items-center gap-1.5">
+                    {!!s.is_headquarters && <HeadquartersBadge />}
+                    {editable && (
+                      <button type="button" onClick={() => setHeadquarters(s.id, s.company_name, !s.is_headquarters)} className="text-xs text-slate-400 opacity-0 hover:text-indigo-700 group-hover:opacity-100 focus:opacity-100">
+                        {s.is_headquarters ? "本部を外す" : "本部にする"}
+                      </button>
+                    )}
                     {!!s.is_user && <span className="rounded bg-emerald-50 px-1.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">ユーザー</span>}
                     {s.status_label && <StatusBadge label={s.status_label} category={null} />}
                     {editable && (

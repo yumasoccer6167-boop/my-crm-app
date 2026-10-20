@@ -261,7 +261,7 @@ export type NearbyUsers = {
 };
 
 /** 姉妹園（同じ法人の他の施設） */
-export type Sibling = { id: number; company_name: string; is_user: number; status_label: string | null };
+export type Sibling = { id: number; company_name: string; is_user: number; is_headquarters: number; status_label: string | null };
 
 /** CRM本体の顧客リストからの取り込み（管理者）。件数の概要と、1回分（数十〜数百件）の結果 */
 export type CustomerImportSummary = { customers: number; imported_customers: number; records: number; imported_records: number };

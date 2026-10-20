@@ -512,6 +512,10 @@ ALTER TABLE telema_call_logs ADD COLUMN sales_product TEXT;
 ALTER TABLE telema_call_logs ADD COLUMN sales_monthly_fee INTEGER;
 ALTER TABLE telema_call_logs ADD COLUMN sales_term TEXT;
 """,
+    # 16: 姉妹園（同じ会社の施設）のうち、本部の施設。会社ごとに1施設だけ。会社から外れる・別の会社へ移ると外れる
+    r"""
+ALTER TABLE telema_companies ADD COLUMN is_headquarters INTEGER NOT NULL DEFAULT 0;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

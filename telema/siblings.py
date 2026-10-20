@@ -14,8 +14,8 @@ from .validate import Bool, Int, Str, parse, parse_id
 
 def _members(d, org_id, exclude_id):
     return d.all(
-        '''SELECT c.id, c.company_name, c.is_user, s.label AS status_label FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
-            WHERE c.organization_id = %s AND c.id <> %s AND c.is_active = 1 ORDER BY c.company_name LIMIT 50''', (org_id, exclude_id))
+        '''SELECT c.id, c.company_name, c.is_user, c.is_headquarters, s.label AS status_label FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
+            WHERE c.organization_id = %s AND c.id <> %s AND c.is_active = 1 ORDER BY c.is_headquarters DESC, c.company_name LIMIT 50''', (org_id, exclude_id))
 
 
 def _count(d, org_id):
@@ -23,7 +23,7 @@ def _count(d, org_id):
 
 
 def _set_org(d, user, company_id, before, after):
-    d.run('UPDATE telema_companies SET organization_id = %s, updated_at = telema_now() WHERE id = %s', (after, company_id))
+    d.run('UPDATE telema_companies SET organization_id = %s, is_headquarters = 0, updated_at = telema_now() WHERE id = %s', (after, company_id))      # 会社が変わったら、本部ではなくなる
     audit(d, user['id'], 'update', 'company_organization', company_id, {'organization_id': before}, {'organization_id': after})
 
 
@@ -58,6 +58,27 @@ def add_sibling(id):
         raise ApiError(409, 'conflict', f'この施設は別の会社「{old["name"]}」（{_count(d, other["organization_id"])}施設）に属しています。この施設の会社へ移しますか？')
     _set_org(d, user, other['id'], other['organization_id'], org_id)
     return jsonify({'organization_id': org_id, 'siblings': _members(d, org_id, me['id'])})
+
+
+@bp.post('/companies/<id>/headquarters')
+def set_headquarters(id):
+    """この施設を、会社（姉妹園）の本部にする／外す。本部は会社ごとに1施設だけで、別の施設を本部にすると、これまでの本部は外れる"""
+    id = parse_id(id)
+    b = parse({'is_headquarters': Bool()}, body())
+    user, d = current_user(), db()
+    company = load_visible_company(id)
+    if not can_edit_company(user, company['assigned_user_id']):
+        raise forbidden()
+    org_id = company['organization_id']
+    if org_id is None:
+        raise ApiError(400, 'validation_error', '会社が連携されていません（先に姉妹園を連携するか、基本情報の会社名を入れてください）')
+    want = int(b['is_headquarters'])
+    if want:
+        d.run('UPDATE telema_companies SET is_headquarters = 0, updated_at = telema_now() WHERE organization_id = %s AND id <> %s AND is_headquarters = 1', (org_id, id))
+    if company['is_headquarters'] != want:
+        d.run('UPDATE telema_companies SET is_headquarters = %s, updated_at = telema_now() WHERE id = %s', (want, id))
+        audit(d, user['id'], 'update', 'company_headquarters', id, {'is_headquarters': company['is_headquarters']}, {'is_headquarters': want})
+    return jsonify({'is_headquarters': want, 'siblings': _members(d, org_id, id)})
 
 
 @bp.post('/companies/<id>/leave-organization')

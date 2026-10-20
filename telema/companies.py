@@ -290,8 +290,8 @@ def get_company(id):
                WHERE cs.company_id = %s ORDER BY cs.created_at''', (id,)),
         'field_sources': d.all('SELECT field, source, source_ref, confidence, updated_at FROM telema_company_field_sources WHERE company_id = %s', (id,)),
         'siblings': d.all(
-            '''SELECT c.id, c.company_name, c.is_user, s.label AS status_label FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
-               WHERE c.organization_id = %s AND c.id <> %s AND c.is_active = 1 ORDER BY c.company_name LIMIT 50''', (org_id, id)) if org_id else [],
+            '''SELECT c.id, c.company_name, c.is_user, c.is_headquarters, s.label AS status_label FROM telema_companies c LEFT JOIN telema_call_statuses s ON s.id = c.status_id
+               WHERE c.organization_id = %s AND c.id <> %s AND c.is_active = 1 ORDER BY c.is_headquarters DESC, c.company_name LIMIT 50''', (org_id, id)) if org_id else [],
         # タイムラインに出す「リスト割り振り」（担当者に割り振った日時と、割り振られた担当者）
         'assignments': d.all(
             '''SELECT a.id, a.created_at AS at, u.display_name AS assignee_name FROM telema_audit_logs a
@@ -348,7 +348,7 @@ def change_company_organization(d, user, company, name):
         else:
             new = organization_id_for_name(d, name)
     if new != current:
-        d.run('UPDATE telema_companies SET organization_id = %s, updated_at = telema_now() WHERE id = %s', (new, company['id']))
+        d.run('UPDATE telema_companies SET organization_id = %s, is_headquarters = 0, updated_at = telema_now() WHERE id = %s', (new, company['id']))
         audit(d, user['id'], 'update', 'company_organization', company['id'], {'organization_id': current}, {'organization_id': new})
 
 
