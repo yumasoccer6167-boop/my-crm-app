@@ -506,6 +506,12 @@ INSERT INTO telema_visit_purposes (name, sort_order) VALUES ('ユーザー訪問
 
 ALTER TABLE telema_call_logs ADD COLUMN visit_purpose_id INTEGER REFERENCES telema_visit_purposes(id);
 """,
+    # 15: 訪問記録で訪問の内容が「営業」のときに残す、商材・月額・期間（現金一括／12〜84か月）。それ以外の記録は NULL
+    r"""
+ALTER TABLE telema_call_logs ADD COLUMN sales_product TEXT;
+ALTER TABLE telema_call_logs ADD COLUMN sales_monthly_fee INTEGER;
+ALTER TABLE telema_call_logs ADD COLUMN sales_term TEXT;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

@@ -7,6 +7,12 @@ from .context import ApiError, body, current_user, db, forbidden, not_found
 from .routes import bp
 from .validate import Enum, Int, IsoDatetime, Str, now_iso, parse, parse_id
 
+# 訪問の内容が「営業」のときだけ残せる項目（名前で判定する）。期間は現金一括（cash）か、12〜84か月
+SALES_PURPOSE_NAME = '営業'
+SALES_TERMS = ['cash', '12', '24', '36', '48', '60', '72', '84']
+_SALES_FIELDS = {'sales_product': '商材', 'sales_monthly_fee': '月額', 'sales_term': '期間'}
+
+
 CALL_BODY = {
     'raw_note': Str(max=5000, trim=False, default=''),
     'called_at': IsoDatetime(optional=True),
@@ -20,6 +26,10 @@ CALL_BODY = {
     'section_id': Int(nullable=True, optional=True),
     # 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問の記録だけに付けられる。省略・null は未設定
     'visit_purpose_id': Int(nullable=True, optional=True),
+    # 訪問の内容が「営業」のときの、商材・月額（円）・期間。それ以外の記録には付けられない
+    'sales_product': Str(max=200, nullable=True, optional=True),
+    'sales_monthly_fee': Int(min=0, nullable=True, optional=True),
+    'sales_term': Enum(SALES_TERMS, nullable=True, optional=True),
     # 記録の種類。省略は架電。訪問（visit）のときは方法（visit＝訪問／zoom）が必須
     'record_type': Enum(['call', 'visit'], default='call'),
     'visit_method': Enum(['visit', 'zoom'], nullable=True, optional=True),
@@ -57,6 +67,11 @@ def _check_visit_purpose(d, purpose_id, current_purpose_id=None):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_purpose_id: 訪問の内容が見つかりません）')
     if not vp['is_active']:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_purpose_id: 無効な訪問の内容は選べません）')
+
+
+def _is_sales_purpose(d, purpose_id):
+    """訪問の内容が「営業」か"""
+    return purpose_id is not None and d.value('SELECT name FROM telema_visit_purposes WHERE id = %s', (purpose_id,)) == SALES_PURPOSE_NAME
 
 
 def _check_section(d, section_id, current_section_id=None):
@@ -102,14 +117,19 @@ def create_call(id):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 架電の記録には付けられません）')
     elif any(b.get(k) is not None for k in _APPOINTMENT_ONLY) and not _is_appointment(d, b.get('result_status_id')):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問日時・事前確認日時は結果が「時間設定」のときだけ設定できます）')
+    sent_sales = [label for k, label in _SALES_FIELDS.items() if b.get(k) is not None]
+    if sent_sales and not (is_visit and _is_sales_purpose(d, b.get('visit_purpose_id'))):
+        raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent_sales)}は、訪問の内容が「営業」の訪問記録だけに付けられます）')
     called_at = b.get('called_at') or now_iso()
     call_id = d.value(
         '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id,
-                                          record_type, visit_method, visit_at, precheck_at, visit_purpose_id)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                                          record_type, visit_method, visit_at, precheck_at, visit_purpose_id,
+                                          sales_product, sales_monthly_fee, sales_term)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b.get('contact_id'), user['id'], called_at, None if is_visit else (b.get('phone_number') or company['phone']), b.get('result_status_id'),
          b['raw_note'], 'pending' if b['raw_note'].strip() and not is_visit else 'skipped', b.get('section_id'),
-         b['record_type'], b.get('visit_method'), b.get('visit_at'), b.get('precheck_at'), b.get('visit_purpose_id')),
+         b['record_type'], b.get('visit_method'), b.get('visit_at'), b.get('precheck_at'), b.get('visit_purpose_id'),
+         b.get('sales_product'), b.get('sales_monthly_fee'), b.get('sales_term')),
     )
     # 履歴を先に確定させる（この後の会社更新で失敗しても架電メモは残す）
     d.commit()
@@ -147,6 +167,9 @@ CALL_PATCH = {
     'section_id': Int(nullable=True),
     'visit_method': Enum(['visit', 'zoom']),
     'visit_purpose_id': Int(nullable=True),
+    'sales_product': Str(max=200, nullable=True),
+    'sales_monthly_fee': Int(min=0, nullable=True),
+    'sales_term': Enum(SALES_TERMS, nullable=True),
     'visit_at': IsoDatetime(nullable=True),
     'precheck_at': IsoDatetime(nullable=True),
     'user_id': Int(min=1),     # この記録の担当者（誰の架電・訪問として数えるか）。一般以上は誰でも付け替えられる
@@ -234,6 +257,12 @@ def update_call(id):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には次回架電は付けられません）')
     next_call_given = 'next_call_at' in b
     next_call = b.pop('next_call_at', None)
+    # 商材・月額・期間は、訪問の内容が「営業」の訪問記録だけ。内容を「営業」以外に直したら、付いていた営業の内容は外す
+    final_purpose = b['visit_purpose_id'] if 'visit_purpose_id' in b else call['visit_purpose_id']
+    if not (call['record_type'] == 'visit' and _is_sales_purpose(d, final_purpose)):
+        if any(b.get(k) is not None for k in _SALES_FIELDS):
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（商材・月額・期間は、訪問の内容が「営業」の訪問記録だけに付けられます）')
+        b.update({k: None for k in _SALES_FIELDS if call[k] is not None})
     changes = {k: v for k, v in b.items() if call[k] != v}
     # 訪問する日時・事前確認日時を直した（または外れた）ときは、「対応済み」も外す（新しい予定として、また表示される）
     for k, done in (('visit_at', 'visit_done_at'), ('precheck_at', 'precheck_done_at')):

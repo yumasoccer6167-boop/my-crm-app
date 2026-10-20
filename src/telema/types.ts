@@ -108,6 +108,10 @@ export type CallLog = {
   /** 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問の記録だけ。null は未設定 */
   visit_purpose_id: number | null;
   visit_purpose_name: string | null;
+  /** 訪問の内容が「営業」のときの、商材・月額（円）・期間（cash＝現金一括、12〜84＝か月）。それ以外は null */
+  sales_product: string | null;
+  sales_monthly_fee: number | null;
+  sales_term: string | null;
   /** 結果が「時間設定」のときの、訪問する日時と事前確認の日時 */
   visit_at: string | null;
   precheck_at: string | null;

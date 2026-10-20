@@ -7,7 +7,8 @@ import { QUICK } from "./CallEntry";
 import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput, isOverdue, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
-import { callsOfKind, KIND_FILTERS, type KindFilter, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
+import { callsOfKind, KIND_FILTERS, type KindFilter, SALES_PURPOSE_NAME, salesSummary, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
+import { SalesDetailFields, salesPayload, type SalesDetail } from "./SalesDetailFields";
 import { ALL_TAB, callsInTab, timelineTabs } from "../../lib/timeline-tabs";
 import { Button, Card, CATEGORY_STYLE, Empty, ErrorBox, inputCls, StatusBadge } from "../ui";
 
@@ -43,6 +44,8 @@ function CallEditForm({
 }) {
   const { statuses, sections, users, visitPurposes } = useMasters();
   const [purposeId, setPurposeId] = useState<number | null>(call.visit_purpose_id);
+  const [sales, setSales] = useState<SalesDetail>({ product: call.sales_product ?? "", fee: call.sales_monthly_fee == null ? "" : String(call.sales_monthly_fee), term: call.sales_term ?? "" });
+  const isSalesVisit = call.record_type === "visit" && visitPurposes.find((p) => p.id === purposeId)?.name === SALES_PURPOSE_NAME;
   const [userId, setUserId] = useState<number | null>(call.user_id);
   const [calledAt, setCalledAt] = useState(toLocalInput(call.called_at));
   const [statusId, setStatusId] = useState<number | null>(call.result_status_id);
@@ -82,7 +85,7 @@ function CallEditForm({
             contact_id: contactId,
             ...(userId != null && userId !== call.user_id ? { user_id: userId } : {}),
             ...(isVisit
-              ? { visit_method: visitMethod, ...(purposeId !== call.visit_purpose_id ? { visit_purpose_id: purposeId } : {}) }
+              ? { visit_method: visitMethod, ...(purposeId !== call.visit_purpose_id ? { visit_purpose_id: purposeId } : {}), ...(isSalesVisit ? salesPayload(sales) : {}) }
               : { result_status_id: statusId, visit_at: isAppointment ? fromLocalInput(visitAt) : null, precheck_at: isAppointment ? fromLocalInput(precheckAt) : null }),
             ...(isUser ? { section_id: sectionId } : {}),
             ...(!isVisit && nextCall !== toLocalInput(nextCallAt) ? { next_call_at: nextCall ? fromLocalInput(nextCall) : null } : {}),
@@ -172,6 +175,8 @@ function CallEditForm({
           </div>
         </div>
       )}
+
+      {isSalesVisit && <SalesDetailFields value={sales} onChange={setSales} currentProduct={call.sales_product} />}
 
       {isVisit && (
         <div>
@@ -487,6 +492,7 @@ export function Timeline({
                       )}
                     </p>
                   )}
+                  {salesSummary(cl) && <p className="mt-1 rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-900">営業：{salesSummary(cl)}</p>}
                   {cl.raw_note && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{cl.raw_note}</p>}
                   {cl.result_category === "appointment" && (
                     <div className="mt-1">

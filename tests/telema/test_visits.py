@@ -195,3 +195,28 @@ def test_訪問ステータスは架電のステータスとは別で_一覧と�
     from datetime import datetime, timedelta, timezone
     client.sql('UPDATE telema_companies SET next_call_at = %s WHERE id = %s', ((datetime.now(timezone.utc) - timedelta(days=1)).isoformat(), a))
     assert {i['company_name'][-1]: i['visit_purpose_name'] for i in client.api('/dashboard')[1]['today']}['A'] == '初回訪問'
+
+
+def test_訪問の内容が営業のとき_商材_月額_期間を残せる(client):
+    cid = client.sql("INSERT INTO telema_companies (company_name, company_name_normalized) VALUES ('営業内容園', '営業内容園') RETURNING id")[0]['id']
+    purposes = {r['name']: r['id'] for r in client.api('/visit-purposes')[1]}
+    product = client.api('/products')[1][0] if client.api('/products')[1] else 'SP'
+    sales = {'sales_product': product, 'sales_monthly_fee': 9800, 'sales_term': '36'}
+    post = lambda purpose, **kw: client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '提案', 'visit_purpose_id': purposes[purpose], **kw})
+    status, v = post('営業', **sales)
+    assert status == 201 and {k: v[k] for k in sales} == sales
+    assert client.api(f'/companies/{cid}/calls')[1][0]['sales_monthly_fee'] == 9800
+    assert post('営業', sales_term='cash')[1]['sales_term'] == 'cash'                          # 現金一括
+    assert all(post('営業', sales_term=t)[0] == 201 for t in ('12', '24', '36', '48', '60', '72', '84'))
+    assert post('営業', sales_term='6')[0] == 400 and post('営業', sales_term='120')[0] == 400    # 期間は決まった選択肢だけ
+    assert post('営業', sales_monthly_fee=-1)[0] == 400
+    assert post('営業')[1]['sales_product'] is None                                            # 何も入れなくても保存できる
+    # 営業以外の訪問記録・架電には付けられない
+    assert post('初回訪問', **sales)[0] == 400
+    assert client.api(f'/companies/{cid}/calls', {'raw_note': '架電', **sales})[0] == 400
+    # 編集：内容を直せる。営業以外に直すと、営業の内容は外れる。営業以外の記録に後から付けることはできない
+    assert client.api(f'/calls/{v["id"]}', {'sales_monthly_fee': 12000, 'sales_term': '60'}, method='PATCH')[1]['sales_monthly_fee'] == 12000
+    row = client.api(f'/calls/{v["id"]}', {'visit_purpose_id': purposes['初回訪問']}, method='PATCH')[1]
+    assert row['sales_product'] is None and row['sales_monthly_fee'] is None and row['sales_term'] is None
+    assert client.api(f'/calls/{v["id"]}', {'sales_term': '12'}, method='PATCH')[0] == 400
+    assert client.api(f'/calls/{v["id"]}', {'visit_purpose_id': purposes['営業'], 'sales_term': 'cash', 'sales_monthly_fee': 0}, method='PATCH')[1]['sales_term'] == 'cash'
