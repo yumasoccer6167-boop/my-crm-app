@@ -13,16 +13,18 @@ JST = timezone(timedelta(hours=9))
 CONTRACT_COUNT_COLUMN = '(SELECT COUNT(*) FROM telema_contracts k WHERE k.company_id = c.id AND k.is_active = 1) AS contract_count'
 
 # 施設一覧に出す「協会会長がいる施設」の印（施設または法人の有効な担当者に、協会会長がいる）。一覧で王冠マークを出すのに使う
-ASSOCIATION_CHAIR_COLUMN = (
+ASSOCIATION_CHAIR_EXISTS = (
     'EXISTS (SELECT 1 FROM telema_contacts kc WHERE kc.is_active = 1 AND kc.is_association_chair = 1 '
-    'AND (kc.company_id = c.id OR (kc.company_id IS NULL AND kc.organization_id = c.organization_id))) AS has_association_chair'
+    'AND (kc.company_id = c.id OR (kc.company_id IS NULL AND kc.organization_id = c.organization_id)))'
 )
+ASSOCIATION_CHAIR_COLUMN = f'{ASSOCIATION_CHAIR_EXISTS} AS has_association_chair'
 
 # 同じく「協会役員がいる施設」の印。銀の王冠で出す
-ASSOCIATION_OFFICER_COLUMN = (
+ASSOCIATION_OFFICER_EXISTS = (
     'EXISTS (SELECT 1 FROM telema_contacts ko WHERE ko.is_active = 1 AND ko.is_association_officer = 1 '
-    'AND (ko.company_id = c.id OR (ko.company_id IS NULL AND ko.organization_id = c.organization_id))) AS has_association_officer'
+    'AND (ko.company_id = c.id OR (ko.company_id IS NULL AND ko.organization_id = c.organization_id)))'
 )
+ASSOCIATION_OFFICER_COLUMN = f'{ASSOCIATION_OFFICER_EXISTS} AS has_association_officer'
 
 # 施設の「訪問ステータス」（架電のステータスとは別）。一番新しい訪問記録（訪問の内容が付いているもの）の訪問の内容。施設一覧・カルテに出し、一覧では絞り込みにも使う
 LATEST_VISIT_PURPOSE_ID = (

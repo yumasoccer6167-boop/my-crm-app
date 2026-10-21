@@ -10,7 +10,7 @@ import { PREFECTURES } from "../shared/prefectures";
 import type { Association, ListType, Tag } from "../types";
 import { useApi } from "../lib/useApi";
 
-const FILTER_KEYS = ["q", "source_id", "user", "category", "status_id", "visit_purpose", "industry", "prefecture", "city", "assigned", "list_type", "association", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
+const FILTER_KEYS = ["q", "source_id", "user", "category", "status_id", "visit_purpose", "industry", "prefecture", "city", "assigned", "list_type", "association", "association_role", "hide_siblings", "temperature", "next_call", "rating_min", "reviews_min", "sort", "order", "page"] as const;
 
 const SORT_OPTIONS = [
   { value: "next_call_at:asc", label: "次回架電が近い順" },
@@ -234,6 +234,16 @@ export function Companies() {
               </option>
             ))}
           </select>
+          <select {...sel("association_role")}>
+            <option value="">協会の役職</option>
+            <option value="any">協会会長・協会役員の園</option>
+            <option value="chair">協会会長の園</option>
+            <option value="officer">協会役員の園</option>
+          </select>
+          <label className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-white px-2.5 py-1.5 text-sm text-slate-700 ring-1 ring-inset ring-slate-300">
+            <input type="checkbox" checked={query.hide_siblings === "1"} onChange={(e) => update({ hide_siblings: e.target.checked ? "1" : undefined })} />
+            姉妹園を表示しない
+          </label>
           <select
             value={`${query.sort ?? "next_call_at"}:${query.order ?? "asc"}`}
             onChange={(e) => {

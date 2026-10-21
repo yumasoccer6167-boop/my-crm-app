@@ -3,7 +3,7 @@ import json
 
 from flask import jsonify, request
 
-from .common import ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, LATEST_VISIT_PURPOSE_ID, TAG_KINDS, VISIT_STATUS_COLUMN, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
+from .common import ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_CHAIR_EXISTS, ASSOCIATION_OFFICER_EXISTS, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, LATEST_VISIT_PURPOSE_ID, TAG_KINDS, VISIT_STATUS_COLUMN, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
@@ -67,6 +67,12 @@ def _list_query():
     for kind in TAG_KINDS:  # 加盟協会・リスト種類の id、または 'none'（1つも付いていない施設）
         tag = get(kind.key)
         q[kind.key] = tag if tag in (None, 'none') else num(kind.key, True, lo=1)
+    # 協会の役職で絞り込む：chair＝協会会長のいる施設／officer＝協会役員のいる施設／any＝どちらか
+    q['association_role'] = get('association_role')
+    if q['association_role'] not in (None, 'chair', 'officer', 'any'):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（association_role: 選択肢にない値です）')
+    # 姉妹園（同じ会社の施設）は、会社ごとに1施設だけ表示する（本部があれば本部、なければ先に登録された施設）
+    q['hide_siblings'] = get('hide_siblings') == '1'
     q['temperature'] = get('temperature')
     if q['temperature'] is not None and q['temperature'] not in TEMPERATURES:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（temperature: 選択肢にない値です）')
@@ -161,11 +167,26 @@ def list_companies():
         else:
             where.append('c.next_call_at IS NULL')
 
-    frm = f'''FROM telema_companies c
+    if q['association_role'] == 'chair':
+        where.append(ASSOCIATION_CHAIR_EXISTS)
+    elif q['association_role'] == 'officer':
+        where.append(ASSOCIATION_OFFICER_EXISTS)
+    elif q['association_role'] == 'any':
+        where.append(f'({ASSOCIATION_CHAIR_EXISTS} OR {ASSOCIATION_OFFICER_EXISTS})')
+
+    def from_clause(conds):
+        return f'''FROM telema_companies c
       LEFT JOIN telema_call_statuses s ON s.id = c.status_id
       LEFT JOIN telema_organizations o ON o.id = c.organization_id
       LEFT JOIN users u ON u.id = c.assigned_user_id
-      WHERE {' AND '.join(where)}'''
+      WHERE {' AND '.join(conds)}'''
+
+    if q['hide_siblings']:
+        # ほかの絞り込みに合う施設の中から、会社ごとに1施設（本部を優先）だけ残す。会社に属していない施設は、そのまま全部出す
+        keep = f'SELECT DISTINCT ON (COALESCE(c.organization_id, -c.id)) c.id {from_clause(where)} ORDER BY COALESCE(c.organization_id, -c.id), c.is_headquarters DESC, c.id'
+        where = [*where, f'c.id IN ({keep})']
+        params = [*params, *params]
+    frm = from_clause(where)
     order = ', '.join(p if p.endswith('IS NULL') else f'{p} {q["order"]}' for p in SORTS[q['sort']]) + ', c.id'
 
     d = db()
