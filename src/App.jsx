@@ -4907,10 +4907,12 @@ export default function App() {
   }
 
   return (
-    // 画面全体の枠は、スクロールさせない。overflow-hidden のままだと、中の要素にフォーカスが当たったとき（協会の選択など）にブラウザがこの枠ごと
-    // スクロールして、画面の下に白い余白が出ることがある。overflow-clip にして、念のためスクロールされても戻す。スクロールするのは中の main だけ
+    // 画面全体の枠は、スクロールさせない。スクロールするのは中の main だけ。
+    // 協会の選択などのチェックボックスは、画面外に隠した絶対配置の入力（sr-only）で、枠が relative でないと、画面全体（ブラウザ側）の高さを押し広げて、
+    // フォーカスが当たったときに画面ごとスクロールして、下に白い余白が出る。枠と main を relative にして、隠した入力もこの中に収める。
+    // 念のため overflow-clip と、スクロールされたら戻す処理も付けている
     <div
-      className="flex h-[100dvh] bg-slate-50 text-slate-800 font-sans overflow-clip"
+      className="relative flex h-[100dvh] bg-slate-50 text-slate-800 font-sans overflow-clip"
       onScroll={(e) => { if (e.currentTarget.scrollTop !== 0 || e.currentTarget.scrollLeft !== 0) e.currentTarget.scrollTo(0, 0); }}
     >
       {/* モバイルヘッダー */}
@@ -4959,7 +4961,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
+      <main className="relative flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
         <h2 className="hidden md:block text-xl font-semibold text-slate-800 mb-6">{titles[activeTab]}</h2>
         {activeTab === 'home' && (
           <HomeView records={records} customers={customers} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} associationTypes={associationTypes} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
