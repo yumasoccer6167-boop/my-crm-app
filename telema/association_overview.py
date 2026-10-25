@@ -1,30 +1,45 @@
 """加盟協会の一覧（組織図・加盟施設数・加盟法人数など）。画面は「協会」タブ（マインドマップ表示とリスト表示）。
 数えるのは有効な施設すべて（営業を含め、全員が同じ数字を見られる。リストのような「自分の担当・未割当のみ」の制限はしない）。協会に加盟している施設は telema_company_associations で決まる。"""
+from collections import Counter
+
 from flask import jsonify
 
-from .common import ASSOCIATION, ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_COLUMN
-from .context import db, not_found
+from .common import ASSOCIATION, ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_COLUMN, audit
+from .context import ApiError, body, current_user, db, not_found, require_role
+from .normalize import PREFECTURES
 from .routes import bp
-from .validate import parse_id
+from .validate import Int, Str, parse, parse_id
 
 MEMBERS_LIMIT = 2000
 
 
+def _descendants(children, root_id):
+    """協会とその下位の協会すべて（自分を含む）"""
+    out, stack = [], [root_id]
+    while stack:
+        i = stack.pop()
+        out.append(i)
+        stack.extend(children.get(i, []))
+    return out
+
+
 @bp.get('/association-overview')
 def association_overview():
-    """協会ごとの加盟施設数・加盟法人数・ユーザー施設数と、協会会長・協会役員。協会の都道府県は、加盟施設で一番多い都道府県"""
+    """協会ごとの加盟施設数・加盟法人数・ユーザー施設数と、協会会長・協会役員。
+    数字は、下位の協会（地区単位・各地域の協会）の加盟施設も含む（同じ施設は1回だけ）。own_facility_count はその協会に直接加盟している施設の数。
+    都道府県は、協会に指定したものを優先し、なければ加盟施設で一番多い都道府県"""
     d = db()
-    rows = d.all(
-        f'''SELECT t.id, t.name, t.is_active, t.sort_order,
-                   COUNT(DISTINCT c.id) AS facility_count,
-                   COUNT(DISTINCT c.organization_id) AS organization_count,
-                   COUNT(DISTINCT c.id) FILTER (WHERE c.is_user = 1) AS user_count,
-                   MODE() WITHIN GROUP (ORDER BY c.prefecture) AS prefecture
-              FROM {ASSOCIATION.master} t
-              LEFT JOIN {ASSOCIATION.link} ca ON ca.{ASSOCIATION.fk} = t.id
-              LEFT JOIN telema_companies c ON c.id = ca.company_id AND c.is_active = 1
-             GROUP BY t.id, t.name, t.is_active, t.sort_order
-             ORDER BY t.sort_order, t.id''')
+    assocs = d.all(f'SELECT id, name, is_active, sort_order, parent_id, prefecture AS prefecture_setting FROM {ASSOCIATION.master} ORDER BY sort_order, id')
+    links = d.all(
+        f'''SELECT ca.{ASSOCIATION.fk} AS association_id, c.id AS company_id, c.organization_id, c.is_user, c.prefecture
+              FROM {ASSOCIATION.link} ca JOIN telema_companies c ON c.id = ca.company_id AND c.is_active = 1''')
+    own = {}
+    for r in links:
+        own.setdefault(r['association_id'], []).append(r)
+    children = {}
+    for a in assocs:
+        if a['parent_id'] is not None:
+            children.setdefault(a['parent_id'], []).append(a['id'])
     # 協会会長・協会役員の担当者（施設の担当者と、法人に登録した担当者）。同じ人は協会ごとに1回だけ
     people = d.all(
         f'''SELECT DISTINCT ON (ca.{ASSOCIATION.fk}, k.id)
@@ -39,22 +54,70 @@ def association_overview():
     for p in people:
         by_assoc.setdefault(p['association_id'], []).append(p)
     items = []
-    for r in rows:
-        ps = by_assoc.get(r['id'], [])
+    for a in assocs:
+        rows = {}
+        for i in _descendants(children, a['id']):
+            for r in own.get(i, []):
+                rows[r['company_id']] = r
+        prefs = Counter(r['prefecture'] for r in rows.values() if r['prefecture'])
+        ps = by_assoc.get(a['id'], [])
         items.append({
-            **r,
+            **a,
+            'facility_count': len(rows),
+            'own_facility_count': len(own.get(a['id'], [])),
+            'organization_count': len({r['organization_id'] for r in rows.values() if r['organization_id'] is not None}),
+            'user_count': sum(1 for r in rows.values() if r['is_user'] == 1),
+            'prefecture': a['prefecture_setting'] or (prefs.most_common(1)[0][0] if prefs else None),
             # 会長が先、そのあと役員（同じ人が両方なら会長として出す）
             'chairs': [p for p in ps if p['is_association_chair']],
             'officers': [p for p in ps if p['is_association_officer'] and not p['is_association_chair']],
         })
-    totals = d.first(
-        f'''SELECT COUNT(DISTINCT c.id) AS facility_count, COUNT(DISTINCT c.organization_id) AS organization_count,
-                   COUNT(DISTINCT c.id) FILTER (WHERE c.is_user = 1) AS user_count
-              FROM telema_companies c JOIN {ASSOCIATION.link} ca ON ca.company_id = c.id
-              JOIN {ASSOCIATION.master} t ON t.id = ca.{ASSOCIATION.fk} AND t.is_active = 1
-             WHERE c.is_active = 1''')
-    totals['association_count'] = sum(1 for r in rows if r['is_active'])
+    active = {a['id'] for a in assocs if a['is_active']}
+    every = {}
+    for r in links:
+        if r['association_id'] in active:
+            every[r['company_id']] = r
+    totals = {
+        'association_count': len(active),
+        'facility_count': len(every),
+        'organization_count': len({r['organization_id'] for r in every.values() if r['organization_id'] is not None}),
+        'user_count': sum(1 for r in every.values() if r['is_user'] == 1),
+    }
     return jsonify({'associations': items, 'totals': totals})
+
+
+@bp.patch('/associations/<id>/structure')
+def set_association_structure(id):
+    """協会の組織図での位置を決める（管理者のみ）。parent_id＝親の協会（null なら都道府県の協会）、prefecture＝都道府県の協会が入る都道府県（地区はここから決まる）"""
+    require_role('admin')
+    id = parse_id(id)
+    b = parse({'parent_id': Int(min=1, nullable=True), 'prefecture': Str(max=10, nullable=True)}, body(), partial=True)
+    d = db()
+    before = d.first(f'SELECT * FROM {ASSOCIATION.master} WHERE id = %s', (id,))
+    if not before:
+        raise not_found('加盟協会')
+    if b.get('prefecture') is not None and b['prefecture'] not in PREFECTURES:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（prefecture: 都道府県名で指定してください）')
+    if b.get('parent_id') is not None:
+        pid = b['parent_id']
+        if pid == id:
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（parent_id: 自分自身は親にできません）')
+        # 親をたどって自分に戻ってくる（自分の下位の協会を親にする）ことはできない
+        seen, cur = set(), pid
+        while cur is not None:
+            row = d.first(f'SELECT id, parent_id FROM {ASSOCIATION.master} WHERE id = %s', (cur,))
+            if not row:
+                raise ApiError(400, 'validation_error', '入力内容に誤りがあります（parent_id: 親の協会が見つかりません）')
+            if row['id'] == id or row['id'] in seen:
+                raise ApiError(400, 'validation_error', '入力内容に誤りがあります（parent_id: 下位の協会は親にできません）')
+            seen.add(row['id'])
+            cur = row['parent_id']
+    sets = {k: b[k] for k in ('parent_id', 'prefecture') if k in b}
+    if not sets:
+        return jsonify(before)
+    row = d.first(f'UPDATE {ASSOCIATION.master} SET {", ".join(f"{k} = %s" for k in sets)}, updated_at = telema_now() WHERE id = %s RETURNING *', [*sets.values(), id])
+    audit(d, current_user()['id'], 'update', 'association_structure', id, {k: before[k] for k in sets}, sets)
+    return jsonify(row)
 
 
 @bp.get('/association-overview/<id>/members')

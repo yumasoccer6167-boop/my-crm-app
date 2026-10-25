@@ -5,6 +5,7 @@
 import type {
   AIUsageData,
   Association,
+  AssociationMaster,
   AssigneeMappingItem,
   CallExtraction,
   CallLog,
@@ -51,7 +52,7 @@ type Api = {
   me: { $get: Call<CurrentUser> };
   statuses: { $get: Call<CallStatus[]>; $post: Call<CallStatus>; ":id": { $patch: Call<CallStatus> } };
   users: { $get: Call<UserRow[]> };
-  associations: { $get: Call<Association[]>; $post: Call<Association>; ":id": { $patch: Call<Association> } };
+  associations: { $get: Call<AssociationMaster[]>; $post: Call<AssociationMaster>; ":id": { $patch: Call<AssociationMaster>; structure: { $patch: Call<AssociationMaster> } } };
   "list-types": { $get: Call<ListType[]>; $post: Call<ListType>; ":id": { $patch: Call<ListType> } };
   sections: { $get: Call<Section[]>; $post: Call<Section>; ":id": { $patch: Call<Section> } };
   "visit-purposes": { $get: Call<VisitPurpose[]>; $post: Call<VisitPurpose>; ":id": { $patch: Call<VisitPurpose> } };

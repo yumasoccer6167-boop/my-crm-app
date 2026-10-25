@@ -4,7 +4,7 @@ export type MapNode = {
   key: string;
   label: string;
   sub?: string;
-  kind: "root" | "pref" | "assoc" | "person" | "org" | "facility" | "note";
+  kind: "root" | "region" | "assoc" | "person" | "org" | "facility" | "note";
   /** カルテを開くときの施設ID */
   companyId?: number;
   children: MapNode[];

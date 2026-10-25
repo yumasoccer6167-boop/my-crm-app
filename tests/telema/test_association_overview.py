@@ -75,3 +75,49 @@ def test_協会の加盟施設一覧と_法人に登録した会長役員_全員
     # 無効にした協会も一覧には出る（is_active で見分けられる）
     client.api(f'/associations/{a}', {'is_active': False}, method='PATCH')
     assert overview(client)[0]['概要メンバー協会']['is_active'] == 0
+
+
+def test_協会の階層_下位の協会の加盟施設も上位の数字に入り_親は付け替えられる(client):
+    pref = client.api('/associations', {'name': '階層県協会'})[1]['id']
+    district = client.api('/associations', {'name': '階層地区協会'})[1]['id']
+    town = client.api('/associations', {'name': '階層地域協会'})[1]['id']
+    other = client.api('/associations', {'name': '階層別県協会'})[1]['id']
+    a = make_company(client, '階層園A', '神奈川県', org='学校法人階層会', is_user=1)
+    b = make_company(client, '階層園B', '神奈川県', org='学校法人階層会')
+    c = make_company(client, '階層園C', '神奈川県', org='学校法人階層別会')
+    for cid, assoc in ((a, pref), (b, district), (c, town), (a, town)):
+        client.api(f'/companies/{cid}/associations', {'association_ids': [*[x['id'] for x in client.api(f'/companies/{cid}')[1]['associations']], assoc]}, method='PATCH')
+    # 親の協会を決める（県 → 地区 → 地域）。決める前は、それぞれ別の協会として数える
+    by, _ = overview(client)
+    assert by['階層県協会']['facility_count'] == 1 and by['階層地域協会']['facility_count'] == 2
+    assert client.api(f'/associations/{district}/structure', {'parent_id': pref}, method='PATCH')[1]['parent_id'] == pref
+    assert client.api(f'/associations/{town}/structure', {'parent_id': district}, method='PATCH')[0] == 200
+    by, totals = overview(client)
+    p = by['階層県協会']
+    assert (p['facility_count'], p['own_facility_count'], p['organization_count'], p['user_count']) == (3, 1, 2, 1)           # 下位の協会の施設も入る。同じ施設（A）は1回だけ
+    d = by['階層地区協会']
+    assert (d['facility_count'], d['own_facility_count'], d['parent_id']) == (3, 1, pref)                                  # 地区 = 自分（B）＋地域（C, A）
+    assert (by['階層地域協会']['facility_count'], by['階層地域協会']['parent_id']) == (2, district)
+    assert by['階層県協会']['parent_id'] is None
+    # 都道府県を指定すると、加盟施設の多数決より優先する。地区は都道府県から決まる
+    assert client.api(f'/associations/{pref}/structure', {'prefecture': '東京都'}, method='PATCH')[1]['prefecture'] == '東京都'
+    assert overview(client)[0]['階層県協会']['prefecture'] == '東京都' and overview(client)[0]['階層県協会']['prefecture_setting'] == '東京都'
+    assert client.api(f'/associations/{pref}/structure', {'prefecture': '東京'}, method='PATCH')[0] == 400
+    assert client.api(f'/associations/{pref}/structure', {'prefecture': None}, method='PATCH')[1]['prefecture'] is None
+    # 自分自身・下位の協会は親にできない（ぐるぐる回らない）。存在しない親・存在しない協会は拒否
+    assert client.api(f'/associations/{pref}/structure', {'parent_id': pref}, method='PATCH')[0] == 400
+    assert client.api(f'/associations/{pref}/structure', {'parent_id': town}, method='PATCH')[0] == 400
+    assert client.api(f'/associations/{pref}/structure', {'parent_id': 999999}, method='PATCH')[0] == 400
+    assert client.api('/associations/999999/structure', {'parent_id': None}, method='PATCH')[0] == 404
+    # 親を外す・付け替える
+    assert client.api(f'/associations/{town}/structure', {'parent_id': other}, method='PATCH')[1]['parent_id'] == other
+    by = overview(client)[0]
+    assert by['階層県協会']['facility_count'] == 2 and by['階層別県協会']['facility_count'] == 2 and by['階層地区協会']['facility_count'] == 1
+    assert client.api(f'/associations/{town}/structure', {'parent_id': None}, method='PATCH')[1]['parent_id'] is None
+    # 変更は管理者のみ
+    client.set_my_role('manager')
+    try:
+        assert client.api(f'/associations/{town}/structure', {'parent_id': pref}, method='PATCH')[0] == 403
+    finally:
+        client.set_my_role('admin')
+    assert totals['association_count'] >= 4

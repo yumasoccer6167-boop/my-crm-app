@@ -1,7 +1,8 @@
 import { Fragment, useMemo, useState } from "react";
 import { Link } from "react-router";
-import type { AssociationOverviewItem, AssociationPerson } from "../types";
-import { PREFECTURES } from "../shared/prefectures";
+import type { AssociationPerson } from "../types";
+import { REGIONS, UNKNOWN_REGION } from "../shared/regions";
+import { buildAssociationForest, flattenForest, groupByRegion, type AssocTreeNode } from "../lib/association-tree";
 import { api, unwrap } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { AssociationMembers } from "../components/AssociationMembers";
@@ -13,7 +14,7 @@ type View = "map" | "list";
 const selectCls = "rounded-md border-0 bg-white px-2.5 py-1.5 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500";
 const VIEW_KEY = "telema:associations-view";
 const SORTS = [
-  { value: "sort", label: "協会の並び順" },
+  { value: "tree", label: "組織図の順（地区→都道府県→下位の協会）" },
   { value: "facilities", label: "加盟施設数が多い順" },
   { value: "organizations", label: "加盟法人数が多い順" },
   { value: "name", label: "協会名順" },
@@ -42,8 +43,8 @@ export function Associations() {
   const { data, error, loading, reload } = useApi(() => unwrap(api["association-overview"].$get()), []);
   const [view, setView] = useState<View>(loadView);
   const [q, setQ] = useState("");
-  const [prefecture, setPrefecture] = useState("");
-  const [sort, setSort] = useState("sort");
+  const [region, setRegion] = useState("");
+  const [sort, setSort] = useState("tree");
   const [showInactive, setShowInactive] = useState(false);
 
   function changeView(v: View) {
@@ -56,18 +57,18 @@ export function Associations() {
   }
 
   const all = useMemo(() => (data?.associations ?? []).filter((a) => showInactive || a.is_active), [data, showInactive]);
-  const prefectures = useMemo(() => [...new Set(all.map((a) => a.prefecture).filter((p): p is string => !!p))].sort((a, b) => PREFECTURES.indexOf(a as never) - PREFECTURES.indexOf(b as never)), [all]);
+  // 組織図の順に平らにする。地区は、いちばん上の協会（都道府県の協会）から決まる
+  const flat = useMemo(() => flattenForest(groupByRegion(buildAssociationForest(all))), [all]);
   const shown = useMemo(() => {
     const t = q.trim();
-    const list = all.filter((a) => (!t || a.name.includes(t)) && (!prefecture || a.prefecture === prefecture));
-    const cmp: Record<string, (x: AssociationOverviewItem, y: AssociationOverviewItem) => number> = {
-      sort: (x, y) => x.sort_order - y.sort_order || x.id - y.id,
-      facilities: (x, y) => y.facility_count - x.facility_count || x.sort_order - y.sort_order,
-      organizations: (x, y) => y.organization_count - x.organization_count || x.sort_order - y.sort_order,
-      name: (x, y) => x.name.localeCompare(y.name, "ja"),
+    const list = flat.filter((f) => (!t || f.node.item.name.includes(t)) && (!region || f.region === region));
+    const cmp: Record<string, (x: (typeof flat)[number], y: (typeof flat)[number]) => number> = {
+      facilities: (x, y) => y.node.item.facility_count - x.node.item.facility_count,
+      organizations: (x, y) => y.node.item.organization_count - x.node.item.organization_count,
+      name: (x, y) => x.node.item.name.localeCompare(y.node.item.name, "ja"),
     };
-    return [...list].sort(cmp[sort]!);
-  }, [all, q, prefecture, sort]);
+    return sort === "tree" ? list : [...list].sort(cmp[sort]!);
+  }, [flat, q, region, sort]);
 
   return (
     <div className="space-y-4">
@@ -103,11 +104,11 @@ export function Associations() {
           <Card>
             <div className="flex flex-wrap items-center gap-2">
               <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="協会名で探す" className={`${inputCls} min-w-52 flex-1`} />
-              <select value={prefecture} onChange={(e) => setPrefecture(e.target.value)} className={selectCls} aria-label="都道府県">
-                <option value="">都道府県（すべて）</option>
-                {prefectures.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
+              <select value={region} onChange={(e) => setRegion(e.target.value)} className={selectCls} aria-label="地区">
+                <option value="">地区（すべて）</option>
+                {[...REGIONS.map((r) => r.label), UNKNOWN_REGION.label].map((r) => (
+                  <option key={r} value={r}>
+                    {r}
                   </option>
                 ))}
               </select>
@@ -128,7 +129,7 @@ export function Associations() {
             </div>
           </Card>
 
-          {shown.length === 0 ? <Empty>該当する協会がありません</Empty> : view === "map" ? <AssociationMindMap associations={shown} /> : <AssociationList items={shown} />}
+          {shown.length === 0 ? <Empty>該当する協会がありません</Empty> : view === "map" ? <AssociationMindMap associations={all.filter((a) => shown.some((f) => f.node.item.id === a.id))} /> : <AssociationList rows={shown} indent={sort === "tree"} />}
         </>
       )}
     </div>
@@ -152,7 +153,7 @@ function PeopleCell({ people, kind }: { people: AssociationPerson[]; kind: "chai
   );
 }
 
-function AssociationList({ items }: { items: AssociationOverviewItem[] }) {
+function AssociationList({ rows, indent }: { rows: { node: AssocTreeNode; region: string }[]; indent: boolean }) {
   const [openId, setOpenId] = useState<number | null>(null);
   const members = useApi(
     async () => (openId == null ? null : unwrap(api["association-overview"][":id"].members.$get({ param: { id: String(openId) } }))),
@@ -160,12 +161,13 @@ function AssociationList({ items }: { items: AssociationOverviewItem[] }) {
   );
   return (
     <div className="overflow-x-auto rounded-lg bg-white ring-1 ring-slate-200">
-      <table className="w-full min-w-[820px] text-sm">
+      <table className="w-full min-w-[900px] text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
             <th className="px-3 py-2 font-medium">協会</th>
+            <th className="px-3 py-2 font-medium">地区</th>
             <th className="px-3 py-2 font-medium">都道府県</th>
-            <th className="px-3 py-2 text-right font-medium">加盟施設数</th>
+            <th className="px-3 py-2 text-right font-medium" title="下位の協会の加盟施設を含みます">加盟施設数</th>
             <th className="px-3 py-2 text-right font-medium">加盟法人数</th>
             <th className="px-3 py-2 text-right font-medium">ユーザー施設</th>
             <th className="px-3 py-2 font-medium">協会会長</th>
@@ -173,47 +175,53 @@ function AssociationList({ items }: { items: AssociationOverviewItem[] }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((a) => (
-            <Fragment key={a.id}>
-              <tr className={`border-b border-slate-100 align-top ${openId === a.id ? "bg-indigo-50/40" : "hover:bg-slate-50"}`}>
-                <td className="px-3 py-2">
-                  <button type="button" onClick={() => setOpenId(openId === a.id ? null : a.id)} className="text-left font-medium text-indigo-700 hover:underline" aria-expanded={openId === a.id}>
-                    <span className="mr-1 text-[10px] text-slate-500">{openId === a.id ? "▼" : "▶"}</span>
-                    {a.name}
-                  </button>
-                  {!a.is_active && <span className="ml-1.5 text-xs text-slate-400">（無効）</span>}
-                </td>
-                <td className="px-3 py-2 text-slate-700">{a.prefecture ?? <span className="text-slate-300">—</span>}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{a.facility_count.toLocaleString()}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{a.organization_count.toLocaleString()}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{a.user_count.toLocaleString()}</td>
-                <td className="px-3 py-2">
-                  <PeopleCell people={a.chairs} kind="chair" />
-                </td>
-                <td className="px-3 py-2">
-                  <PeopleCell people={a.officers} kind="officer" />
-                </td>
-              </tr>
-              {openId === a.id && (
-                <tr className="border-b border-slate-100 bg-slate-50/60">
-                  <td colSpan={7} className="px-4 py-3">
-                    {members.error ? (
-                      <ErrorBox message={members.error} onRetry={members.reload} />
-                    ) : members.data ? (
-                      <AssociationMembers facilities={members.data.facilities} truncated={members.data.truncated} />
-                    ) : (
-                      <p className="text-sm text-slate-400">読み込み中…</p>
-                    )}
-                    <div className="mt-2">
-                      <Button size="sm" variant="ghost" onClick={() => setOpenId(null)}>
-                        閉じる
-                      </Button>
-                    </div>
+          {rows.map(({ node, region }) => {
+            const a = node.item;
+            return (
+              <Fragment key={a.id}>
+                <tr className={`border-b border-slate-100 align-top ${openId === a.id ? "bg-indigo-50/40" : "hover:bg-slate-50"}`}>
+                  <td className="px-3 py-2" style={{ paddingLeft: indent ? 12 + node.depth * 20 : undefined }}>
+                    <button type="button" onClick={() => setOpenId(openId === a.id ? null : a.id)} className="text-left font-medium text-indigo-700 hover:underline" aria-expanded={openId === a.id}>
+                      <span className="mr-1 text-[10px] text-slate-500">{openId === a.id ? "▼" : "▶"}</span>
+                      {a.name}
+                    </button>
+                    {!a.is_active && <span className="ml-1.5 text-xs text-slate-400">（無効）</span>}
+                    {node.children.length > 0 && <span className="ml-1.5 text-[11px] text-slate-400">下位{node.children.length}協会</span>}
+                  </td>
+                  <td className="px-3 py-2 text-slate-700">{region}</td>
+                  <td className="px-3 py-2 text-slate-700">{a.prefecture ?? <span className="text-slate-300">—</span>}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{a.facility_count.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{a.organization_count.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{a.user_count.toLocaleString()}</td>
+                  <td className="px-3 py-2">
+                    <PeopleCell people={a.chairs} kind="chair" />
+                  </td>
+                  <td className="px-3 py-2">
+                    <PeopleCell people={a.officers} kind="officer" />
                   </td>
                 </tr>
-              )}
-            </Fragment>
-          ))}
+                {openId === a.id && (
+                  <tr className="border-b border-slate-100 bg-slate-50/60">
+                    <td colSpan={8} className="px-4 py-3">
+                      {a.facility_count > a.own_facility_count && <p className="mb-2 text-xs text-slate-500">この協会に直接加盟している施設（{a.own_facility_count}施設）です。下位の協会の施設は、各協会の行で見られます。</p>}
+                      {members.error ? (
+                        <ErrorBox message={members.error} onRetry={members.reload} />
+                      ) : members.data ? (
+                        <AssociationMembers facilities={members.data.facilities} truncated={members.data.truncated} />
+                      ) : (
+                        <p className="text-sm text-slate-400">読み込み中…</p>
+                      )}
+                      <div className="mt-2">
+                        <Button size="sm" variant="ghost" onClick={() => setOpenId(null)}>
+                          閉じる
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>

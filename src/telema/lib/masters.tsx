@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { Association, CallStatus, ListType, Section, UserRow, VisitPurpose } from "../types";
+import type { AssociationMaster, CallStatus, ListType, Section, UserRow, VisitPurpose } from "../types";
 import type { CurrentUser } from "../types";
 import { api, unwrap } from "./api";
 import { useApi } from "./useApi";
@@ -9,7 +9,7 @@ type Masters = {
   me: CurrentUser;
   statuses: CallStatus[];
   users: UserRow[];
-  associations: Association[];
+  associations: AssociationMaster[];
   listTypes: ListType[];
   sections: Section[];
   visitPurposes: VisitPurpose[];

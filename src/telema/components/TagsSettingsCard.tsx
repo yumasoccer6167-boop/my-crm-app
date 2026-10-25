@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Tag } from "../types";
 import { useMasters } from "../lib/masters";
 import { Button, Card, Empty, ErrorBox, inputCls } from "./ui";
@@ -13,12 +13,15 @@ export function TagsSettingsCard({
   items,
   create,
   update,
+  renderExtra,
 }: {
   title: string;
   description: string;
   items: Tag[];
   create: (name: string) => Promise<unknown>;
   update: (id: number, patch: { name?: string; is_active?: boolean }) => Promise<unknown>;
+  /** 各項目の名前の下に出す追加の設定（例：協会の親の協会・都道府県）。busy と、実行用の run（成功したら一覧を読み直す）を渡す */
+  renderExtra?: (item: Tag, ctx: { isAdmin: boolean; busy: boolean; run: (fn: () => Promise<unknown>) => Promise<boolean> }) => ReactNode;
 }) {
   const { me, reload } = useMasters();
   const isAdmin = me.role === "admin";
@@ -70,6 +73,7 @@ export function TagsSettingsCard({
               <span className="flex-1 break-words">
                 {a.name}
                 {!a.is_active && <span className="ml-2 text-xs text-slate-500">（無効）</span>}
+                {renderExtra?.(a, { isAdmin, busy, run })}
               </span>
               {isAdmin && (
                 <>

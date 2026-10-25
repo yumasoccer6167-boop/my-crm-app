@@ -3,6 +3,7 @@ import { STATUS_CATEGORIES } from "../shared/constants";
 import { AIUsageCard } from "../components/AIUsageCard";
 import { AssigneeMappingCard } from "../components/AssigneeMappingCard";
 import { TagsSettingsCard } from "../components/TagsSettingsCard";
+import { PREFECTURES } from "../shared/prefectures";
 import { PrefectureStatsCard } from "../components/PrefectureStatsCard";
 import { Button, Card, CATEGORY_STYLE, ErrorBox, inputCls, selectCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
@@ -108,10 +109,65 @@ export function Settings() {
         />
         <TagsSettingsCard
           title="加盟協会"
-          description="ここで追加した加盟協会を、施設の「基本情報」で複数選べます。無効にした協会は新しく選べなくなりますが、すでに付いている施設には残ります。"
+          description="ここで追加した加盟協会を、施設の「基本情報」で複数選べます。無効にした協会は新しく選べなくなりますが、すでに付いている施設には残ります。協会ごとに「親の協会」を選ぶと、「協会」ページの組織図（全日本私立幼稚園連合会 → 地区 → 都道府県の協会 → 地区単位の協会 → 各地域の協会）でその下に表示されます。親のない協会は都道府県の協会として、都道府県から地区に入ります。"
           items={associations}
           create={(name) => unwrap(api.associations.$post({ json: { name } }))}
           update={(id, patch) => unwrap(api.associations[":id"].$patch({ param: { id: String(id) }, json: patch }))}
+          renderExtra={(item, { isAdmin: admin, busy, run: act }) => {
+            const a = associations.find((x) => x.id === item.id);
+            if (!a) return null;
+            // 親の協会に選べるのは、自分と自分の下位の協会を除いた協会（ぐるぐる回らないように）
+            const below = new Set<number>([a.id]);
+            let grew = true;
+            while (grew) {
+              grew = false;
+              for (const x of associations) {
+                if (x.parent_id != null && below.has(x.parent_id) && !below.has(x.id)) {
+                  below.add(x.id);
+                  grew = true;
+                }
+              }
+            }
+            const parent = associations.find((x) => x.id === a.parent_id);
+            const selCls = "rounded-md border-0 bg-white px-2 py-1 text-xs text-slate-900 ring-1 ring-inset ring-slate-300";
+            const save = (json: { parent_id?: number | null; prefecture?: string | null }) => void act(() => unwrap(api.associations[":id"].structure.$patch({ param: { id: String(a.id) }, json })));
+            return (
+              <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                <span className="flex items-center gap-1">
+                  親の協会
+                  {admin ? (
+                    <select className={selCls} value={a.parent_id ?? ""} disabled={busy} onChange={(e) => save({ parent_id: e.target.value ? Number(e.target.value) : null })}>
+                      <option value="">（なし：都道府県の協会）</option>
+                      {associations.filter((x) => !below.has(x.id)).map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span>{parent?.name ?? "（なし：都道府県の協会）"}</span>
+                  )}
+                </span>
+                {a.parent_id == null && (
+                  <span className="flex items-center gap-1">
+                    都道府県
+                    {admin ? (
+                      <select className={selCls} value={a.prefecture ?? ""} disabled={busy} onChange={(e) => save({ prefecture: e.target.value || null })}>
+                        <option value="">（加盟施設から自動）</option>
+                        {PREFECTURES.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span>{a.prefecture ?? "（加盟施設から自動）"}</span>
+                    )}
+                  </span>
+                )}
+              </span>
+            );
+          }}
         />
       </div>
 

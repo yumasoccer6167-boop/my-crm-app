@@ -161,6 +161,8 @@ export type Contract = {
 /** 加盟協会（設定画面で管理者が管理するマスタ）。is_active=0 でも、施設に付いている間は表示する */
 export type Tag = { id: number; name: string; is_active: number; sort_order?: number };
 export type Association = Tag;
+/** 加盟協会のマスタ（設定画面）。parent_id＝親の協会（無ければ都道府県の協会）、prefecture＝都道府県の協会が入る都道府県（未指定なら加盟施設で一番多い都道府県） */
+export type AssociationMaster = Association & { parent_id: number | null; prefecture: string | null };
 /** リスト種類（「繋がり」「群私幼」など。設定画面で管理者が増やせるマスタ） */
 export type ListType = Tag;
 /** 部署（営業部・制作部・CS など。設定画面で管理者が増やせるマスタ。タイムラインの記録ごとに付ける） */
@@ -242,8 +244,14 @@ export type AssociationOverviewItem = {
   facility_count: number;
   organization_count: number;
   user_count: number;
-  /** 加盟施設で一番多い都道府県。加盟施設が無い協会は null */
+  /** 親の協会（組織図）。null は都道府県の協会 */
+  parent_id: number | null;
+  /** 協会に指定した都道府県（未指定は null） */
+  prefecture_setting: string | null;
+  /** 協会に指定した都道府県。指定がなければ、加盟施設で一番多い都道府県（それも無ければ null） */
   prefecture: string | null;
+  /** その協会に直接加盟している施設の数（facility_count は下位の協会の施設も含む） */
+  own_facility_count: number;
   chairs: AssociationPerson[];
   officers: AssociationPerson[];
 };

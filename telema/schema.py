@@ -516,6 +516,12 @@ ALTER TABLE telema_call_logs ADD COLUMN sales_term TEXT;
     r"""
 ALTER TABLE telema_companies ADD COLUMN is_headquarters INTEGER NOT NULL DEFAULT 0;
 """,
+    # 17: 協会の組織図。全日本私立幼稚園連合会 → 地区 → 都道府県の協会 → 地区単位の協会 → 各地域の協会、と続く階層を、協会ごとの「親の協会」で持つ。
+    #     親が無い協会は都道府県の協会（都道府県を指定すると、その地区に入る。未指定なら加盟施設で一番多い都道府県）。地区は都道府県から決まる（コード側の固定の一覧）
+    r"""
+ALTER TABLE telema_associations ADD COLUMN parent_id INTEGER REFERENCES telema_associations(id) ON DELETE SET NULL;
+ALTER TABLE telema_associations ADD COLUMN prefecture TEXT;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く
