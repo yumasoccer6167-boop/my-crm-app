@@ -232,6 +232,41 @@ export type GraphEdge = {
   notes: string | null;
 };
 
+/** 加盟協会の一覧（「協会」タブ：マインドマップ／リスト）。人は、協会会長・協会役員の担当者 */
+export type AssociationPerson = { association_id: number; contact_id: number; name: string | null; role: string | null; company_id: number; company_name: string };
+export type AssociationOverviewItem = {
+  id: number;
+  name: string;
+  is_active: number;
+  sort_order: number;
+  facility_count: number;
+  organization_count: number;
+  user_count: number;
+  /** 加盟施設で一番多い都道府県。加盟施設が無い協会は null */
+  prefecture: string | null;
+  chairs: AssociationPerson[];
+  officers: AssociationPerson[];
+};
+export type AssociationOverview = {
+  associations: AssociationOverviewItem[];
+  totals: { association_count: number; facility_count: number; organization_count: number; user_count: number };
+};
+export type AssociationMember = {
+  id: number;
+  company_name: string;
+  organization_id: number | null;
+  organization_name: string | null;
+  is_user: number;
+  is_headquarters: number;
+  prefecture: string | null;
+  city: string | null;
+  status_label: string | null;
+  status_category: string | null;
+  has_association_chair: boolean;
+  has_association_officer: boolean;
+};
+export type AssociationMembers = { association: { id: number; name: string }; truncated: boolean; facilities: AssociationMember[] };
+
 /** 同じ加盟協会の施設のまとまり（相関図では線ではなく「★ 協会名」のグループで表示）。2施設以上が加盟している協会だけ */
 export type AssociationGroup = { id: number; name: string; members: number[] };
 

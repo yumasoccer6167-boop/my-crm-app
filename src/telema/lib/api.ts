@@ -30,6 +30,8 @@ import type {
   ListType,
   PrefectureStat,
   Section,
+  AssociationOverview,
+  AssociationMembers,
   VisitPurpose,
   RelationItem,
   ScheduleToday,
@@ -57,6 +59,7 @@ type Api = {
   "visit-targets": { $get: Call<VisitTarget[]> };
   dashboard: { $get: Call<DashboardData>; "calls-monthly": { $get: Call<MonthlyCallsData> } };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
+  "association-overview": { $get: Call<AssociationOverview>; ":id": { members: { $get: Call<AssociationMembers> } } };
   companies: {
     $get: Call<CompanyListData>;
     $post: Call<Company>;
