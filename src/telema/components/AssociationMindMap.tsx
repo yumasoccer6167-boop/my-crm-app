@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { Crown } from "lucide-react";
+import { Crown, Pencil } from "lucide-react";
 import type { AssociationMembers, AssociationOverviewItem } from "../types";
 import { NATIONAL_ASSOCIATION_NAME } from "../shared/regions";
 import { api, unwrap } from "../lib/api";
@@ -26,7 +26,7 @@ type MemberState = AssociationMembers | "loading" | "error";
  * 協会を開くと、下位の協会に加えて、協会会長・役員と、その協会に直接加盟している法人・施設が出る（加盟施設は開いたときに読み込む）。
  * ノードをクリックで開閉。施設・会長・役員はクリックでカルテへ
  */
-export function AssociationMindMap({ associations }: { associations: AssociationOverviewItem[] }) {
+export function AssociationMindMap({ associations, onEdit }: { associations: AssociationOverviewItem[]; onEdit?: (id: number) => void }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [members, setMembers] = useState<Record<number, MemberState>>({});
@@ -129,8 +129,8 @@ export function AssociationMindMap({ associations }: { associations: Association
             const clickable = n.kind !== "note" && n.kind !== "root" && (p.expandable || n.kind === "assoc" || n.kind === "facility" || n.kind === "person");
             const dark = n.kind === "root" || n.kind === "region";
             return (
+              <Fragment key={n.key}>
               <button
-                key={n.key}
                 type="button"
                 disabled={!clickable}
                 onClick={() => toggle(n)}
@@ -145,6 +145,19 @@ export function AssociationMindMap({ associations }: { associations: Association
                   {n.sub && <span className={`block truncate text-[10px] font-normal leading-tight ${dark ? "text-white/70" : "text-slate-500"}`}>{n.sub}</span>}
                 </span>
               </button>
+              {onEdit && n.kind === "assoc" && (
+                <button
+                  type="button"
+                  onClick={() => onEdit(Number(n.key.split(":")[1]))}
+                  title={`${n.label}の位置を変更`}
+                  aria-label={`${n.label}の位置を変更`}
+                  style={{ left: p.x + NODE_W - 24, top: p.y + 8 }}
+                  className="absolute flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white shadow hover:bg-indigo-700"
+                >
+                  <Pencil className="h-3 w-3" aria-hidden />
+                </button>
+              )}
+              </Fragment>
             );
           })}
         </div>

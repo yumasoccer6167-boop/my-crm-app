@@ -1,12 +1,14 @@
 import { Fragment, useMemo, useState } from "react";
 import { Link } from "react-router";
-import type { AssociationPerson } from "../types";
+import type { AssociationOverviewItem, AssociationPerson } from "../types";
 import { REGIONS, UNKNOWN_REGION } from "../shared/regions";
 import { buildAssociationForest, flattenForest, groupByRegion, type AssocTreeNode } from "../lib/association-tree";
 import { api, unwrap } from "../lib/api";
 import { useApi } from "../lib/useApi";
+import { useMasters } from "../lib/masters";
 import { AssociationMembers } from "../components/AssociationMembers";
 import { AssociationMindMap } from "../components/AssociationMindMap";
+import { AssociationStructureDialog, AssociationStructureFields } from "../components/AssociationStructureEditor";
 import { ChairCrown, OfficerCrown } from "../components/CompanyTable";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../components/ui";
 
@@ -46,6 +48,11 @@ export function Associations() {
   const [region, setRegion] = useState("");
   const [sort, setSort] = useState("tree");
   const [showInactive, setShowInactive] = useState(false);
+  const { me } = useMasters();
+  const canEdit = me.role === "admin";
+  // 組織図を編集するモード（管理者のみ）。マインドマップでは鉛筆の印、リストでは「組織図の位置」の欄が出る
+  const [editing, setEditing] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
 
   function changeView(v: View) {
     setView(v);
@@ -74,6 +81,12 @@ export function Associations() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-600">加盟協会ごとの加盟施設・加盟法人と、協会会長・協会役員の一覧です。</p>
+        <div className="flex flex-wrap items-center gap-2">
+        {canEdit && (
+          <Button variant={editing ? "primary" : "secondary"} size="sm" onClick={() => setEditing((v) => !v)} aria-pressed={editing}>
+            {editing ? "組織図の編集を終わる" : "組織図を編集"}
+          </Button>
+        )}
         <div role="tablist" aria-label="表示の切り替え" className="inline-flex rounded-md bg-slate-100 p-0.5 text-sm">
           {([["map", "マインドマップ"], ["list", "リスト"]] as const).map(([v, label]) => (
             <button
@@ -88,7 +101,15 @@ export function Associations() {
             </button>
           ))}
         </div>
+        </div>
       </div>
+
+      {editing && (
+        <p className="rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-900 ring-1 ring-indigo-200">
+          組織図の編集中です。{view === "map" ? "マインドマップの協会の右にある ✎ を押すと、その協会を入れる「上位の協会」を選べます。" : "各協会の「組織図の位置」で、その協会を入れる「上位の協会」を選べます。"}
+          上位の協会を選ばない協会は「都道府県の協会」になり、都道府県から地区に入ります。変更はすぐ保存されます。
+        </p>
+      )}
 
       {error && <ErrorBox message={error} onRetry={reload} />}
       {loading && !data && <p className="text-sm text-slate-400">読み込み中…</p>}
@@ -129,9 +150,10 @@ export function Associations() {
             </div>
           </Card>
 
-          {shown.length === 0 ? <Empty>該当する協会がありません</Empty> : view === "map" ? <AssociationMindMap associations={all.filter((a) => shown.some((f) => f.node.item.id === a.id))} /> : <AssociationList rows={shown} indent={sort === "tree"} />}
+          {shown.length === 0 ? <Empty>該当する協会がありません</Empty> : view === "map" ? <AssociationMindMap associations={all.filter((a) => shown.some((f) => f.node.item.id === a.id))} onEdit={editing ? setEditId : undefined} /> : <AssociationList rows={shown} indent={sort === "tree"} editing={editing} all={all} onSaved={reload} />}
         </>
       )}
+      {editId != null && <AssociationStructureDialog itemId={editId} items={all} onSaved={reload} onClose={() => setEditId(null)} />}
     </div>
   );
 }
@@ -153,7 +175,7 @@ function PeopleCell({ people, kind }: { people: AssociationPerson[]; kind: "chai
   );
 }
 
-function AssociationList({ rows, indent }: { rows: { node: AssocTreeNode; region: string }[]; indent: boolean }) {
+function AssociationList({ rows, indent, editing, all, onSaved }: { rows: { node: AssocTreeNode; region: string }[]; indent: boolean; editing: boolean; all: AssociationOverviewItem[]; onSaved: () => void }) {
   const [openId, setOpenId] = useState<number | null>(null);
   const members = useApi(
     async () => (openId == null ? null : unwrap(api["association-overview"][":id"].members.$get({ param: { id: String(openId) } }))),
@@ -161,10 +183,11 @@ function AssociationList({ rows, indent }: { rows: { node: AssocTreeNode; region
   );
   return (
     <div className="overflow-x-auto rounded-lg bg-white ring-1 ring-slate-200">
-      <table className="w-full min-w-[900px] text-sm">
+      <table className={`w-full text-sm ${editing ? "min-w-[1200px]" : "min-w-[900px]"}`}>
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
             <th className="px-3 py-2 font-medium">協会</th>
+            {editing && <th className="px-3 py-2 font-medium">組織図の位置（上位の協会を選ぶ）</th>}
             <th className="px-3 py-2 font-medium">地区</th>
             <th className="px-3 py-2 font-medium">都道府県</th>
             <th className="px-3 py-2 text-right font-medium" title="下位の協会の加盟施設を含みます">加盟施設数</th>
@@ -188,6 +211,11 @@ function AssociationList({ rows, indent }: { rows: { node: AssocTreeNode; region
                     {!a.is_active && <span className="ml-1.5 text-xs text-slate-400">（無効）</span>}
                     {node.children.length > 0 && <span className="ml-1.5 text-[11px] text-slate-400">下位{node.children.length}協会</span>}
                   </td>
+                  {editing && (
+                    <td className="min-w-72 px-3 py-2">
+                      <AssociationStructureFields item={a} items={all} onSaved={onSaved} compact />
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-slate-700">{region}</td>
                   <td className="px-3 py-2 text-slate-700">{a.prefecture ?? <span className="text-slate-300">—</span>}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{a.facility_count.toLocaleString()}</td>
@@ -202,7 +230,7 @@ function AssociationList({ rows, indent }: { rows: { node: AssocTreeNode; region
                 </tr>
                 {openId === a.id && (
                   <tr className="border-b border-slate-100 bg-slate-50/60">
-                    <td colSpan={8} className="px-4 py-3">
+                    <td colSpan={editing ? 9 : 8} className="px-4 py-3">
                       {a.facility_count > a.own_facility_count && <p className="mb-2 text-xs text-slate-500">この協会に直接加盟している施設（{a.own_facility_count}施設）です。下位の協会の施設は、各協会の行で見られます。</p>}
                       {members.error ? (
                         <ErrorBox message={members.error} onRetry={members.reload} />
