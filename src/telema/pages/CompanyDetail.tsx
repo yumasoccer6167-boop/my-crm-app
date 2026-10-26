@@ -179,6 +179,25 @@ export function CompanyDetail() {
             )}
           </div>
         </div>
+        {/* 加盟している協会。名前を押すと、その協会に加盟している施設のリストが開く */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-sm">
+          <span className="mr-1 text-xs text-slate-500">加盟協会</span>
+          {associations.length === 0 ? (
+            <span className="text-slate-400">未設定</span>
+          ) : (
+            associations.map((a) => (
+              <Link
+                key={a.id}
+                to={`/companies?association=${a.id}`}
+                title="この協会に加盟している施設をリストで見る"
+                className={`rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100 ${a.is_active ? "" : "opacity-60"}`}
+              >
+                {a.name}
+                {!a.is_active && "（無効）"}
+              </Link>
+            ))
+          )}
+        </div>
         {!!company.is_user && <UserTenure contracts={contracts} />}
         {patchError && <div className="mt-3"><ErrorBox message={patchError} /></div>}
       </section>
