@@ -2,13 +2,14 @@ import { Fragment, useMemo, useState } from "react";
 import { Link } from "react-router";
 import type { AssociationOverviewItem, AssociationPerson } from "../types";
 import { REGIONS, UNKNOWN_REGION } from "../shared/regions";
+import { PREFECTURES } from "../shared/prefectures";
 import { buildAssociationForest, flattenForest, groupByRegion, topLevelNodes, TOP_LEVEL_LABEL, type AssocTreeNode } from "../lib/association-tree";
 import { api, unwrap } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { useMasters } from "../lib/masters";
 import { AssociationMembers } from "../components/AssociationMembers";
 import { AssociationMindMap } from "../components/AssociationMindMap";
-import { AssociationStructureDialog, AssociationStructureFields } from "../components/AssociationStructureEditor";
+import { AssociationStructureDialog, AssociationStructureFields, descendantIds } from "../components/AssociationStructureEditor";
 import { ChairCrown, OfficerCrown } from "../components/CompanyTable";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../components/ui";
 
@@ -109,8 +110,13 @@ export function Associations() {
 
       {editing && (
         <p className="rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-900 ring-1 ring-indigo-200">
-          組織図の編集中です。{view === "map" ? "マインドマップの協会の右にある ✎ を押すと、その協会を入れる「上位の協会」を選べます。" : "各協会の「組織図の位置」で、その協会を入れる「上位の協会」を選べます。"}
+          組織図の編集中です。{view === "map" ? "マインドマップの協会の右にある ✎ を押すと、その協会を入れる「上位の協会」を選べます。たくさんの協会をまとめて移すときは、リスト表示で選んでください。" : "各協会の「組織図の位置」で、その協会を入れる「上位の協会」を選べます。左のチェックで複数の協会を選ぶと、まとめて同じ上位の協会に移せます。"}
           上位の協会を選ばない協会は「都道府県の協会」になり、都道府県から地区に入ります。「最上位の組織にする」と、全日本私立幼稚園連合会と並ぶ組織になります。変更はすぐ保存されます。
+          {view === "map" && (
+            <Button size="sm" className="ml-2" onClick={() => changeView("list")}>
+              リスト表示でまとめて選ぶ
+            </Button>
+          )}
         </p>
       )}
 
@@ -228,15 +234,34 @@ function PeopleCell({ people, kind }: { people: AssociationPerson[]; kind: "chai
 
 function AssociationList({ rows, indent, editing, all, onSaved }: { rows: { node: AssocTreeNode; region: string }[]; indent: boolean; editing: boolean; all: AssociationOverviewItem[]; onSaved: () => void }) {
   const [openId, setOpenId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const members = useApi(
     async () => (openId == null ? null : unwrap(api["association-overview"][":id"].members.$get({ param: { id: String(openId) } }))),
     [openId],
   );
+  const shownIds = rows.map((r) => r.node.item.id);
+  const allShownSelected = shownIds.length > 0 && shownIds.every((id) => selected.has(id));
+  const toggle = (ids: number[], on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
   return (
+    <div className="space-y-3">
+      {editing && selected.size > 0 && <BulkStructureBar selectedIds={[...selected].filter((id) => all.some((a) => a.id === id))} all={all} onClear={() => setSelected(new Set())} onSaved={() => { setSelected(new Set()); onSaved(); }} />}
     <div className="overflow-x-auto rounded-lg bg-white ring-1 ring-slate-200">
       <table className={`w-full text-sm ${editing ? "min-w-[1200px]" : "min-w-[900px]"}`}>
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+            {editing && (
+              <th className="w-8 px-3 py-2">
+                <input type="checkbox" checked={allShownSelected} onChange={(e) => toggle(shownIds, e.target.checked)} aria-label="表示中の協会をすべて選ぶ" title="表示中の協会をすべて選ぶ" />
+              </th>
+            )}
             <th className="px-3 py-2 font-medium">協会</th>
             {editing && <th className="px-3 py-2 font-medium">組織図の位置（上位の協会を選ぶ）</th>}
             <th className="px-3 py-2 font-medium">地区</th>
@@ -253,7 +278,12 @@ function AssociationList({ rows, indent, editing, all, onSaved }: { rows: { node
             const a = node.item;
             return (
               <Fragment key={a.id}>
-                <tr className={`border-b border-slate-100 align-top ${openId === a.id ? "bg-indigo-50/40" : "hover:bg-slate-50"}`}>
+                <tr className={`border-b border-slate-100 align-top ${openId === a.id ? "bg-indigo-50/40" : selected.has(a.id) ? "bg-indigo-50/60" : "hover:bg-slate-50"}`}>
+                  {editing && (
+                    <td className="px-3 py-2">
+                      <input type="checkbox" checked={selected.has(a.id)} onChange={(e) => toggle([a.id], e.target.checked)} aria-label={`${a.name}を選ぶ`} />
+                    </td>
+                  )}
                   <td className="px-3 py-2" style={{ paddingLeft: indent ? 12 + node.depth * 20 : undefined }}>
                     <button type="button" onClick={() => setOpenId(openId === a.id ? null : a.id)} className="text-left font-medium text-indigo-700 hover:underline" aria-expanded={openId === a.id}>
                       <span className="mr-1 text-[10px] text-slate-500">{openId === a.id ? "▼" : "▶"}</span>
@@ -281,7 +311,7 @@ function AssociationList({ rows, indent, editing, all, onSaved }: { rows: { node
                 </tr>
                 {openId === a.id && (
                   <tr className="border-b border-slate-100 bg-slate-50/60">
-                    <td colSpan={editing ? 9 : 8} className="px-4 py-3">
+                    <td colSpan={editing ? 10 : 8} className="px-4 py-3">
                       {a.facility_count > a.own_facility_count && <p className="mb-2 text-xs text-slate-500">この協会に直接加盟している施設（{a.own_facility_count}施設）です。下位の協会の施設は、各協会の行で見られます。</p>}
                       {members.error ? (
                         <ErrorBox message={members.error} onRetry={members.reload} />
@@ -303,6 +333,94 @@ function AssociationList({ rows, indent, editing, all, onSaved }: { rows: { node
           })}
         </tbody>
       </table>
+    </div>
+    </div>
+  );
+}
+
+const pathName = (all: AssociationOverviewItem[], id: number): string => {
+  const byId = new Map(all.map((a) => [a.id, a]));
+  const names: string[] = [];
+  for (let cur = byId.get(id), n = 0; cur && n < 20; cur = cur.parent_id != null ? byId.get(cur.parent_id) : undefined, n++) names.unshift(cur.name);
+  return names.join(" ＞ ");
+};
+
+/** 選んだ協会の「上位の協会」（と都道府県）を、まとめて同じ内容にする。1件でも入れられない協会があれば、全件とも変更しない */
+function BulkStructureBar({ selectedIds, all, onClear, onSaved }: { selectedIds: number[]; all: AssociationOverviewItem[]; onClear: () => void; onSaved: () => void }) {
+  // "" 未選択 / "none" 上位なし（都道府県の協会）/ "top" 最上位の組織 / 協会のID
+  const [target, setTarget] = useState("");
+  const [prefecture, setPrefecture] = useState("keep"); // keep 変えない / auto 加盟施設から自動 / 都道府県名
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const candidates = useMemo(() => {
+    // 選んだ協会と、その下位の協会は、上位の協会にできない
+    const blocked = new Set<number>();
+    for (const id of selectedIds) descendantIds(all, id).forEach((x) => blocked.add(x));
+    return all.filter((a) => !blocked.has(a.id)).sort((x, y) => pathName(all, x.id).localeCompare(pathName(all, y.id), "ja"));
+  }, [all, selectedIds]);
+
+  async function apply() {
+    if (!target || busy) return;
+    const label = target === "none" ? "都道府県の協会" : target === "top" ? "最上位の組織" : `「${pathName(all, Number(target))}」の下`;
+    if (!window.confirm(`選んだ${selectedIds.length}協会を、${label}に移します。よろしいですか？`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const json: { association_ids: number[]; parent_id?: number | null; prefecture?: string | null; is_top_level?: boolean } = { association_ids: selectedIds };
+      if (target === "top") json.is_top_level = true;
+      else {
+        json.parent_id = target === "none" ? null : Number(target);
+        if (target === "none" && prefecture !== "keep") json.prefecture = prefecture === "auto" ? null : prefecture;
+        if (target === "none") json.is_top_level = false;
+      }
+      await unwrap(api["association-structure"].bulk.$post({ json }));
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="sticky top-0 z-10 rounded-lg bg-white p-3 shadow ring-1 ring-indigo-300">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-slate-900">{selectedIds.length}協会を選択中</span>
+        <label className="flex items-center gap-1.5 text-sm text-slate-600">
+          上位の協会
+          <select value={target} onChange={(e) => setTarget(e.target.value)} className={`${selectCls} max-w-md`} aria-label="まとめて移す先">
+            <option value="">選んでください</option>
+            <option value="none">（なし：都道府県の協会として、地区の下に置く）</option>
+            <option value="top">（最上位の組織にする）</option>
+            {candidates.map((a) => (
+              <option key={a.id} value={a.id}>
+                {pathName(all, a.id)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {target === "none" && (
+          <label className="flex items-center gap-1.5 text-sm text-slate-600">
+            都道府県
+            <select value={prefecture} onChange={(e) => setPrefecture(e.target.value)} className={selectCls} aria-label="まとめて決める都道府県">
+              <option value="keep">（変えない）</option>
+              <option value="auto">（加盟施設から自動）</option>
+              {PREFECTURES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <Button variant="primary" size="sm" onClick={() => void apply()} disabled={!target || busy}>
+          まとめて移す
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onClear}>
+          選択をやめる
+        </Button>
+      </div>
+      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
     </div>
   );
 }

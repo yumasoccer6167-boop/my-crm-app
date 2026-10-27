@@ -142,3 +142,38 @@ def test_最上位の組織は複数登録でき_親と都道府県を持たず_
     # 最上位をやめると、都道府県の協会に戻る
     r = client.api(f'/associations/{top1}/structure', {'is_top_level': False}, method='PATCH')[1]
     assert (r['is_top_level'], r['parent_id']) == (0, None)
+
+
+def test_協会の位置をまとめて変更でき_1件でも入れられなければ全件変更しない(client):
+    bulk = '/association-structure/bulk'
+    parent = client.api('/associations', {'name': '一括親協会'})[1]['id']
+    kids = [client.api('/associations', {'name': f'一括子協会{i}'})[1]['id'] for i in range(3)]
+    sub = client.api('/associations', {'name': '一括子の下の協会'})[1]['id']
+    assert client.api(f'/associations/{sub}/structure', {'parent_id': kids[0]}, method='PATCH')[0] == 200
+    # まとめて同じ親にする
+    status, r = client.api(bulk, {'association_ids': kids, 'parent_id': parent})
+    assert (status, r['updated']) == (200, 3)
+    by = overview(client)[0]
+    assert all(by[f'一括子協会{i}']['parent_id'] == parent for i in range(3)) and by['一括子の下の協会']['parent_id'] == kids[0]
+    # 親・都道府県・最上位を、まとめて外す／決める
+    assert client.api(bulk, {'association_ids': kids[:2], 'parent_id': None, 'prefecture': '東京都'})[0] == 200
+    by = overview(client)[0]
+    assert (by['一括子協会0']['parent_id'], by['一括子協会0']['prefecture']) == (None, '東京都') and by['一括子協会2']['parent_id'] == parent
+    assert client.api(bulk, {'association_ids': kids[:2], 'is_top_level': True})[0] == 200
+    assert overview(client)[0]['一括子協会1']['is_top_level'] == 1
+    # 下位の協会を親にする組み合わせは、全件とも変更しない
+    assert client.api(bulk, {'association_ids': [kids[2], kids[0]], 'parent_id': sub})[0] == 400
+    by = overview(client)[0]
+    assert by['一括子協会2']['parent_id'] == parent and by['一括子協会0']['is_top_level'] == 1
+    # 入力の誤り・存在しない協会
+    assert client.api(bulk, {'association_ids': kids})[0] == 400
+    assert client.api(bulk, {'association_ids': []})[0] == 400
+    assert client.api(bulk, {'parent_id': parent})[0] == 400
+    assert client.api(bulk, {'association_ids': [kids[2], 999999], 'parent_id': None})[0] == 404
+    assert overview(client)[0]['一括子協会2']['parent_id'] == parent
+    # 管理者のみ
+    client.set_my_role('manager')
+    try:
+        assert client.api(bulk, {'association_ids': kids, 'parent_id': None})[0] == 403
+    finally:
+        client.set_my_role('admin')

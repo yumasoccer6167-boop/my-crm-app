@@ -60,6 +60,7 @@ type Api = {
   "visit-targets": { $get: Call<VisitTarget[]> };
   dashboard: { $get: Call<DashboardData>; "calls-monthly": { $get: Call<MonthlyCallsData> } };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
+  "association-structure": { bulk: { $post: Call<{ updated: number }> } };
   "association-overview": { $get: Call<AssociationOverview>; ":id": { members: { $get: Call<AssociationMembers> } } };
   companies: {
     $get: Call<CompanyListData>;

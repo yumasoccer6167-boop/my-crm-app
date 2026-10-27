@@ -8,7 +8,7 @@ from .common import ASSOCIATION, ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_C
 from .context import ApiError, body, current_user, db, not_found, require_role
 from .normalize import PREFECTURES
 from .routes import bp
-from .validate import Bool, Int, Str, parse, parse_id
+from .validate import Bool, Int, IntList, Str, parse, parse_id
 
 MEMBERS_LIMIT = 2000
 
@@ -86,14 +86,11 @@ def association_overview():
     return jsonify({'associations': items, 'totals': totals})
 
 
-@bp.patch('/associations/<id>/structure')
-def set_association_structure(id):
-    """協会の組織図での位置を決める（管理者のみ）。parent_id＝親の協会（null なら都道府県の協会）、prefecture＝都道府県の協会が入る都道府県（地区はここから決まる）、
-    is_top_level＝組織図の最上位の組織（全日本私立幼稚園連合会と同じ位置。親・都道府県は持たない。複数登録できる）"""
-    require_role('admin')
-    id = parse_id(id)
-    b = parse({'parent_id': Int(min=1, nullable=True), 'prefecture': Str(max=10, nullable=True), 'is_top_level': Bool()}, body(), partial=True)
-    d = db()
+STRUCTURE_FIELDS = {'parent_id': Int(min=1, nullable=True), 'prefecture': Str(max=10, nullable=True), 'is_top_level': Bool()}
+
+
+def _update_structure(d, id, b):
+    """協会1件の組織図での位置を更新する（b は検証済みの項目）。変えた後の行を返す"""
     before = d.first(f'SELECT * FROM {ASSOCIATION.master} WHERE id = %s', (id,))
     if not before:
         raise not_found('加盟協会')
@@ -102,7 +99,7 @@ def set_association_structure(id):
     if b.get('parent_id') is not None:
         pid = b['parent_id']
         if pid == id:
-            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（parent_id: 自分自身は親にできません）')
+            raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（parent_id: 自分自身は親にできません：{before["name"]}）')
         # 親をたどって自分に戻ってくる（自分の下位の協会を親にする）ことはできない
         seen, cur = set(), pid
         while cur is not None:
@@ -110,7 +107,7 @@ def set_association_structure(id):
             if not row:
                 raise ApiError(400, 'validation_error', '入力内容に誤りがあります（parent_id: 親の協会が見つかりません）')
             if row['id'] == id or row['id'] in seen:
-                raise ApiError(400, 'validation_error', '入力内容に誤りがあります（parent_id: 下位の協会は親にできません）')
+                raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（parent_id: 下位の協会は親にできません：{before["name"]}）')
             seen.add(row['id'])
             cur = row['parent_id']
     sets = {k: b[k] for k in ('parent_id', 'prefecture', 'is_top_level') if k in b}
@@ -124,10 +121,38 @@ def set_association_structure(id):
     elif 'is_top_level' in sets:
         sets['is_top_level'] = 0
     if not sets:
-        return jsonify(before)
+        return before
     row = d.first(f'UPDATE {ASSOCIATION.master} SET {", ".join(f"{k} = %s" for k in sets)}, updated_at = telema_now() WHERE id = %s RETURNING *', [*sets.values(), id])
     audit(d, current_user()['id'], 'update', 'association_structure', id, {k: before[k] for k in sets}, sets)
-    return jsonify(row)
+    return row
+
+
+@bp.patch('/associations/<id>/structure')
+def set_association_structure(id):
+    """協会の組織図での位置を決める（管理者のみ）。parent_id＝親の協会（null なら都道府県の協会）、prefecture＝都道府県の協会が入る都道府県（地区はここから決まる）、
+    is_top_level＝組織図の最上位の組織（全日本私立幼稚園連合会と同じ位置。親・都道府県は持たない。複数登録できる）"""
+    require_role('admin')
+    id = parse_id(id)
+    b = parse(STRUCTURE_FIELDS, body(), partial=True)
+    return jsonify(_update_structure(db(), id, b))
+
+
+@bp.post('/association-structure/bulk')
+def set_association_structure_bulk():
+    """複数の協会の組織図での位置を、まとめて同じ内容にする（管理者のみ）。項目は1件ずつの変更（/associations/<id>/structure）と同じ。
+    1件でも入れられない協会（下位の協会を親にするなど）があれば、全件とも変更しない"""
+    require_role('admin')
+    raw = body()
+    b = parse({'association_ids': IntList(min_len=1, max_len=500), **STRUCTURE_FIELDS}, raw, partial=True)
+    if 'association_ids' not in b:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（association_ids: 必須です）')
+    ids = list(dict.fromkeys(b.pop('association_ids')))
+    if not b:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（変更する項目を指定してください）')
+    d = db()
+    for i in ids:
+        _update_structure(d, i, b)
+    return jsonify({'updated': len(ids)})
 
 
 @bp.get('/association-overview/<id>/members')
