@@ -121,3 +121,24 @@ def test_協会の階層_下位の協会の加盟施設も上位の数字に入�
     finally:
         client.set_my_role('admin')
     assert totals['association_count'] >= 4
+
+
+def test_最上位の組織は複数登録でき_親と都道府県を持たず_親を選ぶと最上位から外れる(client):
+    top1 = client.api('/associations', {'name': '最上位組織一'})[1]['id']
+    top2 = client.api('/associations', {'name': '最上位組織二'})[1]['id']
+    child = client.api('/associations', {'name': '最上位の下の協会'})[1]['id']
+    assert client.api(f'/associations/{child}/structure', {'parent_id': top1, 'prefecture': '東京都'}, method='PATCH')[0] == 200
+    # 最上位にすると、親・都道府県は外れる。何件でも登録できる
+    r = client.api(f'/associations/{top1}/structure', {'is_top_level': True, 'prefecture': '神奈川県'}, method='PATCH')[1]
+    assert (r['is_top_level'], r['parent_id'], r['prefecture']) == (1, None, None)
+    assert client.api(f'/associations/{top2}/structure', {'is_top_level': True}, method='PATCH')[1]['is_top_level'] == 1
+    by = overview(client)[0]
+    assert by['最上位組織一']['is_top_level'] == 1 and by['最上位組織二']['is_top_level'] == 1 and by['最上位の下の協会']['is_top_level'] == 0
+    assert by['最上位の下の協会']['parent_id'] == top1
+    # 最上位の組織に親は指定できない。親を選ぶと最上位から外れる
+    assert client.api(f'/associations/{top2}/structure', {'is_top_level': True, 'parent_id': top1}, method='PATCH')[0] == 400
+    r = client.api(f'/associations/{top2}/structure', {'parent_id': top1}, method='PATCH')[1]
+    assert (r['is_top_level'], r['parent_id']) == (0, top1)
+    # 最上位をやめると、都道府県の協会に戻る
+    r = client.api(f'/associations/{top1}/structure', {'is_top_level': False}, method='PATCH')[1]
+    assert (r['is_top_level'], r['parent_id']) == (0, None)

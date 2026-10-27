@@ -57,7 +57,7 @@ export function AssociationStructureFields({
     return items.filter((x) => !below.has(x.id)).sort((a, b) => pathLabel(items, a.id).localeCompare(pathLabel(items, b.id), "ja"));
   }, [items, item.id]);
 
-  async function save(json: { parent_id?: number | null; prefecture?: string | null }) {
+  async function save(json: { parent_id?: number | null; prefecture?: string | null; is_top_level?: boolean }) {
     setBusy(true);
     setError(null);
     try {
@@ -71,8 +71,14 @@ export function AssociationStructureFields({
   }
 
   const region = regionOfPrefecture(item.prefecture);
+  const isTop = item.is_top_level === 1;
   return (
     <div className={compact ? "space-y-1.5" : "space-y-3"}>
+      <label className="flex items-center gap-1.5 text-sm text-slate-700">
+        <input type="checkbox" checked={isTop} disabled={busy} onChange={(e) => void save({ is_top_level: e.target.checked })} />
+        最上位の組織にする（全日本私立幼稚園連合会と同じ位置）
+      </label>
+      {!isTop && (
       <label className="block">
         <span className="mb-0.5 block text-xs text-slate-500">上位の協会（この協会が入る協会）</span>
         <select className={selCls} value={item.parent_id ?? ""} disabled={busy} onChange={(e) => void save({ parent_id: e.target.value ? Number(e.target.value) : null })}>
@@ -84,7 +90,8 @@ export function AssociationStructureFields({
           ))}
         </select>
       </label>
-      {item.parent_id == null && (
+      )}
+      {!isTop && item.parent_id == null && (
         <label className="block">
           <span className="mb-0.5 block text-xs text-slate-500">都道府県（入る地区：{region?.label ?? UNKNOWN_REGION.label}）</span>
           <select className={selCls} value={item.prefecture_setting ?? ""} disabled={busy} onChange={(e) => void save({ prefecture: e.target.value || null })}>
@@ -112,7 +119,7 @@ export function AssociationStructureDialog({ itemId, items, onSaved, onClose }: 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true" aria-label={`${item.name}の位置を変更`} onClick={onClose}>
       <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-base font-semibold text-slate-900">{item.name}</h3>
-        <p className="mb-3 mt-0.5 text-xs text-slate-500">組織図でこの協会を入れる場所を選びます。{children.length > 0 && `下位の${children.length}協会も一緒に移ります。`}</p>
+        <p className="mb-3 mt-0.5 text-xs text-slate-500">組織図でこの協会を入れる場所を選びます。「最上位の組織」にすると、全日本私立幼稚園連合会と並んで表示されます。{children.length > 0 && `下位の${children.length}協会も一緒に移ります。`}</p>
         <AssociationStructureFields item={item} items={items} onSaved={onSaved} />
         <div className="mt-4 flex justify-end">
           <Button onClick={onClose}>閉じる</Button>

@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from "react";
 import { Link } from "react-router";
 import type { AssociationOverviewItem, AssociationPerson } from "../types";
 import { REGIONS, UNKNOWN_REGION } from "../shared/regions";
-import { buildAssociationForest, flattenForest, groupByRegion, type AssocTreeNode } from "../lib/association-tree";
+import { buildAssociationForest, flattenForest, groupByRegion, topLevelNodes, TOP_LEVEL_LABEL, type AssocTreeNode } from "../lib/association-tree";
 import { api, unwrap } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { useMasters } from "../lib/masters";
@@ -65,7 +65,10 @@ export function Associations() {
 
   const all = useMemo(() => (data?.associations ?? []).filter((a) => showInactive || a.is_active), [data, showInactive]);
   // 組織図の順に平らにする。地区は、いちばん上の協会（都道府県の協会）から決まる
-  const flat = useMemo(() => flattenForest(groupByRegion(buildAssociationForest(all))), [all]);
+  const flat = useMemo(() => {
+    const forest = buildAssociationForest(all);
+    return flattenForest(groupByRegion(forest), topLevelNodes(forest));
+  }, [all]);
   const shown = useMemo(() => {
     const t = q.trim();
     const list = flat.filter((f) => (!t || f.node.item.name.includes(t)) && (!region || f.region === region));
@@ -107,9 +110,11 @@ export function Associations() {
       {editing && (
         <p className="rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-900 ring-1 ring-indigo-200">
           組織図の編集中です。{view === "map" ? "マインドマップの協会の右にある ✎ を押すと、その協会を入れる「上位の協会」を選べます。" : "各協会の「組織図の位置」で、その協会を入れる「上位の協会」を選べます。"}
-          上位の協会を選ばない協会は「都道府県の協会」になり、都道府県から地区に入ります。変更はすぐ保存されます。
+          上位の協会を選ばない協会は「都道府県の協会」になり、都道府県から地区に入ります。「最上位の組織にする」と、全日本私立幼稚園連合会と並ぶ組織になります。変更はすぐ保存されます。
         </p>
       )}
+
+      {editing && <AddTopLevel onAdded={reload} />}
 
       {error && <ErrorBox message={error} onRetry={reload} />}
       {loading && !data && <p className="text-sm text-slate-400">読み込み中…</p>}
@@ -127,7 +132,7 @@ export function Associations() {
               <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="協会名で探す" className={`${inputCls} min-w-52 flex-1`} />
               <select value={region} onChange={(e) => setRegion(e.target.value)} className={selectCls} aria-label="地区">
                 <option value="">地区（すべて）</option>
-                {[...REGIONS.map((r) => r.label), UNKNOWN_REGION.label].map((r) => (
+                {[TOP_LEVEL_LABEL, ...REGIONS.map((r) => r.label), UNKNOWN_REGION.label].map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
@@ -155,6 +160,52 @@ export function Associations() {
       )}
       {editId != null && <AssociationStructureDialog itemId={editId} items={all} onSaved={reload} onClose={() => setEditId(null)} />}
     </div>
+  );
+}
+
+/** 最上位の組織（全日本私立幼稚園連合会と同じ位置に並ぶ組織）を追加する。同じ名前の協会が既にあれば、それを最上位にする */
+function AddTopLevel({ onAdded }: { onAdded: () => void }) {
+  const { associations, reload: reloadMasters } = useMasters();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    const n = name.trim();
+    if (!n || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const existing = associations.find((a) => a.name === n);
+      const id = existing ? existing.id : (await unwrap(api.associations.$post({ json: { name: n } }))).id;
+      await unwrap(api.associations[":id"].structure.$patch({ param: { id: String(id) }, json: { is_top_level: true } }));
+      setName("");
+      reloadMasters();
+      onAdded();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="最上位の組織を追加">
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void add();
+        }}
+      >
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="組織の名前（例：全国私立幼稚園PTA連合会）" className={`${inputCls} min-w-64 flex-1`} aria-label="最上位の組織の名前" />
+        <Button type="submit" variant="primary" disabled={busy || !name.trim()}>
+          追加
+        </Button>
+      </form>
+      <p className="mt-1.5 text-xs text-slate-500">追加した組織は、全日本私立幼稚園連合会と同じ位置に表示されます。その下に入る協会は、各協会の ✎（リストでは「組織図の位置」）で「上位の協会」にこの組織を選んでください。</p>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </Card>
   );
 }
 

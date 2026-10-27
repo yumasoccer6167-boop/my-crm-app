@@ -5,6 +5,8 @@ export type MapNode = {
   label: string;
   sub?: string;
   kind: "root" | "region" | "assoc" | "person" | "org" | "facility" | "note";
+  /** 組織図の最上位の組織（全日本私立幼稚園連合会と同じ濃い色で表示する） */
+  top?: boolean;
   /** カルテを開くときの施設ID */
   companyId?: number;
   children: MapNode[];
@@ -19,8 +21,8 @@ const COL_GAP = 46;
 const ROW_H = 48;
 const PAD = 16;
 
-/** 開いているノードの子を、深さごとの列・葉の順の行に並べる。親は子の真ん中に置く。root は常に開く */
-export function layoutMindMap(root: MapNode, open: Set<string>): { placed: Placed[]; links: Link[]; width: number; height: number } {
+/** 開いているノードの子を、深さごとの列・葉の順の行に並べる。親は子の真ん中に置く。root は常に開く。木が複数あるときは上から順に並べる */
+export function layoutMindMap(roots: MapNode[], open: Set<string>): { placed: Placed[]; links: Link[]; width: number; height: number } {
   const placed: Placed[] = [];
   const links: Link[] = [];
   let row = 0;
@@ -36,7 +38,7 @@ export function layoutMindMap(root: MapNode, open: Set<string>): { placed: Place
     return p;
   }
 
-  walk(root, 0);
+  for (const root of roots) walk(root, 0);
   const maxDepth = placed.reduce((m, p) => Math.max(m, p.depth), 0);
   return { placed, links, width: PAD * 2 + (maxDepth + 1) * NODE_W + maxDepth * COL_GAP, height: PAD * 2 + Math.max(1, row) * ROW_H };
 }

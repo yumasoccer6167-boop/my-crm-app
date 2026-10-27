@@ -522,6 +522,10 @@ ALTER TABLE telema_companies ADD COLUMN is_headquarters INTEGER NOT NULL DEFAULT
 ALTER TABLE telema_associations ADD COLUMN parent_id INTEGER REFERENCES telema_associations(id) ON DELETE SET NULL;
 ALTER TABLE telema_associations ADD COLUMN prefecture TEXT;
 """,
+    # 18: 協会の組織図の最上位（全日本私立幼稚園連合会と同じ位置に並べる組織）。複数登録できる。親・都道府県は持たない
+    r"""
+ALTER TABLE telema_associations ADD COLUMN is_top_level INTEGER NOT NULL DEFAULT 0;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

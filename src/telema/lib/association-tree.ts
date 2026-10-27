@@ -28,6 +28,7 @@ export function buildAssociationForest(items: AssociationOverviewItem[]): AssocT
 export function groupByRegion(forest: AssocTreeNode[]): RegionGroup[] {
   const groups: RegionGroup[] = [...REGIONS.map((r) => ({ key: r.key, label: r.label })), UNKNOWN_REGION].map((r) => ({ ...r, top: [], facilityCount: 0 }));
   for (const n of forest) {
+    if (n.item.is_top_level) continue;
     const region = regionOfPrefecture(n.item.prefecture);
     const g = groups.find((x) => x.key === (region?.key ?? UNKNOWN_REGION.key))!;
     g.top.push(n);
@@ -36,13 +37,21 @@ export function groupByRegion(forest: AssocTreeNode[]): RegionGroup[] {
   return groups;
 }
 
-/** 木を、表示の順（地区→都道府県の協会→下位の協会）に平らにする */
-export function flattenForest(groups: RegionGroup[]): { node: AssocTreeNode; region: string }[] {
+/** 最上位の組織（全日本私立幼稚園連合会と同じ位置に並ぶ組織）。親の協会を持たないものだけ */
+export function topLevelNodes(forest: AssocTreeNode[]): AssocTreeNode[] {
+  return forest.filter((n) => n.item.is_top_level);
+}
+
+export const TOP_LEVEL_LABEL = "最上位の組織";
+
+/** 木を、表示の順（最上位の組織→地区→都道府県の協会→下位の協会）に平らにする */
+export function flattenForest(groups: RegionGroup[], tops: AssocTreeNode[] = []): { node: AssocTreeNode; region: string }[] {
   const out: { node: AssocTreeNode; region: string }[] = [];
   const walk = (n: AssocTreeNode, region: string) => {
     out.push({ node: n, region });
     n.children.forEach((c) => walk(c, region));
   };
+  tops.forEach((n) => walk(n, TOP_LEVEL_LABEL));
   for (const g of groups) g.top.forEach((n) => walk(n, g.label));
   return out;
 }

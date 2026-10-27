@@ -4,7 +4,7 @@ import { Crown, Pencil } from "lucide-react";
 import type { AssociationMembers, AssociationOverviewItem } from "../types";
 import { NATIONAL_ASSOCIATION_NAME } from "../shared/regions";
 import { api, unwrap } from "../lib/api";
-import { buildAssociationForest, groupByRegion, type AssocTreeNode } from "../lib/association-tree";
+import { buildAssociationForest, groupByRegion, topLevelNodes, type AssocTreeNode } from "../lib/association-tree";
 import { layoutMindMap, NODE_H, NODE_W, type MapNode } from "../lib/mindmap-layout";
 import { Button } from "./ui";
 import { groupByOrganization } from "./AssociationMembers";
@@ -31,10 +31,13 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [members, setMembers] = useState<Record<number, MemberState>>({});
 
-  const groups = useMemo(() => groupByRegion(buildAssociationForest(associations)), [associations]);
+  const forest = useMemo(() => buildAssociationForest(associations), [associations]);
+  const groups = useMemo(() => groupByRegion(forest), [forest]);
+  const tops = useMemo(() => topLevelNodes(forest), [forest]);
 
-  const tree = useMemo<MapNode>(
-    () => ({
+  // 最上位の組織は、全日本私立幼稚園連合会の下に並べて、複数登録できる
+  const roots = useMemo<MapNode[]>(() => {
+    const national: MapNode = {
       key: "root",
       label: NATIONAL_ASSOCIATION_NAME,
       sub: `${groups.reduce((n, g) => n + g.top.length, 0)}の都道府県協会`,
@@ -49,11 +52,11 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
           kind: "region" as const,
           children: g.top.map((n) => assocNode(n, members)),
         })),
-    }),
-    [groups, members],
-  );
+    };
+    return [national, ...tops.map((n) => ({ ...assocNode(n, members), top: true }))];
+  }, [groups, tops, members]);
 
-  const { placed, links, width, height } = useMemo(() => layoutMindMap(tree, open), [tree, open]);
+  const { placed, links, width, height } = useMemo(() => layoutMindMap(roots, open), [roots, open]);
 
   async function loadMembers(id: number) {
     if (members[id] && members[id] !== "error") return;
@@ -84,7 +87,7 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
   /** 地区だけ／下位の協会をもつ協会まで、一気に開く */
   function expand(level: "regions" | "associations" | "none") {
     if (level === "none") return setOpen(new Set());
-    const keys = new Set<string>(tree.children.map((c) => c.key));
+    const keys = new Set<string>(roots[0]!.children.map((c) => c.key));
     if (level === "associations") {
       const walk = (n: AssocTreeNode) => {
         if (n.children.length > 0) {
@@ -94,6 +97,7 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
         n.children.forEach(walk);
       };
       groups.forEach((g) => g.top.forEach(walk));
+      tops.forEach(walk);
     }
     setOpen(keys);
   }
@@ -127,7 +131,7 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
           {placed.map((p) => {
             const n = p.node;
             const clickable = n.kind !== "note" && n.kind !== "root" && (p.expandable || n.kind === "assoc" || n.kind === "facility" || n.kind === "person");
-            const dark = n.kind === "root" || n.kind === "region";
+            const dark = n.kind === "root" || n.kind === "region" || n.top === true;
             return (
               <Fragment key={n.key}>
               <button
@@ -136,7 +140,7 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
                 onClick={() => toggle(n)}
                 title={[n.label, n.sub].filter(Boolean).join("　")}
                 style={{ left: p.x, top: p.y, width: NODE_W, height: NODE_H }}
-                className={`absolute flex items-center gap-1.5 rounded-xl px-2.5 text-left text-xs ring-1 ring-inset ${KIND_STYLE[n.kind]} ${clickable ? "cursor-pointer hover:shadow" : "cursor-default"}`}
+                className={`absolute flex items-center gap-1.5 rounded-xl px-2.5 text-left text-xs ring-1 ring-inset ${n.top ? KIND_STYLE.root : KIND_STYLE[n.kind]} ${clickable ? "cursor-pointer hover:shadow" : "cursor-default"}`}
               >
                 {n.kind === "person" && <Crown className={`h-3.5 w-3.5 shrink-0 ${n.label.startsWith("会長") ? "text-amber-500" : "text-slate-400"}`} aria-hidden />}
                 {p.expandable && n.kind !== "root" && <span className={`shrink-0 text-[10px] ${dark ? "text-white/70" : "text-slate-500"}`}>{p.isOpen ? "▼" : "▶"}</span>}

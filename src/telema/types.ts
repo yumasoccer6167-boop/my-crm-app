@@ -162,7 +162,7 @@ export type Contract = {
 export type Tag = { id: number; name: string; is_active: number; sort_order?: number };
 export type Association = Tag;
 /** 加盟協会のマスタ（設定画面）。parent_id＝親の協会（無ければ都道府県の協会）、prefecture＝都道府県の協会が入る都道府県（未指定なら加盟施設で一番多い都道府県） */
-export type AssociationMaster = Association & { parent_id: number | null; prefecture: string | null };
+export type AssociationMaster = Association & { parent_id: number | null; prefecture: string | null; is_top_level: number };
 /** リスト種類（「繋がり」「群私幼」など。設定画面で管理者が増やせるマスタ） */
 export type ListType = Tag;
 /** 部署（営業部・制作部・CS など。設定画面で管理者が増やせるマスタ。タイムラインの記録ごとに付ける） */
@@ -246,6 +246,8 @@ export type AssociationOverviewItem = {
   user_count: number;
   /** 親の協会（組織図）。null は都道府県の協会 */
   parent_id: number | null;
+  /** 1＝組織図の最上位の組織（全日本私立幼稚園連合会と同じ位置。複数登録できる） */
+  is_top_level: number;
   /** 協会に指定した都道府県（未指定は null） */
   prefecture_setting: string | null;
   /** 協会に指定した都道府県。指定がなければ、加盟施設で一番多い都道府県（それも無ければ null） */

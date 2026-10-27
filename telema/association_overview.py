@@ -8,7 +8,7 @@ from .common import ASSOCIATION, ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_OFFICER_C
 from .context import ApiError, body, current_user, db, not_found, require_role
 from .normalize import PREFECTURES
 from .routes import bp
-from .validate import Int, Str, parse, parse_id
+from .validate import Bool, Int, Str, parse, parse_id
 
 MEMBERS_LIMIT = 2000
 
@@ -29,7 +29,7 @@ def association_overview():
     数字は、下位の協会（地区単位・各地域の協会）の加盟施設も含む（同じ施設は1回だけ）。own_facility_count はその協会に直接加盟している施設の数。
     都道府県は、協会に指定したものを優先し、なければ加盟施設で一番多い都道府県"""
     d = db()
-    assocs = d.all(f'SELECT id, name, is_active, sort_order, parent_id, prefecture AS prefecture_setting FROM {ASSOCIATION.master} ORDER BY sort_order, id')
+    assocs = d.all(f'SELECT id, name, is_active, sort_order, parent_id, is_top_level, prefecture AS prefecture_setting FROM {ASSOCIATION.master} ORDER BY sort_order, id')
     links = d.all(
         f'''SELECT ca.{ASSOCIATION.fk} AS association_id, c.id AS company_id, c.organization_id, c.is_user, c.prefecture
               FROM {ASSOCIATION.link} ca JOIN telema_companies c ON c.id = ca.company_id AND c.is_active = 1''')
@@ -88,10 +88,11 @@ def association_overview():
 
 @bp.patch('/associations/<id>/structure')
 def set_association_structure(id):
-    """協会の組織図での位置を決める（管理者のみ）。parent_id＝親の協会（null なら都道府県の協会）、prefecture＝都道府県の協会が入る都道府県（地区はここから決まる）"""
+    """協会の組織図での位置を決める（管理者のみ）。parent_id＝親の協会（null なら都道府県の協会）、prefecture＝都道府県の協会が入る都道府県（地区はここから決まる）、
+    is_top_level＝組織図の最上位の組織（全日本私立幼稚園連合会と同じ位置。親・都道府県は持たない。複数登録できる）"""
     require_role('admin')
     id = parse_id(id)
-    b = parse({'parent_id': Int(min=1, nullable=True), 'prefecture': Str(max=10, nullable=True)}, body(), partial=True)
+    b = parse({'parent_id': Int(min=1, nullable=True), 'prefecture': Str(max=10, nullable=True), 'is_top_level': Bool()}, body(), partial=True)
     d = db()
     before = d.first(f'SELECT * FROM {ASSOCIATION.master} WHERE id = %s', (id,))
     if not before:
@@ -112,7 +113,16 @@ def set_association_structure(id):
                 raise ApiError(400, 'validation_error', '入力内容に誤りがあります（parent_id: 下位の協会は親にできません）')
             seen.add(row['id'])
             cur = row['parent_id']
-    sets = {k: b[k] for k in ('parent_id', 'prefecture') if k in b}
+    sets = {k: b[k] for k in ('parent_id', 'prefecture', 'is_top_level') if k in b}
+    # 最上位の組織は親も都道府県も持たない。親を選んだら最上位ではなくなる
+    if sets.get('is_top_level'):
+        if b.get('parent_id') is not None:
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（parent_id: 最上位の組織には親を指定できません）')
+        sets.update({'parent_id': None, 'prefecture': None, 'is_top_level': 1})
+    elif b.get('parent_id') is not None:
+        sets['is_top_level'] = 0
+    elif 'is_top_level' in sets:
+        sets['is_top_level'] = 0
     if not sets:
         return jsonify(before)
     row = d.first(f'UPDATE {ASSOCIATION.master} SET {", ".join(f"{k} = %s" for k in sets)}, updated_at = telema_now() WHERE id = %s RETURNING *', [*sets.values(), id])
