@@ -2,10 +2,21 @@
 // 「業種・エリア／困りごと／施策／成果」の4点で事例を蓄積し、検索・絞り込み・PDF出力ができる。
 // テレマリストのカルテ（施設）と紐づけると、カルテの情報を事例に反映でき、カルテ側にもその事例が表示される。
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, X, Link2, Trash2, Edit, FileText, ExternalLink } from 'lucide-react';
+import { Plus, Search, X, Link2, Trash2, Edit, FileText, ExternalLink, Globe, Users, Video, MapPin, Megaphone, Share2 } from 'lucide-react';
 
 // 制作内容の分類（絞り込み用）
 const SUCCESS_CASE_TAGS = ['採用サイト', 'ホームページ', '動画', '広告運用', 'MEO・口コミ対策', 'その他'];
+// 事例へのリンクの種類（カードに出るマーク）。リンクごとに選べる
+const LINK_KINDS = [
+  { key: 'hp', label: 'ホームページ', Icon: Globe, style: 'bg-sky-50 text-sky-800 ring-sky-200 hover:bg-sky-100' },
+  { key: 'recruit', label: '採用サイト', Icon: Users, style: 'bg-emerald-50 text-emerald-800 ring-emerald-200 hover:bg-emerald-100' },
+  { key: 'video', label: '動画', Icon: Video, style: 'bg-rose-50 text-rose-800 ring-rose-200 hover:bg-rose-100' },
+  { key: 'meo', label: 'MEO・口コミ', Icon: MapPin, style: 'bg-amber-50 text-amber-800 ring-amber-200 hover:bg-amber-100' },
+  { key: 'ads', label: '広告', Icon: Megaphone, style: 'bg-violet-50 text-violet-800 ring-violet-200 hover:bg-violet-100' },
+  { key: 'sns', label: 'SNS', Icon: Share2, style: 'bg-indigo-50 text-indigo-800 ring-indigo-200 hover:bg-indigo-100' },
+  { key: 'other', label: 'その他', Icon: ExternalLink, style: 'bg-slate-50 text-slate-700 ring-slate-200 hover:bg-slate-100' },
+];
+const linkKind = (key) => LINK_KINDS.find(k => k.key === key) || LINK_KINDS[LINK_KINDS.length - 1];
 const GOALS = ['集客', '採用'];
 const GOAL_STYLE = {
   集客: 'bg-sky-50 text-sky-800 ring-sky-200',
@@ -22,11 +33,33 @@ const tagsOf = (c) => (Array.isArray(c.tags) ? c.tags : []);
 const goalsOf = (c) => (Array.isArray(c.goals) ? c.goals : []);
 const titleOf = (c) => c.name || `${c.industry}（${c.area}）`;
 const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : '');
+// 事例へのリンク（URLが正しいものだけ）
+const linksOf = (c) => (Array.isArray(c.links) ? c.links : []).filter(l => safeUrl(l && l.url));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 // 数字の部分を強調して表示する
 function Emph({ text }) {
   return String(text ?? '').split(/(\d+(?:[.,]\d+)?)/).map((p, i) => (i % 2 ? <b key={i} className="text-indigo-700">{p}</b> : p));
+}
+
+// 事例へ1クリックで飛ぶマーク付きのリンク。押すと別タブで開く
+function CaseLinks({ c, className = '' }) {
+  const links = linksOf(c);
+  if (!links.length) return null;
+  return (
+    <div className={`flex flex-wrap gap-1.5 ${className}`}>
+      {links.map((l, i) => {
+        const k = linkKind(l.kind);
+        const text = (l.label || '').trim() || k.label;
+        return (
+          <a key={i} href={safeUrl(l.url)} target="_blank" rel="noopener noreferrer" title={`${text}を開く（${l.url}）`}
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition-colors ${k.style}`}>
+            <k.Icon className="h-3.5 w-3.5" aria-hidden />{text}
+          </a>
+        );
+      })}
+    </div>
+  );
 }
 
 function Chip({ active, onClick, children, count }) {
@@ -247,6 +280,7 @@ function CaseDetail({ c, token, canEdit, canDelete, onEdit, onDelete, onClose, o
           <p>{c.industry}／{c.area}{c.name && <><br />{c.name}</>}</p>
           {url && <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-700 hover:underline">{url}<ExternalLink className="h-3 w-3" /></a>}
         </Step>
+        {linksOf(c).length > 0 && <CaseLinks c={c} className="-mt-1 pl-9" />}
         <Step n="2" title="何に困っていた"><p className="whitespace-pre-wrap">{c.problem}</p></Step>
         <Step n="3" title="何をした">
           {tagsOf(c).length > 0 && (
@@ -282,11 +316,12 @@ function Field({ label, req, hint, children, className = '' }) {
 
 function CaseForm({ initial, token, onSave, onClose, saving }) {
   const [f, setF] = useState(() => ({
-    goals: [], industry: '', area: '', name: '', url: '', problem: '', tags: [], measure: '', action: '', headline: '', period: '', result: '',
+    goals: [], industry: '', area: '', name: '', url: '', links: [], problem: '', tags: [], measure: '', action: '', headline: '', period: '', result: '',
     telemaCompanyId: null, telemaCompanyName: '', ...initial,
   }));
   const [error, setError] = useState('');
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+  const setLink = (i, patch) => setF(prev => ({ ...prev, links: prev.links.map((l, j) => (j === i ? { ...l, ...patch } : l)) }));
   const toggle = (k, v) => setF(prev => ({ ...prev, [k]: prev[k].includes(v) ? prev[k].filter(x => x !== v) : [...prev[k], v] }));
 
   // カルテの情報を、まだ入力していない項目に反映する（入力済みの内容は上書きしない）
@@ -319,6 +354,10 @@ function CaseForm({ initial, token, onSave, onClose, saving }) {
     const data = Object.fromEntries(Object.entries(f).map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v]));
     const missing = [['industry', '業種'], ['area', 'エリア'], ['problem', '困っていたこと'], ['action', '施策の内容'], ['headline', '成果']].filter(([k]) => !data[k]).map(([, l]) => l);
     if (missing.length) { setError(`${missing.join('・')}を入力してください。`); return; }
+    const bad = (f.links || []).findIndex(l => (l.url || '').trim() && !safeUrl(l.url.trim()));
+    if (bad >= 0) { setError(`事例へのリンク${bad + 1}件目のURLは、https:// から始まる形で入力してください。`); return; }
+    // URLが空のリンクは保存しない
+    data.links = (f.links || []).map(l => ({ kind: l.kind, label: (l.label || '').trim(), url: (l.url || '').trim() })).filter(l => l.url);
     onSave(data);
   };
 
@@ -381,6 +420,27 @@ function CaseForm({ initial, token, onSave, onClose, saving }) {
             <Field label="成果（数字1つ）" req hint="例：応募数 月1件→8件"><input className={inputCls} value={f.headline} onChange={e => set('headline', e.target.value)} /></Field>
             <Field label="期間" hint="例：3ヶ月"><input className={inputCls} value={f.period} onChange={e => set('period', e.target.value)} /></Field>
             <Field label="成果の詳細" className="sm:col-span-2"><textarea className={`${inputCls} min-h-[4rem] resize-y`} value={f.result} onChange={e => set('result', e.target.value)} /></Field>
+          </div>
+        </fieldset>
+        <fieldset>
+          <Legend n="↗">事例へのリンク<span className="text-xs font-normal text-slate-400">任意</span></Legend>
+          <p className="mb-2 text-xs text-slate-500">制作したホームページ・動画・MEOなどのURLを登録すると、事例のカードにマーク付きのリンクが出て、1クリックで開けます。マークはリンクごとに変えられます。</p>
+          <div className="space-y-2">
+            {f.links.map((l, i) => {
+              const k = linkKind(l.kind);
+              return (
+                <div key={i} className="flex flex-wrap items-center gap-2">
+                  <k.Icon className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+                  <select aria-label={`リンク${i + 1}のマーク`} className={`${inputCls} !w-auto`} value={k.key} onChange={e => setLink(i, { kind: e.target.value })}>
+                    {LINK_KINDS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                  </select>
+                  <input aria-label={`リンク${i + 1}のURL`} className={`${inputCls} min-w-52 flex-1`} type="url" value={l.url || ''} onChange={e => setLink(i, { url: e.target.value })} placeholder="https://" />
+                  <input aria-label={`リンク${i + 1}の表示名`} className={`${inputCls} !w-36`} value={l.label || ''} onChange={e => setLink(i, { label: e.target.value })} placeholder={`表示名（${k.label}）`} />
+                  <button type="button" className="text-slate-400 hover:text-rose-600" aria-label={`リンク${i + 1}を削除`} onClick={() => setF(prev => ({ ...prev, links: prev.links.filter((_, j) => j !== i) }))}><X className="h-4 w-4" /></button>
+                </div>
+              );
+            })}
+            <button type="button" className={btnSecondary} onClick={() => setF(prev => ({ ...prev, links: [...prev.links, { kind: 'hp', label: '', url: '' }] }))}><Plus className="h-4 w-4" />リンクを追加</button>
           </div>
         </fieldset>
       </form>
@@ -480,7 +540,8 @@ export default function SuccessCasesView({ cases, setCases, currentUser, token, 
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map(c => (
-            <button key={c.id} type="button" onClick={() => setOpenId(c.id)} className="flex flex-col gap-2 rounded-lg bg-white p-4 text-left ring-1 ring-slate-200 transition hover:ring-indigo-300">
+            <div key={c.id} className="flex flex-col gap-2 rounded-lg bg-white p-4 ring-1 ring-slate-200 transition hover:ring-indigo-300">
+              <button type="button" onClick={() => setOpenId(c.id)} className="flex flex-col gap-2 text-left">
               <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                 <GoalBadges c={c} />
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-700 ring-1 ring-inset ring-slate-200">{c.industry}</span>
@@ -495,7 +556,9 @@ export default function SuccessCasesView({ cases, setCases, currentUser, token, 
                 {c.period && <span className="ml-2 text-xs text-slate-500">{c.period}</span>}
               </div>
               <p className="line-clamp-2 text-xs text-slate-600"><strong className="font-semibold">課題：</strong>{c.problem}</p>
-            </button>
+              </button>
+              <CaseLinks c={c} />
+            </div>
           ))}
         </div>
       )}
