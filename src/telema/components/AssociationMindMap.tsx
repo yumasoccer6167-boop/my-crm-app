@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Crown, Pencil } from "lucide-react";
 import type { AssociationMembers, AssociationOverviewItem } from "../types";
@@ -19,6 +19,16 @@ const KIND_STYLE: Record<MapNode["kind"], string> = {
   note: "bg-transparent text-slate-400 ring-transparent",
 };
 
+const ONLY_KEY = "telema:associations-map-only";
+
+function loadOnly(): boolean {
+  try {
+    return localStorage.getItem(ONLY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 type MemberState = AssociationMembers | "loading" | "error";
 
 /**
@@ -30,6 +40,17 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
   const navigate = useNavigate();
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [members, setMembers] = useState<Record<number, MemberState>>({});
+  // 協会だけの表示（会長・役員・法人・施設を出さない）。選んだ表示は覚えておく
+  const [only, setOnly] = useState(loadOnly);
+
+  function changeOnly(v: boolean) {
+    setOnly(v);
+    try {
+      localStorage.setItem(ONLY_KEY, v ? "1" : "0");
+    } catch {
+      // 保存できなくても動作は続ける
+    }
+  }
 
   const forest = useMemo(() => buildAssociationForest(associations), [associations]);
   const groups = useMemo(() => groupByRegion(forest), [forest]);
@@ -50,13 +71,20 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
           label: g.label,
           sub: g.top.length ? `${g.top.length}協会・${g.facilityCount.toLocaleString()}施設` : "協会はまだありません",
           kind: "region" as const,
-          children: g.top.map((n) => assocNode(n, members)),
+          children: g.top.map((n) => assocNode(n, members, only)),
         })),
     };
-    return [national, ...tops.map((n) => ({ ...assocNode(n, members), top: true }))];
-  }, [groups, tops, members]);
+    return [national, ...tops.map((n) => ({ ...assocNode(n, members, only), top: true }))];
+  }, [groups, tops, members, only]);
 
   const { placed, links, width, height } = useMemo(() => layoutMindMap(roots, open), [roots, open]);
+
+  // 協会だけの表示から詳しい表示に戻したとき、開いている協会の加盟施設を読み込む
+  useEffect(() => {
+    if (only) return;
+    for (const key of open) if (key.startsWith("assoc:")) void loadMembers(Number(key.split(":")[1]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [only, open]);
 
   async function loadMembers(id: number) {
     if (members[id] && members[id] !== "error") return;
@@ -81,7 +109,7 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
       else next.delete(node.key);
       return next;
     });
-    if (opening && node.kind === "assoc") void loadMembers(Number(node.key.split(":")[1]));
+    if (opening && node.kind === "assoc" && !only) void loadMembers(Number(node.key.split(":")[1]));
   }
 
   /** 地区だけ／下位の協会をもつ協会まで、一気に開く */
@@ -92,7 +120,7 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
       const walk = (n: AssocTreeNode) => {
         if (n.children.length > 0) {
           keys.add(`assoc:${n.item.id}`);
-          void loadMembers(n.item.id);
+          if (!only) void loadMembers(n.item.id);
         }
         n.children.forEach(walk);
       };
@@ -114,7 +142,21 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
         <Button size="sm" onClick={() => expand("none")}>
           すべて閉じる
         </Button>
-        <span>ノードをクリックで開閉します。協会を開くと、下位の協会・会長・役員と、直接加盟している法人・施設が出ます。施設・会長・役員をクリックでカルテへ移動します。</span>
+        <div role="group" aria-label="表示する内容" className="inline-flex rounded-md bg-slate-100 p-0.5 text-sm">
+          {([[false, "すべて表示"], [true, "協会だけ表示"]] as const).map(([v, label]) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={only === v}
+              onClick={() => changeOnly(v)}
+              className={`rounded px-3 py-1 font-medium ${only === v ? "bg-white text-indigo-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+              title={v ? "会長・役員・法人・施設を出さずに、協会だけを表示します" : "協会に加えて、会長・役員・法人・施設も表示します"}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span>{only ? "ノードをクリックで開閉します。協会だけを表示しています（会長・役員・法人・施設は「すべて表示」で出ます）。" : "ノードをクリックで開閉します。協会を開くと、下位の協会・会長・役員と、直接加盟している法人・施設が出ます。施設・会長・役員をクリックでカルテへ移動します。"}</span>
       </div>
       <div className="max-h-[72vh] overflow-auto rounded-lg bg-white ring-1 ring-slate-200">
         <div className="relative" style={{ width, height }}>
@@ -171,10 +213,12 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
 }
 
 /** 協会のノード。子は、下位の協会、協会会長・協会役員、直接加盟している法人（法人未登録の施設は最後にまとめる） */
-function assocNode(n: AssocTreeNode, members: Record<number, MemberState>): MapNode {
+function assocNode(n: AssocTreeNode, members: Record<number, MemberState>, only: boolean): MapNode {
   const a = n.item;
   const m = members[a.id];
-  const children: MapNode[] = n.children.map((c) => assocNode(c, members));
+  const children: MapNode[] = n.children.map((c) => assocNode(c, members, only));
+  const sub = [`${a.facility_count.toLocaleString()}施設`, `${a.organization_count.toLocaleString()}法人`, n.children.length ? `下位${n.children.length}協会` : null].filter(Boolean).join("・");
+  if (only) return { key: `assoc:${a.id}`, label: a.name, sub, kind: "assoc", children };
   for (const [kind, list] of [["会長", a.chairs], ["役員", a.officers]] as const) {
     for (const p of list) {
       children.push({ key: `person:${a.id}:${p.contact_id}`, label: `${kind} ${p.name ?? "氏名不明"}`, sub: p.role ?? p.company_name, kind: "person", companyId: p.company_id, children: [] });
@@ -198,6 +242,5 @@ function assocNode(n: AssocTreeNode, members: Record<number, MemberState>): MapN
       if (m.truncated) children.push({ key: `note:${a.id}:more`, label: "（一部のみ表示）", kind: "note", children: [] });
     }
   }
-  const sub = [`${a.facility_count.toLocaleString()}施設`, `${a.organization_count.toLocaleString()}法人`, n.children.length ? `下位${n.children.length}協会` : null].filter(Boolean).join("・");
   return { key: `assoc:${a.id}`, label: a.name, sub, kind: "assoc", children };
 }
