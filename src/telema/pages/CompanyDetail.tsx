@@ -248,7 +248,7 @@ export function CompanyDetail() {
             title="基本情報"
             withOrganization
             organization={organization}
-            fields={["company_name", "name_kana", "phone", "phone_alt", "postal_code", "address", "website", "industry", "employee_count", "google_rating", "google_review_count", "map_url", "facility_code", "corporate_number", "notes"]}
+            fields={["company_name", "name_kana", "phone", "phone_alt", "postal_code", "address", "website", "instagram_url", "youtube_url", "recruit_url", "facebook_url", "x_url", "tiktok_url", "line_url", "industry", "employee_count", "google_rating", "google_review_count", "map_url", "facility_code", "corporate_number", "notes"]}
             company={company}
             sources={field_sources}
             editable={editable}

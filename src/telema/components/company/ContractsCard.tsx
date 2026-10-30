@@ -6,11 +6,11 @@ import { useMasters } from "../../lib/masters";
 import { useApi } from "../../lib/useApi";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../ui";
 
-type Draft = { product_name: string; contract_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string };
+type Draft = { product_name: string; contract_date: string; delivery_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string };
 
 const URL_RE = /^https?:\/\/\S+$/;
 
-/** 契約情報（商材・契約日・営業担当）。1施設に複数件登録できる */
+/** 契約情報（商材・契約日・納品日・営業担当）。1施設に複数件登録できる */
 export function ContractsCard({
   companyId,
   contracts,
@@ -42,6 +42,7 @@ export function ContractsCard({
         ? {
             product_name: c.product_name,
             contract_date: c.contract_date,
+            delivery_date: c.delivery_date ?? "",
             assigned_user_id: c.assigned_user_id,
             product_url: c.product_url ?? "",
             appointment_user_name: c.appointment_user_name ?? "",
@@ -49,6 +50,7 @@ export function ContractsCard({
         : {
             product_name: "",
             contract_date: todayJst(),
+            delivery_date: "",
             assigned_user_id: me.role === "sales" ? me.id : (companyAssigneeId ?? me.id),
             product_url: "",
             appointment_user_name: "",
@@ -72,6 +74,7 @@ export function ContractsCard({
     const json = {
       product_name,
       contract_date: draft.contract_date,
+      delivery_date: draft.delivery_date || null,
       assigned_user_id: draft.assigned_user_id,
       product_url: product_url || null,
       appointment_user_name: draft.appointment_user_name.trim() || null,
@@ -137,6 +140,10 @@ export function ContractsCard({
           <input type="date" className={inputCls} value={draft.contract_date} onChange={(e) => setDraft({ ...draft, contract_date: e.target.value })} />
         </label>
         <label className="block">
+          <div className="mb-1 text-xs text-slate-500">納品日</div>
+          <input type="date" className={inputCls} value={draft.delivery_date} onChange={(e) => setDraft({ ...draft, delivery_date: e.target.value })} />
+        </label>
+        <label className="col-span-2 block">
           <div className="mb-1 text-xs text-slate-500">営業担当</div>
           <select
             className={inputCls}
@@ -206,7 +213,8 @@ export function ContractsCard({
                 ) : (
                   <span className="font-medium text-slate-900">{c.product_name}</span>
                 )}
-                <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">{fmtDate(c.contract_date)}</span>
+                <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">契約日 {fmtDate(c.contract_date)}</span>
+                <span className={`whitespace-nowrap text-xs tabular-nums ${c.delivery_date ? "text-slate-500" : "text-slate-300"}`}>{c.delivery_date ? `納品日 ${fmtDate(c.delivery_date)}` : "納品日 未設定"}</span>
                 {editable && editingId === null && (
                   <span className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
                     <Button size="sm" variant="ghost" onClick={() => start(c)}>

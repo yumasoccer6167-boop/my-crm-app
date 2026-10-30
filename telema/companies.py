@@ -12,11 +12,15 @@ from .validate import Bool, Email, Enum, Int, IntList, IsoDatetime, Num, Str, pa
 
 TEMPERATURES = ['unrated', 'low', 'mid', 'high']
 
+# Webサイト以外のリンク（Instagram・YouTube・採用サイトなど）。画面でそのままリンクにするので http(s) だけ受け付ける
+LINK_FIELDS = ['instagram_url', 'youtube_url', 'recruit_url', 'facebook_url', 'x_url', 'tiktok_url', 'line_url']
+
 # 会社カルテの項目（src/telema/shared/fields.ts の COMPANY_FIELDS と同じ）。情報源（company_field_sources）を記録する対象
 COMPANY_FIELDS = [
     'company_name', 'name_kana', 'facility_code', 'corporate_number', 'phone', 'phone_alt', 'website', 'postal_code',
     'address', 'industry', 'employee_count', 'google_rating', 'google_review_count', 'map_url', 'notes',
     'interest', 'pain_point', 'decision_timing', 'budget', 'current_service', 'competitor', 'ng_reason', 'next_action', 'current_note',
+    *LINK_FIELDS,
 ]
 
 # ---------- 一覧 ----------
@@ -243,6 +247,7 @@ COMPANY_PATCH = {
     'google_rating': Num(min=0, max=5, nullable=True),
     'google_review_count': Int(min=0, nullable=True),
     'map_url': _text(1000),
+    **{f: Str(max=500, pattern=r'https?://\S+', pattern_msg='リンクは http:// または https:// から始まるURLで入力してください', nullable=True) for f in LINK_FIELDS},
     'notes': _text(2000),
     'interest': _text(500),
     'pain_point': _text(500),

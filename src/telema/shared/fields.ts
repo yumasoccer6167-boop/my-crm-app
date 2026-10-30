@@ -10,6 +10,13 @@ export const COMPANY_FIELDS = {
   phone: { label: "電話番号", group: "basic" },
   phone_alt: { label: "電話番号(その他)", group: "basic" },
   website: { label: "Webサイト", group: "basic" },
+  instagram_url: { label: "Instagram", group: "basic" },
+  youtube_url: { label: "YouTube", group: "basic" },
+  recruit_url: { label: "採用サイト", group: "basic" },
+  facebook_url: { label: "Facebook", group: "basic" },
+  x_url: { label: "X（旧Twitter）", group: "basic" },
+  tiktok_url: { label: "TikTok", group: "basic" },
+  line_url: { label: "LINE公式", group: "basic" },
   postal_code: { label: "郵便番号", group: "basic" },
   address: { label: "住所", group: "basic" },
   industry: { label: "業種・施設類型", group: "basic" },
@@ -28,6 +35,9 @@ export const COMPANY_FIELDS = {
   next_action: { label: "次回アクション", group: "sales" },
   current_note: { label: "メモ", group: "sales" },
 } as const satisfies Record<string, { label: string; group: FieldGroup }>;
+
+/** Webサイト以外のリンクの項目（Instagram・YouTube・採用サイトなど）。未登録のときは、編集するまで画面に出さない */
+export const EXTRA_LINK_FIELDS = ["instagram_url", "youtube_url", "recruit_url", "facebook_url", "x_url", "tiktok_url", "line_url"] as const satisfies readonly (keyof typeof COMPANY_FIELDS)[];
 
 export type CompanyField = keyof typeof COMPANY_FIELDS;
 export const COMPANY_FIELD_KEYS = Object.keys(COMPANY_FIELDS) as CompanyField[];

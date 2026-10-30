@@ -290,3 +290,33 @@ def test_架電の記録の担当者を付け替えられる(client):
     # 訪問の記録も付け替えられる
     visit = client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '訪問'})[1]
     assert client.api(f'/calls/{visit["id"]}', {'user_id': other}, method='PATCH')[1]['user_id'] == other
+
+
+def test_契約に納品日を登録でき_空にでき_契約リストにも出る(client):
+    cid = make_company(client, '納品日テスト園')
+    status, a = client.api(f'/companies/{cid}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-01', 'delivery_date': '2026-09-10'})
+    assert (status, a['delivery_date']) == (201, '2026-09-10')
+    b = client.api(f'/companies/{cid}/contracts', {'product_name': 'SP-MEO', 'contract_date': '2026-08-02'})[1]
+    assert b['delivery_date'] is None                                                                   # 納品日は任意
+    assert client.api(f'/contracts/{b["id"]}', {'delivery_date': '2026-10-01'}, method='PATCH')[1]['delivery_date'] == '2026-10-01'
+    assert client.api(f'/contracts/{a["id"]}', {'delivery_date': ''}, method='PATCH')[0] == 400         # 空文字は日付として不正。外すときは null
+    assert client.api(f'/contracts/{a["id"]}', {'delivery_date': None}, method='PATCH')[1]['delivery_date'] is None
+    assert client.api(f'/companies/{cid}', method='GET')[1]['contracts'][0]['delivery_date'] == '2026-10-01'
+    assert client.api(f'/companies/{cid}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-01', 'delivery_date': '2026/09/10'})[0] == 400
+    items = client.api('/contracts?q=納品日テスト園')[1]['items']
+    assert {i['product_name']: i['delivery_date'] for i in items} == {'SP': None, 'SP-MEO': '2026-10-01'}
+
+
+def test_施設にInstagram_YouTube_採用サイトなどのリンクを登録でき_http以外は拒否される(client):
+    cid = make_company(client, 'リンクテスト園')
+    links = {'instagram_url': 'https://www.instagram.com/test_en/', 'youtube_url': 'https://www.youtube.com/@test', 'recruit_url': 'https://recruit.example.com/',
+             'facebook_url': 'https://facebook.com/test', 'x_url': 'https://x.com/test', 'tiktok_url': 'https://www.tiktok.com/@test', 'line_url': 'https://lin.ee/abc'}
+    status, row = client.api(f'/companies/{cid}', links, method='PATCH')
+    assert status == 200 and all(row[k] == v for k, v in links.items())
+    assert all(company(client, cid)[k] == v for k, v in links.items())
+    # 登録した項目は情報源が「手入力」になる
+    assert {s['field'] for s in client.api(f'/companies/{cid}')[1]['field_sources']} >= set(links)
+    assert client.api(f'/companies/{cid}', {'instagram_url': 'instagram.com/test'}, method='PATCH')[0] == 400
+    assert client.api(f'/companies/{cid}', {'youtube_url': 'javascript:alert(1)'}, method='PATCH')[0] == 400
+    assert client.api(f'/companies/{cid}', {'instagram_url': None}, method='PATCH')[1]['instagram_url'] is None
+    assert company(client, cid)['youtube_url'] == links['youtube_url']

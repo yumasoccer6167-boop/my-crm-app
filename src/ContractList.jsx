@@ -147,14 +147,15 @@ export default function ContractListView({ token, onOpenTelemaCompany }) {
               <th className="px-3 py-2 font-medium">商材</th>
               <th className="px-3 py-2 font-medium">商材リンク</th>
               <th className="px-3 py-2 font-medium">契約日</th>
+              <th className="px-3 py-2 font-medium">納品日</th>
               <th className="px-3 py-2 font-medium">営業担当</th>
               <th className="px-3 py-2 font-medium">アポ担当者名</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {!data && !error && <tr><td colSpan={6} className="py-10 text-center text-slate-400">読み込み中…</td></tr>}
+            {!data && !error && <tr><td colSpan={7} className="py-10 text-center text-slate-400">読み込み中…</td></tr>}
             {data && data.items.length === 0 && (
-              <tr><td colSpan={6} className="py-10 text-center text-slate-400">{filtered ? '条件に合う契約情報がありません。' : 'まだ契約情報がありません。テレマリストのカルテで登録すると、ここに表示されます。'}</td></tr>
+              <tr><td colSpan={7} className="py-10 text-center text-slate-400">{filtered ? '条件に合う契約情報がありません。' : 'まだ契約情報がありません。テレマリストのカルテで登録すると、ここに表示されます。'}</td></tr>
             )}
             {(data?.items || []).map(c => {
               const url = safeUrl(c.product_url);
@@ -175,6 +176,7 @@ export default function ContractListView({ token, onOpenTelemaCompany }) {
                     {url ? <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-700 hover:underline">{host(url)}<ExternalLink className="h-3 w-3" /></a> : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums text-slate-700">{fmtDate(c.contract_date)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 tabular-nums text-slate-700">{c.delivery_date ? fmtDate(c.delivery_date) : <span className="text-slate-300">—</span>}</td>
                   <td className="px-3 py-2 text-slate-700">{c.assigned_user_name || <span className="text-slate-300">—</span>}</td>
                   <td className="px-3 py-2 text-slate-700">{c.appointment_user_name || <span className="text-slate-300">—</span>}</td>
                 </tr>

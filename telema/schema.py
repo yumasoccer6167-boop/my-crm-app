@@ -526,6 +526,17 @@ ALTER TABLE telema_associations ADD COLUMN prefecture TEXT;
     r"""
 ALTER TABLE telema_associations ADD COLUMN is_top_level INTEGER NOT NULL DEFAULT 0;
 """,
+    # 19: 契約の納品日（契約日とは別。暦の日付 YYYY-MM-DD。未納品は空）／施設のWebサイト以外のリンク（Instagram・YouTube・採用サイトなど）
+    r"""
+ALTER TABLE telema_contracts ADD COLUMN delivery_date TEXT;
+ALTER TABLE telema_companies ADD COLUMN instagram_url TEXT;
+ALTER TABLE telema_companies ADD COLUMN youtube_url TEXT;
+ALTER TABLE telema_companies ADD COLUMN recruit_url TEXT;
+ALTER TABLE telema_companies ADD COLUMN facebook_url TEXT;
+ALTER TABLE telema_companies ADD COLUMN x_url TEXT;
+ALTER TABLE telema_companies ADD COLUMN tiktok_url TEXT;
+ALTER TABLE telema_companies ADD COLUMN line_url TEXT;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

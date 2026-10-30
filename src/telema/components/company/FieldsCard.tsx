@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from "react";
 import type { Company, FieldSource } from "../../types";
-import { COMPANY_FIELDS, SOURCE_LABELS, type CompanyField } from "../../shared/fields";
+import { COMPANY_FIELDS, EXTRA_LINK_FIELDS, SOURCE_LABELS, type CompanyField } from "../../shared/fields";
 import { api, unwrap } from "../../lib/api";
 import { Button, Card, ErrorBox, inputCls } from "../ui";
 
 const NUMERIC = new Set<CompanyField>(["employee_count", "google_rating", "google_review_count"]);
+const EXTRA_LINKS = new Set<CompanyField>(EXTRA_LINK_FIELDS);
+const isLink = (f: CompanyField) => f === "website" || EXTRA_LINKS.has(f);
 const MULTILINE = new Set<CompanyField>(["notes", "current_note", "pain_point", "interest", "ng_reason", "next_action"]);
 
 /** カルテの項目群。値の横に情報源（Excel/架電/手入力…）を小さく表示し、その場で編集できる */
@@ -50,7 +52,8 @@ export function FieldsCard({
       const before = company[f] == null ? "" : String(company[f]);
       const v = draft[f]!.trim();
       if (v === before) continue;
-      changed[f] = NUMERIC.has(f) ? (v === "" ? null : Number(v)) : v === "" ? null : v;
+      // Instagram などのリンクは、https:// を付け忘れても受け付ける
+      changed[f] = NUMERIC.has(f) ? (v === "" ? null : Number(v)) : v === "" ? null : EXTRA_LINKS.has(f) && !/^https?:\/\//i.test(v) ? `https://${v}` : v;
     }
     if (withOrganization && (draft.__org ?? "").trim() !== orgName) changed.organization_name = (draft.__org ?? "").trim() || null;
     if (Object.keys(changed).length === 0) return setEditing(false);
@@ -110,6 +113,7 @@ export function FieldsCard({
         {fields.map((f) => {
           const src = srcMap.get(f);
           const value = company[f];
+          if (!editing && EXTRA_LINKS.has(f) && (value == null || value === "")) return null;
           return (
             <div key={f} className="contents">
               <dt className="pt-1 text-xs text-slate-500">{COMPANY_FIELDS[f].label}</dt>
@@ -121,6 +125,7 @@ export function FieldsCard({
                     <input
                       className={inputCls}
                       type={NUMERIC.has(f) ? "number" : "text"}
+                      placeholder={EXTRA_LINKS.has(f) ? "https://…（任意）" : undefined}
                       step={f === "google_rating" ? "0.1" : undefined}
                       value={draft[f]}
                       onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
@@ -129,7 +134,7 @@ export function FieldsCard({
                 ) : (
                   <div className="flex items-baseline gap-2 pt-0.5">
                     <span className={`whitespace-pre-wrap break-words ${value == null || value === "" ? "text-slate-300" : "text-slate-800"}`}>
-                      {value == null || value === "" ? "未取得" : f === "map_url" ? <a href={String(value)} target="_blank" rel="noreferrer" className="text-indigo-700 hover:underline">Googleマップで開く</a> : f === "website" ? <a href={String(value)} target="_blank" rel="noreferrer" className="text-indigo-700 hover:underline">{String(value)}</a> : String(value)}
+                      {value == null || value === "" ? "未取得" : f === "map_url" ? <a href={String(value)} target="_blank" rel="noreferrer" className="text-indigo-700 hover:underline">Googleマップで開く</a> : isLink(f) ? <a href={String(value)} target="_blank" rel="noreferrer" className="text-indigo-700 hover:underline">{String(value)}</a> : String(value)}
                     </span>
                     {src && (
                       <span className="shrink-0 text-[10px] text-slate-400" title={src.source_ref ?? undefined}>

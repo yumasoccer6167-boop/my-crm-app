@@ -143,12 +143,14 @@ export type CallLog = {
   created_at: string;
 };
 
-/** 契約情報（商材・契約日・営業担当）。契約日は暦の日付 YYYY-MM-DD */
+/** 契約情報（商材・契約日・納品日・営業担当）。契約日は暦の日付 YYYY-MM-DD */
 export type Contract = {
   id: number;
   company_id: number;
   product_name: string;
   contract_date: string;
+  /** 納品日（YYYY-MM-DD）。未納品は null */
+  delivery_date: string | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
   product_url: string | null;
