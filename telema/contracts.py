@@ -8,7 +8,7 @@ from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found
 from .normalize import escape_like
 from .routes import bp
-from .validate import Bool, Int, IsoDate, Str, parse, parse_id
+from .validate import Bool, Int, IsoDate, Str, StrList, parse, parse_id
 
 CONTRACT_BODY = {
     'product_name': Str(min=1, max=100),
@@ -18,6 +18,9 @@ CONTRACT_BODY = {
     # 商材の案内ページなどへのリンク。画面でそのままリンクにするので http(s) だけ受け付ける
     'product_url': Str(max=1000, pattern=r'https?://\S+', pattern_msg='リンクは http:// または https:// から始まるURLで入力してください', nullable=True, optional=True),
     'appointment_user_name': Str(max=100, nullable=True, optional=True),
+    # 課題（集客・採用・クチコミ対策など。選択肢は画面側 src/telema/shared/constants.ts の CONTRACT_ISSUES。増やしても保存済みのデータは壊れないよう、ここでは文字列として受ける）
+    'issues': StrList(max_len=20, item_max=50, optional=True),
+    'memo': Str(max=2000, nullable=True, optional=True),
 }
 
 
@@ -40,10 +43,10 @@ def create_contract(id):
     d = db()
     _check_assignee(d, user, b.get('assigned_user_id'))
     new_id = d.value(
-        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, delivery_date, assigned_user_id, product_url, appointment_user_name, created_by)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, delivery_date, assigned_user_id, product_url, appointment_user_name, issues, memo, created_by)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b['product_name'], b['contract_date'], b.get('delivery_date') or None, b.get('assigned_user_id'), b.get('product_url') or None,
-         b.get('appointment_user_name') or None, user['id']),
+         b.get('appointment_user_name') or None, b.get('issues') or [], b.get('memo') or None, user['id']),
     )
     row = d.first(f'{CONTRACT_SELECT} WHERE ct.id = %s', (new_id,))
     audit(d, user['id'], 'create', 'contract', new_id, None, row)
@@ -65,7 +68,7 @@ def update_contract(id):
     if 'assigned_user_id' in b and b['assigned_user_id'] != before['assigned_user_id']:
         _check_assignee(d, user, b['assigned_user_id'])
     values = dict(b)
-    for key in ('product_url', 'appointment_user_name', 'delivery_date'):
+    for key in ('product_url', 'appointment_user_name', 'delivery_date', 'memo'):
         if key in values and not values[key]:
             values[key] = None
     if 'is_active' in values:

@@ -144,6 +144,25 @@ class IntList(Field):
         return v
 
 
+class StrList(Field):
+    """文字列の配列（重複は除く。順番は保つ）"""
+    def __init__(self, max_len=None, item_max=None, **kw):
+        super().__init__(**kw)
+        self.max_len, self.item_max = max_len, item_max
+
+    def check(self, v):
+        if not isinstance(v, list):
+            raise Invalid('配列で入力してください')
+        if self.max_len is not None and len(v) > self.max_len:
+            raise Invalid(f'{self.max_len}件以内で指定してください')
+        out = []
+        for x in v:
+            x = Str(min=1, max=self.item_max).check(x)
+            if x not in out:
+                out.append(x)
+        return out
+
+
 def iso_utc(d: datetime) -> str:
     return d.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.') + f'{d.astimezone(timezone.utc).microsecond // 1000:03d}Z'
 

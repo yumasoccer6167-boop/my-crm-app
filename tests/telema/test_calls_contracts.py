@@ -307,6 +307,34 @@ def test_契約に納品日を登録でき_空にでき_契約リストにも出
     assert {i['product_name']: i['delivery_date'] for i in items} == {'SP': None, 'SP-MEO': '2026-10-01'}
 
 
+def test_契約に課題とメモを登録でき_重複は除かれ_空にでき_契約リストの絞り込みには影響しない(client):
+    cid = make_company(client, '課題テスト園')
+    status, a = client.api(f'/companies/{cid}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-03', 'issues': ['集客', '採用', '集客'], 'memo': '  採用に力を入れたい  '})
+    assert (status, a['issues'], a['memo']) == (201, ['集客', '採用'], '採用に力を入れたい')
+    b = client.api(f'/companies/{cid}/contracts', {'product_name': 'SP-MEO', 'contract_date': '2026-08-04'})[1]
+    assert (b['issues'], b['memo']) == ([], None)                                                       # 課題・メモは任意
+    assert client.api(f'/contracts/{b["id"]}', {'issues': ['クチコミ対策']}, method='PATCH')[1]['issues'] == ['クチコミ対策']
+    patched = client.api(f'/contracts/{a["id"]}', {'issues': [], 'memo': ''}, method='PATCH')[1]
+    assert (patched['issues'], patched['memo']) == ([], None)
+    assert client.api(f'/contracts/{a["id"]}', {'issues': '集客'}, method='PATCH')[0] == 400
+    assert client.api(f'/contracts/{a["id"]}', {'issues': ['']}, method='PATCH')[0] == 400
+    contracts = {c['product_name']: c for c in client.api(f'/companies/{cid}')[1]['contracts']}
+    assert contracts['SP-MEO']['issues'] == ['クチコミ対策'] and contracts['SP']['issues'] == []
+
+
+def test_施設ごとの加盟協会を事例管理の絞り込み用にまとめて返す(client):
+    a = client.sql("INSERT INTO telema_associations (name, sort_order) VALUES ('事例絞込協会A', 901) RETURNING id")[0]['id']
+    b = client.sql("INSERT INTO telema_associations (name, sort_order) VALUES ('事例絞込協会B', 902) RETURNING id")[0]['id']
+    c1, c2, c3 = (make_company(client, f'事例絞込園{i}') for i in (1, 2, 3))
+    for cid, assoc in ((c1, a), (c1, b), (c2, b)):
+        client.sql('INSERT INTO telema_company_associations (company_id, association_id) VALUES (%s, %s)', (cid, assoc))
+    status, body = client.api(f'/companies/associations?ids={c1},{c2},{c3},999999')
+    got = {i['company_id']: [x['name'] for x in i['associations']] for i in body['items']}
+    assert status == 200 and got == {c1: ['事例絞込協会A', '事例絞込協会B'], c2: ['事例絞込協会B'], c3: []}   # 存在しない施設は含めない
+    assert client.api('/companies/associations')[1] == {'items': []}
+    assert client.api('/companies/associations?ids=abc')[0] == 400
+
+
 def test_施設にInstagram_YouTube_採用サイトなどのリンクを登録でき_http以外は拒否される(client):
     cid = make_company(client, 'リンクテスト園')
     links = {'instagram_url': 'https://www.instagram.com/test_en/', 'youtube_url': 'https://www.youtube.com/@test', 'recruit_url': 'https://recruit.example.com/',

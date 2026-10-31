@@ -537,6 +537,11 @@ ALTER TABLE telema_companies ADD COLUMN x_url TEXT;
 ALTER TABLE telema_companies ADD COLUMN tiktok_url TEXT;
 ALTER TABLE telema_companies ADD COLUMN line_url TEXT;
 """,
+    # 20: 契約情報の課題（集客・採用・クチコミ対策など。複数選べる）とメモ
+    r"""
+ALTER TABLE telema_contracts ADD COLUMN issues TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE telema_contracts ADD COLUMN memo TEXT;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

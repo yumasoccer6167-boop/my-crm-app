@@ -2,6 +2,7 @@
 // 「業種・エリア／困りごと／施策／成果」の4点で事例を蓄積し、検索・絞り込み・PDF出力ができる。
 // テレマリストのカルテ（施設）と紐づけると、カルテの情報を事例に反映でき、カルテ側にもその事例が表示される。
 import { useEffect, useMemo, useState } from 'react';
+import SearchableSelect from './SearchableSelect';
 import { Plus, Search, X, Link2, Trash2, Edit, FileText, ExternalLink, Globe, Users, Video, MapPin, Megaphone, Share2 } from 'lucide-react';
 
 // 制作内容の分類（絞り込み用）
@@ -458,6 +459,7 @@ export default function SuccessCasesView({ cases, setCases, currentUser, token, 
   const [industry, setIndustry] = useState('');
   const [tag, setTag] = useState('');
   const [goal, setGoal] = useState('');
+  const [association, setAssociation] = useState(''); // '' = すべて、'none' = 加盟協会なし、それ以外は協会ID
   const [openId, setOpenId] = useState(null);
   const [editing, setEditing] = useState(null); // { initial }
 
@@ -471,16 +473,38 @@ export default function SuccessCasesView({ cases, setCases, currentUser, token, 
   useEffect(() => { if (request && onRequestHandled) onRequestHandled(); }, [request]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sorted = useMemo(() => [...(cases || [])].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))), [cases]);
+
+  // 連携しているカルテの加盟協会（カルテに登録されたもの）。協会での絞り込みに使う
+  const telema = useTelema(token);
+  const [assocByCompany, setAssocByCompany] = useState({}); // カルテID -> [{ id, name }]
+  const companyIds = useMemo(() => [...new Set(sorted.map(c => c.telemaCompanyId).filter(Boolean))].sort((a, b) => a - b), [sorted]);
+  const companyIdsKey = companyIds.join(',');
+  useEffect(() => {
+    if (!companyIdsKey) { setAssocByCompany({}); return undefined; }
+    let alive = true;
+    telema(`/companies/associations?ids=${companyIdsKey}`)
+      .then(d => { if (alive) setAssocByCompany(Object.fromEntries((d.items || []).map(i => [i.company_id, i.associations || []]))); })
+      .catch(() => { if (alive) setAssocByCompany({}); });
+    return () => { alive = false; };
+  }, [companyIdsKey, telema]);
+  const assocOf = (c) => (c.telemaCompanyId && assocByCompany[c.telemaCompanyId]) || [];
+  const associationOptions = useMemo(() => {
+    const m = new Map();
+    for (const c of sorted) for (const a of assocOf(c)) { const e = m.get(a.id) || { ...a, n: 0 }; e.n += 1; m.set(a.id, e); }
+    return [...m.values()];
+  }, [sorted, assocByCompany]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const visible = useMemo(() => {
     const term = q.trim().toLowerCase();
     return sorted.filter(c => {
+      if (association === 'none' ? assocOf(c).length > 0 : association && !assocOf(c).some(a => String(a.id) === association)) return false;
       if (industry && c.industry !== industry) return false;
       if (tag && !tagsOf(c).includes(tag)) return false;
       if (goal && !goalsOf(c).includes(goal)) return false;
       if (!term) return true;
       return [c.name, c.url, c.industry, c.area, c.problem, c.measure, c.action, c.headline, c.period, c.result, c.telemaCompanyName, ...tagsOf(c), ...goalsOf(c)].join(' ').toLowerCase().includes(term);
     });
-  }, [sorted, q, industry, tag, goal]);
+  }, [sorted, q, industry, tag, goal, association, assocByCompany]); // eslint-disable-line react-hooks/exhaustive-deps
   const industries = useMemo(() => [...new Set(sorted.map(c => c.industry).filter(Boolean))], [sorted]);
   const opened = (cases || []).find(c => c.id === openId);
 
@@ -530,6 +554,22 @@ export default function SuccessCasesView({ cases, setCases, currentUser, token, 
         <div className="flex flex-wrap items-center gap-1.5"><span className="mr-1 w-14 text-xs text-slate-500">業種</span>
           <Chip active={!industry} onClick={() => setIndustry('')}>すべて</Chip>
           {industries.map(i => <Chip key={i} active={industry === i} onClick={() => setIndustry(i)} count={count(c => c.industry === i)}>{i}</Chip>)}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5"><span className="mr-1 w-14 text-xs text-slate-500">加盟協会</span>
+          <div className="w-72 max-w-full">
+            <SearchableSelect
+              ariaLabel="加盟協会"
+              value={association}
+              onChange={setAssociation}
+              placeholder="協会名で検索"
+              options={[
+                { value: '', label: 'すべて' },
+                ...associationOptions.map(a => ({ value: String(a.id), label: `${a.name}（${a.n}）` })),
+                { value: 'none', label: `加盟協会なし（${count(c => assocOf(c).length === 0)}）` },
+              ]}
+            />
+          </div>
+          <span className="text-xs text-slate-400">カルテに登録された加盟協会で絞り込みます</span>
         </div>
       </div>
 

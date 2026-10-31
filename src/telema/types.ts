@@ -155,6 +155,9 @@ export type Contract = {
   assigned_user_name: string | null;
   product_url: string | null;
   appointment_user_name: string | null;
+  /** 課題（集客・採用・クチコミ対策など） */
+  issues: string[];
+  memo: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;

@@ -32,3 +32,6 @@ export const SOURCE_PRIORITY: Record<InfoSource, number> = {
 
 export const ROLES = ["admin", "manager", "sales"] as const;
 export type Role = (typeof ROLES)[number];
+
+/** 契約情報の課題（ボタンで選ぶ。複数選べる）。増やすときはここに足す。保存済みの契約に残っている値は、ここに無くなっても画面に出る */
+export const CONTRACT_ISSUES = ["集客", "採用", "クチコミ対策"] as const;

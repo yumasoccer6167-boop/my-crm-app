@@ -1,12 +1,13 @@
 import { useState } from "react";
 import type { Contract } from "../../types";
 import { api, unwrap } from "../../lib/api";
+import { CONTRACT_ISSUES } from "../../shared/constants";
 import { fmtDate, todayJst } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
 import { useApi } from "../../lib/useApi";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../ui";
 
-type Draft = { product_name: string; contract_date: string; delivery_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string };
+type Draft = { product_name: string; contract_date: string; delivery_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string; issues: string[]; memo: string };
 
 const URL_RE = /^https?:\/\/\S+$/;
 
@@ -46,6 +47,8 @@ export function ContractsCard({
             assigned_user_id: c.assigned_user_id,
             product_url: c.product_url ?? "",
             appointment_user_name: c.appointment_user_name ?? "",
+            issues: c.issues ?? [],
+            memo: c.memo ?? "",
           }
         : {
             product_name: "",
@@ -54,6 +57,8 @@ export function ContractsCard({
             assigned_user_id: me.role === "sales" ? me.id : (companyAssigneeId ?? me.id),
             product_url: "",
             appointment_user_name: "",
+            issues: [],
+            memo: "",
           },
     );
   }
@@ -78,6 +83,8 @@ export function ContractsCard({
       assigned_user_id: draft.assigned_user_id,
       product_url: product_url || null,
       appointment_user_name: draft.appointment_user_name.trim() || null,
+      issues: draft.issues,
+      memo: draft.memo.trim() || null,
     };
     setSaving(true);
     setError(null);
@@ -106,6 +113,9 @@ export function ContractsCard({
       alert(e instanceof Error ? e.message : String(e));
     }
   }
+
+  // 選択肢は決まった一覧。ただし、その契約に保存済みの課題が一覧に無くなっていても、外せるよう末尾に出す
+  const issueChoices = [...CONTRACT_ISSUES, ...(draft?.issues ?? []).filter((x) => !(CONTRACT_ISSUES as readonly string[]).includes(x))];
 
   const form = draft && (
     <div className="space-y-2 rounded-md bg-slate-50 p-3">
@@ -173,6 +183,29 @@ export function ContractsCard({
             ))}
           </datalist>
         </label>
+        <div className="col-span-2">
+          <div className="mb-1 text-xs text-slate-500">課題（複数選べます）</div>
+          <div className="flex flex-wrap gap-1.5">
+            {issueChoices.map((name) => {
+              const on = draft.issues.includes(name);
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setDraft({ ...draft, issues: on ? draft.issues.filter((x) => x !== name) : [...draft.issues, name] })}
+                  className={`rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset transition-colors ${on ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <label className="col-span-2 block">
+          <div className="mb-1 text-xs text-slate-500">メモ</div>
+          <textarea className={inputCls} rows={3} maxLength={2000} placeholder="契約についてのメモ（任意）" value={draft.memo} onChange={(e) => setDraft({ ...draft, memo: e.target.value })} />
+        </label>
       </div>
       {error && <ErrorBox message={error} />}
       <div className="flex justify-end gap-1">
@@ -230,6 +263,17 @@ export function ContractsCard({
                 営業担当：{c.assigned_user_name ?? "未設定"}
                 {c.appointment_user_name && <span className="ml-2">アポ担当：{c.appointment_user_name}</span>}
               </div>
+              {(c.issues ?? []).length > 0 && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className="text-xs text-slate-500">課題：</span>
+                  {c.issues.map((name) => (
+                    <span key={name} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200">
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {c.memo && <p className="mt-1 whitespace-pre-wrap rounded bg-slate-50 px-2 py-1 text-xs text-slate-600">{c.memo}</p>}
             </div>
           ),
         )}

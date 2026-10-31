@@ -3,7 +3,7 @@ import json
 
 from flask import jsonify, request
 
-from .common import ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_CHAIR_EXISTS, ASSOCIATION_OFFICER_EXISTS, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, LATEST_VISIT_PURPOSE_ID, TAG_KINDS, VISIT_STATUS_COLUMN, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
+from .common import ASSOCIATION, ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_CHAIR_EXISTS, ASSOCIATION_OFFICER_EXISTS, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, LATEST_VISIT_PURPOSE_ID, TAG_KINDS, VISIT_STATUS_COLUMN, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
@@ -225,6 +225,24 @@ def company_facets():
               AND (%s::text IS NULL OR c.prefecture = %s)
             GROUP BY c.city ORDER BY n DESC LIMIT 200''', [*vis_params, prefecture, prefecture])
     return jsonify({'industries': industries, 'prefectures': prefectures, 'cities': cities})
+
+
+@bp.get('/companies/associations')
+def companies_associations():
+    """施設ごとの加盟協会（事例管理の協会での絞り込み用）。ids はカンマ区切りの施設ID（500件まで）。見えない施設は結果に含めない"""
+    ids = []
+    for x in (request.args.get('ids') or '').split(',')[:500]:
+        if x.strip():
+            ids.append(parse_id(x.strip()))
+    if not ids:
+        return jsonify({'items': []})
+    vis_sql, vis_params = company_visibility(current_user())
+    rows = db().all(
+        f'''SELECT c.id AS company_id,
+                  COALESCE((SELECT json_agg(json_build_object('id', m.id, 'name', m.name) ORDER BY m.sort_order, m.id)
+                              FROM {ASSOCIATION.link} l JOIN {ASSOCIATION.master} m ON m.id = l.{ASSOCIATION.fk} WHERE l.company_id = c.id), '[]'::json) AS associations
+             FROM telema_companies c WHERE c.id = ANY(%s) AND c.is_active = 1 AND {vis_sql}''', [ids, *vis_params])
+    return jsonify({'items': rows})
 
 
 # ---------- 編集 ----------
