@@ -343,9 +343,23 @@ def get_company(id):
                WHERE a.action = 'list_assign' AND a.entity_type = 'company' AND a.entity_id = %s ORDER BY a.created_at DESC, a.id DESC LIMIT 50''', (id,)),
         'pending_suggestions': d.value("SELECT COUNT(*) FROM telema_ai_suggestions WHERE company_id = %s AND status = 'pending'", (id,)),
         'summary_suggestion': _summary_draft(d, id),
-        'contracts': d.all(f'{CONTRACT_SELECT} WHERE ct.company_id = %s AND ct.is_active = 1 ORDER BY ct.contract_date DESC, ct.id DESC', (id,)),
+        'contracts': _shared_contracts(d, current_user(), id, org_id),
         **{kind.field: d.all(kind.of_company, (id,)) for kind in TAG_KINDS},
     })
+
+
+def _shared_contracts(d, user, company_id, org_id):
+    """契約情報。同じ法人の施設（姉妹園）の契約も共有して返す（この施設の契約には company_id が自分、姉妹園の契約には company_name が付く）。
+    can_edit は、その契約の施設を編集できるか（一般は担当の施設だけ）"""
+    rows = d.all(
+        f"""SELECT ct.*, u.display_name AS assigned_user_name, c2.company_name, c2.assigned_user_id AS company_assigned_user_id
+              FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id
+              JOIN telema_companies c2 ON c2.id = ct.company_id AND c2.is_active = 1
+             WHERE ct.is_active = 1 AND (ct.company_id = %s OR (%s::int IS NOT NULL AND c2.organization_id = %s))
+             ORDER BY ct.contract_date DESC, ct.id DESC""", (company_id, org_id, org_id))
+    for r in rows:
+        r['can_edit'] = can_edit_company(user, r.pop('company_assigned_user_id'))
+    return rows
 
 
 def _summary_draft(d, company_id):

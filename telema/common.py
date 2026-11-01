@@ -10,7 +10,11 @@ JST = timezone(timedelta(hours=9))
 
 # 契約情報の取得（営業担当の表示名つき）。会社詳細と契約APIで共有する
 # 施設一覧に出す契約件数（有効な契約情報）。ユーザーなのに契約情報が未登録の施設を一覧で見分けるのに使う
-CONTRACT_COUNT_COLUMN = '(SELECT COUNT(*) FROM telema_contracts k WHERE k.company_id = c.id AND k.is_active = 1) AS contract_count'
+# 同じ法人の施設（姉妹園）の契約情報は共有される（カルテの契約情報と同じ範囲を数える）
+CONTRACT_COUNT_COLUMN = (
+    '(SELECT COUNT(*) FROM telema_contracts k WHERE k.is_active = 1 AND (k.company_id = c.id OR (c.organization_id IS NOT NULL AND k.company_id IN '
+    '(SELECT s.id FROM telema_companies s WHERE s.organization_id = c.organization_id AND s.is_active = 1)))) AS contract_count'
+)
 
 # 施設一覧に出す「協会会長がいる施設」の印（施設または法人の有効な担当者に、協会会長がいる）。一覧で王冠マークを出すのに使う
 ASSOCIATION_CHAIR_EXISTS = (

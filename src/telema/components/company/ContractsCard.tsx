@@ -231,6 +231,7 @@ export function ContractsCard({
       }
     >
       <div className="space-y-3">
+        {contracts.some((c) => c.company_id !== companyId) && <p className="text-xs text-slate-400">同じ法人の施設の契約情報も、共有して表示しています（施設名の付いたもの）。</p>}
         {editingId === "new" && form}
         {contracts.length === 0 && editingId !== "new" && <Empty>契約情報はまだありません</Empty>}
         {contracts.map((c) =>
@@ -246,9 +247,14 @@ export function ContractsCard({
                 ) : (
                   <span className="font-medium text-slate-900">{c.product_name}</span>
                 )}
+                {c.company_id !== companyId && c.company_name && (
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600 ring-1 ring-inset ring-slate-200" title="同じ法人の施設の契約情報（共有）">
+                    {c.company_name}
+                  </span>
+                )}
                 <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">契約日 {fmtDate(c.contract_date)}</span>
                 <span className={`whitespace-nowrap text-xs tabular-nums ${c.delivery_date ? "text-slate-500" : "text-slate-300"}`}>{c.delivery_date ? `納品日 ${fmtDate(c.delivery_date)}` : "納品日 未設定"}</span>
-                {editable && editingId === null && (
+                {(c.can_edit ?? editable) && editingId === null && (
                   <span className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
                     <Button size="sm" variant="ghost" onClick={() => start(c)}>
                       編集

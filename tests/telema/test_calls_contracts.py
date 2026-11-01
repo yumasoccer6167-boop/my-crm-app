@@ -322,6 +322,30 @@ def test_契約に課題とメモを登録でき_重複は除かれ_空にでき
     assert contracts['SP-MEO']['issues'] == ['クチコミ対策'] and contracts['SP']['issues'] == []
 
 
+def test_同じ法人の施設の契約情報は共有され_別の法人の施設には出ない(client):
+    org = client.sql("INSERT INTO telema_organizations (name, name_normalized) VALUES ('共有契約法人', '共有契約法人') RETURNING id")[0]['id']
+    other_org = client.sql("INSERT INTO telema_organizations (name, name_normalized) VALUES ('別の共有契約法人', '別の共有契約法人') RETURNING id")[0]['id']
+    ids = [client.sql('INSERT INTO telema_companies (company_name, company_name_normalized, organization_id) VALUES (%s, %s, %s) RETURNING id', (n, n, o))[0]['id']
+           for n, o in (('共有契約A園', org), ('共有契約B園', org), ('共有契約C園', None), ('共有契約D園', other_org))]
+    a, b, c, dd = ids
+    ca = client.api(f'/companies/{a}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-01'})[1]
+    cb = client.api(f'/companies/{b}/contracts', {'product_name': 'SP-MEO', 'contract_date': '2026-08-02'})[1]
+    client.api(f'/companies/{c}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-03'})
+    client.api(f'/companies/{dd}/contracts', {'product_name': 'SP', 'contract_date': '2026-08-04'})
+
+    def shown(cid):
+        return [(x['id'], x['company_id'], x['company_name'], x['can_edit']) for x in client.api(f'/companies/{cid}')[1]['contracts']]
+    assert shown(a) == [(cb['id'], b, '共有契約B園', True), (ca['id'], a, '共有契約A園', True)]       # 姉妹園の契約も、契約日の新しい順に出る
+    assert [x[0] for x in shown(b)] == [cb['id'], ca['id']]
+    assert len(shown(c)) == 1 and len(shown(dd)) == 1                                                   # 法人に属さない施設・別の法人には共有されない
+    counts = {i['company_name']: i['contract_count'] for i in client.api('/companies?q=共有契約&per_page=50')[1]['items']}
+    assert counts == {'共有契約A園': 2, '共有契約B園': 2, '共有契約C園': 1, '共有契約D園': 1}              # 一覧の契約件数も共有分を数える
+    # 契約リストは1契約1行のまま（共有しても重複しない）
+    assert len([i for i in client.api('/contracts?q=共有契約')[1]['items']]) == 4
+    # 姉妹園の契約も、カルテから直せる
+    assert client.api(f'/contracts/{cb["id"]}', {'memo': '共有メモ'}, method='PATCH')[1]['memo'] == '共有メモ'
+
+
 def test_施設ごとの加盟協会を事例管理の絞り込み用にまとめて返す(client):
     a = client.sql("INSERT INTO telema_associations (name, sort_order) VALUES ('事例絞込協会A', 901) RETURNING id")[0]['id']
     b = client.sql("INSERT INTO telema_associations (name, sort_order) VALUES ('事例絞込協会B', 902) RETURNING id")[0]['id']

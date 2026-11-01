@@ -158,6 +158,10 @@ export type Contract = {
   /** 課題（集客・採用・クチコミ対策など） */
   issues: string[];
   memo: string | null;
+  /** カルテの契約情報だけに付く。company_id が開いている施設と違うものは、同じ法人の施設（姉妹園）の契約 */
+  company_name?: string;
+  /** その契約の施設を編集できるか（カルテの契約情報だけに付く） */
+  can_edit?: boolean;
   is_active: number;
   created_at: string;
   updated_at: string;
