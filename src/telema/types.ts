@@ -431,3 +431,43 @@ export type AIUsageData = {
 };
 
 export type AssigneeMappingItem = { name: string; total: number; unassigned: number };
+
+/** 営業結果管理・初回訪問結果管理の1件（訪問記録）。later_* は初回訪問結果管理で、その後に同じ施設で営業の訪問があったか／受注したか */
+export type SalesResultItem = {
+  id: number;
+  company_id: number;
+  company_name: string;
+  called_at: string;
+  user_id: number | null;
+  user_name: string | null;
+  visit_method: VisitMethod | null;
+  raw_note: string;
+  sales_product: string | null;
+  sales_monthly_fee: number | null;
+  sales_term: string | null;
+  sales_result: SalesResult | null;
+  sales_followup_at: string | null;
+  sales_amount: number | null;
+  sales_gross_profit: number | null;
+  sales_units: number | null;
+  later_sales_visits: number;
+  later_won: boolean;
+};
+export type SalesResultsData = { items: SalesResultItem[]; truncated: boolean; date_from: string; date_to: string };
+
+/** 営業成績表の1行（営業担当ごと） */
+export type SalesScoreRow = {
+  user_id: number | null;
+  user_name: string;
+  first_visits: number;
+  user_visits: number;
+  sales_visits: number;
+  won: number;
+  waiting: number;
+  ng: number;
+  resales: number;
+  amount: number;
+  gross_profit: number;
+  units: number;
+};
+export type SalesScorecardData = { items: SalesScoreRow[]; date_from: string; date_to: string };

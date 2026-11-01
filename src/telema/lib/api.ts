@@ -22,6 +22,8 @@ import type {
   DuplicateCandidate,
   DashboardData,
   MonthlyCallsData,
+  SalesResultsData,
+  SalesScorecardData,
   Facet,
   AssociationGroup,
   AssociationPeers,
@@ -59,6 +61,8 @@ type Api = {
   "list-sources": { $get: Call<ListSource[]> };
   "visit-targets": { $get: Call<VisitTarget[]> };
   dashboard: { $get: Call<DashboardData>; "calls-monthly": { $get: Call<MonthlyCallsData> } };
+  "sales-results": { $get: Call<SalesResultsData> };
+  "sales-scorecard": { $get: Call<SalesScorecardData> };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
   "association-structure": { bulk: { $post: Call<{ updated: number }> } };
   "association-overview": { $get: Call<AssociationOverview>; ":id": { members: { $get: Call<AssociationMembers> } } };

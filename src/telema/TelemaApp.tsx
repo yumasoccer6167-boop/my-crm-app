@@ -10,6 +10,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
 import { Associations } from "./pages/Associations";
 import { Network } from "./pages/Network";
+import { SalesResults } from "./pages/SalesResults";
 import { Settings } from "./pages/Settings";
 import { VisitRoute } from "./pages/VisitRoute";
 
@@ -23,6 +24,7 @@ const router = createMemoryRouter([
       { path: "/companies/:id", element: <CompanyDetail /> },
       { path: "/network", element: <Network /> },
       { path: "/associations", element: <Associations /> },
+      { path: "/results", element: <SalesResults /> },
       { path: "/visits", element: <VisitRoute /> },
       { path: "/import", element: <ImportPage /> },
       { path: "/settings", element: <Settings /> },
