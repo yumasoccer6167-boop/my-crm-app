@@ -1,5 +1,5 @@
 // 記録の種類（架電／訪問）と、訪問の方法（訪問／Zoom）の表示名・絞り込み。
-import type { CallLog, SalesResult, VisitMethod } from "../types";
+import type { CallLog, FirstResult, SalesResult, VisitMethod } from "../types";
 import { fmtDateTime } from "./format";
 
 export const VISIT_METHODS: { value: VisitMethod; label: string }[] = [
@@ -16,6 +16,18 @@ export const SALES_TERMS: { value: string; label: string }[] = [
   ...[12, 24, 36, 48, 60, 72, 84].map((n) => ({ value: String(n), label: `${n}か月` })),
 ];
 export const salesTermLabel = (t: string | null) => SALES_TERMS.find((x) => x.value === t)?.label ?? "";
+
+/** 訪問の内容が「初回訪問」のときだけ、結果（営業時間設定・見込みなし）を残せる（名前で判定する） */
+export const FIRST_PURPOSE_NAME = "初回訪問";
+export const FIRST_RESULTS: { value: FirstResult; label: string; on: string }[] = [
+  { value: "scheduled", label: "営業時間設定", on: "bg-sky-600 text-white ring-sky-600" },
+  { value: "no_prospect", label: "見込みなし", on: "bg-slate-600 text-white ring-slate-600" },
+];
+export const firstResultLabel = (r: FirstResult | null) => FIRST_RESULTS.find((x) => x.value === r)?.label ?? "";
+
+/** 初回訪問の結果を1行の文にする（営業時間設定のときは営業の日時つき）。結果が無ければ空 */
+export const firstSummary = (c: Pick<CallLog, "first_result" | "first_followup_at">): string =>
+  c.first_result ? `${firstResultLabel(c.first_result)}${c.first_followup_at ? `（営業 ${fmtDateTime(c.first_followup_at)}）` : ""}` : "";
 
 /** 営業の結果（即決受注・返事待ち・NG・再営業）。on は選んだときのボタンの色 */
 export const SALES_RESULTS: { value: SalesResult; label: string; on: string }[] = [

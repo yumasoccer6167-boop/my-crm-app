@@ -1,6 +1,6 @@
 """営業結果管理・初回訪問結果管理・営業成績表。訪問記録（訪問の内容が「営業」「初回訪問」「ユーザー訪問」）を、登録すると自動でそのまま一覧・集計に反映する（別に登録しない）。
  - 営業結果管理：訪問の内容が「営業」の記録（商材・結果・次回日時・受注金額・粗利・台数）
- - 初回訪問結果管理：訪問の内容が「初回訪問」の記録。その後に同じ施設で営業の訪問があったか・受注したかも添える
+ - 初回訪問結果管理：訪問の内容が「初回訪問」の記録（結果：営業時間設定・見込みなし）。その後に同じ施設で営業の訪問があったか・受注したかも添える
  - 営業成績表：営業担当ごとの、初回訪問・ユーザー訪問・営業の件数と、営業の結果の内訳、受注の金額・粗利・台数
  一般（sales）は自分の記録だけ、マネージャー・管理者は全員分（担当者で絞り込める）"""
 from datetime import datetime, timedelta, timezone
@@ -13,6 +13,7 @@ from .routes import bp
 
 KINDS = {'sales': '営業', 'first': '初回訪問'}
 RESULTS = ('won', 'waiting', 'ng', 'resales', 'none')
+FIRST_RESULTS = ('scheduled', 'no_prospect', 'none')
 LIST_LIMIT = 500
 
 
@@ -54,20 +55,21 @@ def _user_filter(user):
 
 @bp.get('/sales-results')
 def sales_results():
-    """kind=sales（営業結果管理）または first（初回訪問結果管理）の記録一覧。新しい順。result で結果を絞り込める（営業のみ。none は結果なし）"""
+    """kind=sales（営業結果管理）または first（初回訪問結果管理）の記録一覧。新しい順。result で結果を絞り込める（none は結果なし）"""
     user = current_user()
     kind = request.args.get('kind') or 'sales'
     if kind not in KINDS:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（kind: sales / first のどちらかを指定してください）')
     result = request.args.get('result')
-    if result and result not in RESULTS:
+    if result and result not in (RESULTS if kind == 'sales' else FIRST_RESULTS):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（result の値が正しくありません）')
     date_from, date_to, start, end = _range()
     user_sql, user_params = _user_filter(user)
     where = ["cl.is_active = 1", "cl.record_type = 'visit'", 'vp.name = %s', 'cl.called_at::timestamptz >= %s', 'cl.called_at::timestamptz < %s', 'c.is_active = 1', user_sql]
     params = [KINDS[kind], start, end, *user_params]
-    if kind == 'sales' and result:
-        where.append('cl.sales_result IS NULL' if result == 'none' else 'cl.sales_result = %s')
+    if result:
+        col = 'cl.sales_result' if kind == 'sales' else 'cl.first_result'
+        where.append(f'{col} IS NULL' if result == 'none' else f'{col} = %s')
         if result != 'none':
             params.append(result)
     clause = ' AND '.join(where)
@@ -75,7 +77,7 @@ def sales_results():
     rows = d.all(
         f'''SELECT cl.id, cl.company_id, c.company_name, cl.called_at, cl.user_id, u.display_name AS user_name, cl.visit_method, cl.raw_note,
                    cl.sales_product, cl.sales_monthly_fee, cl.sales_term, cl.sales_result, cl.sales_followup_at,
-                   cl.sales_amount, cl.sales_gross_profit, cl.sales_units,
+                   cl.sales_amount, cl.sales_gross_profit, cl.sales_units, cl.first_result, cl.first_followup_at,
                    (SELECT COUNT(*) FROM telema_call_logs n JOIN telema_visit_purposes nv ON nv.id = n.visit_purpose_id AND nv.name = '営業'
                      WHERE n.company_id = cl.company_id AND n.is_active = 1 AND n.record_type = 'visit' AND n.called_at > cl.called_at) AS later_sales_visits,
                    EXISTS (SELECT 1 FROM telema_call_logs n JOIN telema_visit_purposes nv ON nv.id = n.visit_purpose_id AND nv.name = '営業'
@@ -102,6 +104,8 @@ def sales_scorecard():
                    COUNT(*) FILTER (WHERE vp.name = '初回訪問')::int AS first_visits,
                    COUNT(*) FILTER (WHERE vp.name = 'ユーザー訪問')::int AS user_visits,
                    COUNT(*) FILTER (WHERE vp.name = '営業')::int AS sales_visits,
+                   COUNT(*) FILTER (WHERE vp.name = '初回訪問' AND cl.first_result = 'scheduled')::int AS first_scheduled,
+                   COUNT(*) FILTER (WHERE vp.name = '初回訪問' AND cl.first_result = 'no_prospect')::int AS first_no_prospect,
                    COUNT(*) FILTER (WHERE vp.name = '営業' AND cl.sales_result = 'won')::int AS won,
                    COUNT(*) FILTER (WHERE vp.name = '営業' AND cl.sales_result = 'waiting')::int AS waiting,
                    COUNT(*) FILTER (WHERE vp.name = '営業' AND cl.sales_result = 'ng')::int AS ng,

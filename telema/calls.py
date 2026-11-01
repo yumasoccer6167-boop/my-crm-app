@@ -17,6 +17,10 @@ SALES_RESULTS = ['won', 'waiting', 'ng', 'resales']
 _SALES_FIELDS = {'sales_product': '商材', 'sales_monthly_fee': '月額', 'sales_term': '期間', 'sales_result': '結果', 'sales_followup_at': '次回日時',
                  'sales_amount': '受注金額', 'sales_gross_profit': '粗利', 'sales_units': '台数'}
 _FOLLOWUP_RESULTS = ('waiting', 'resales')
+# 初回訪問の結果。営業時間設定（scheduled：営業の日時を決めた）・見込みなし（no_prospect）。訪問の内容が「初回訪問」の訪問記録だけ。営業時間設定は営業の日時を付けられる
+FIRST_PURPOSE_NAME = '初回訪問'
+FIRST_RESULTS = ['scheduled', 'no_prospect']
+_FIRST_FIELDS = {'first_result': '結果', 'first_followup_at': '営業の日時'}
 _WON_FIELDS = {'sales_amount': '受注金額', 'sales_gross_profit': '粗利', 'sales_units': '台数'}
 
 
@@ -43,6 +47,9 @@ CALL_BODY = {
     'sales_amount': Int(min=0, nullable=True, optional=True),
     'sales_gross_profit': Int(min=0, nullable=True, optional=True),
     'sales_units': Int(min=0, nullable=True, optional=True),
+    # 初回訪問の結果（営業時間設定・見込みなし）と、営業時間設定のときの営業の日時
+    'first_result': Enum(FIRST_RESULTS, nullable=True, optional=True),
+    'first_followup_at': IsoDatetime(nullable=True, optional=True),
     # 記録の種類。省略は架電。訪問（visit）のときは方法（visit＝訪問／zoom）が必須
     'record_type': Enum(['call', 'visit'], default='call'),
     'visit_method': Enum(['visit', 'zoom'], nullable=True, optional=True),
@@ -97,6 +104,16 @@ def _check_sales_result(get):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent)}は、結果が「即決受注」のときだけ設定できます）')
     if result == 'won' and not get('sales_product'):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（即決受注にするときは、商材を選んでください）')
+
+
+def _is_first_purpose(d, purpose_id):
+    """訪問の内容が「初回訪問」か"""
+    return purpose_id is not None and d.value('SELECT name FROM telema_visit_purposes WHERE id = %s', (purpose_id,)) == FIRST_PURPOSE_NAME
+
+
+def _check_first_result(get):
+    if get('first_followup_at') is not None and get('first_result') != 'scheduled':
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（営業の日時は、結果が「営業時間設定」のときだけ設定できます）')
 
 
 def _sync_won_contract(d, user, call_id):
@@ -166,18 +183,23 @@ def create_call(id):
     if sent_sales and not (is_visit and _is_sales_purpose(d, b.get('visit_purpose_id'))):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent_sales)}は、訪問の内容が「営業」の訪問記録だけに付けられます）')
     _check_sales_result(b.get)
+    sent_first = [label for k, label in _FIRST_FIELDS.items() if b.get(k) is not None]
+    if sent_first and not (is_visit and _is_first_purpose(d, b.get('visit_purpose_id'))):
+        raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent_first)}は、訪問の内容が「初回訪問」の訪問記録だけに付けられます）')
+    _check_first_result(b.get)
     called_at = b.get('called_at') or now_iso()
     call_id = d.value(
         '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id,
                                           record_type, visit_method, visit_at, precheck_at, visit_purpose_id,
                                           sales_product, sales_monthly_fee, sales_term,
-                                          sales_result, sales_followup_at, sales_amount, sales_gross_profit, sales_units)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                                          sales_result, sales_followup_at, sales_amount, sales_gross_profit, sales_units, first_result, first_followup_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b.get('contact_id'), user['id'], called_at, None if is_visit else (b.get('phone_number') or company['phone']), b.get('result_status_id'),
          b['raw_note'], 'pending' if b['raw_note'].strip() and not is_visit else 'skipped', b.get('section_id'),
          b['record_type'], b.get('visit_method'), b.get('visit_at'), b.get('precheck_at'), b.get('visit_purpose_id'),
          b.get('sales_product'), b.get('sales_monthly_fee'), b.get('sales_term'),
-         b.get('sales_result'), b.get('sales_followup_at'), b.get('sales_amount'), b.get('sales_gross_profit'), b.get('sales_units')),
+         b.get('sales_result'), b.get('sales_followup_at'), b.get('sales_amount'), b.get('sales_gross_profit'), b.get('sales_units'),
+         b.get('first_result'), b.get('first_followup_at')),
     )
     # 履歴を先に確定させる（この後の会社更新で失敗しても架電メモは残す）
     d.commit()
@@ -224,6 +246,8 @@ CALL_PATCH = {
     'sales_amount': Int(min=0, nullable=True),
     'sales_gross_profit': Int(min=0, nullable=True),
     'sales_units': Int(min=0, nullable=True),
+    'first_result': Enum(FIRST_RESULTS, nullable=True),
+    'first_followup_at': IsoDatetime(nullable=True),
     'visit_at': IsoDatetime(nullable=True),
     'precheck_at': IsoDatetime(nullable=True),
     'user_id': Int(min=1),     # この記録の担当者（誰の架電・訪問として数えるか）。一般以上は誰でも付け替えられる
@@ -326,6 +350,15 @@ def update_call(id):
                 if (k == 'sales_followup_at' and new_result not in _FOLLOWUP_RESULTS) or (k in _WON_FIELDS and new_result != 'won'):
                     b[k] = None
         _check_sales_result(lambda k: b[k] if k in b else call[k])
+    # 初回訪問の結果・営業の日時は、訪問の内容が「初回訪問」の訪問記録だけ。内容を直したら外す。結果を営業時間設定以外に直したら、営業の日時も外す
+    if not (call['record_type'] == 'visit' and _is_first_purpose(d, final_purpose)):
+        if any(b.get(k) is not None for k in _FIRST_FIELDS):
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（結果・営業の日時は、訪問の内容が「初回訪問」の訪問記録だけに付けられます）')
+        b.update({k: None for k in _FIRST_FIELDS if call[k] is not None})
+    else:
+        if 'first_result' in b and b['first_result'] != 'scheduled' and 'first_followup_at' not in b and call['first_followup_at'] is not None:
+            b['first_followup_at'] = None
+        _check_first_result(lambda k: b[k] if k in b else call[k])
     changes = {k: v for k, v in b.items() if call[k] != v}
     # 訪問する日時・事前確認日時を直した（または外れた）ときは、「対応済み」も外す（新しい予定として、また表示される）
     for k, done in (('visit_at', 'visit_done_at'), ('precheck_at', 'precheck_done_at')):

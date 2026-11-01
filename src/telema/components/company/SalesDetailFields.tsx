@@ -1,12 +1,12 @@
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, toLocalInput } from "../../lib/format";
-import { SALES_RESULTS, SALES_TERMS } from "../../lib/record-kind";
-import type { CallLog, SalesResult } from "../../types";
+import { FIRST_RESULTS, SALES_RESULTS, SALES_TERMS } from "../../lib/record-kind";
+import type { CallLog, FirstResult, SalesResult } from "../../types";
 import { useApi } from "../../lib/useApi";
 import { inputCls } from "../ui";
 
-export type SalesDetail = { product: string; fee: string; term: string; result: SalesResult | ""; followupAt: string; amount: string; grossProfit: string; units: string };
-export const emptySales: SalesDetail = { product: "", fee: "", term: "", result: "", followupAt: "", amount: "", grossProfit: "", units: "" };
+export type SalesDetail = { product: string; fee: string; term: string; result: SalesResult | ""; followupAt: string; amount: string; grossProfit: string; units: string; firstResult: FirstResult | ""; firstAt: string };
+export const emptySales: SalesDetail = { product: "", fee: "", term: "", result: "", followupAt: "", amount: "", grossProfit: "", units: "", firstResult: "", firstAt: "" };
 
 const numStr = (n: number | null) => (n == null ? "" : String(n));
 
@@ -21,6 +21,8 @@ export function salesFromCall(c: CallLog): SalesDetail {
     amount: numStr(c.sales_amount),
     grossProfit: numStr(c.sales_gross_profit),
     units: numStr(c.sales_units),
+    firstResult: c.first_result ?? "",
+    firstAt: toLocalInput(c.first_followup_at),
   };
 }
 
@@ -115,4 +117,42 @@ export function salesPayload(v: SalesDetail) {
     sales_gross_profit: won ? num(v.grossProfit) : null,
     sales_units: won ? num(v.units) : null,
   };
+}
+
+/** 訪問の内容が「初回訪問」のときの、結果（営業時間設定・見込みなし）。営業時間設定のときは、営業の日時を決める */
+export function FirstVisitFields({ value, onChange }: { value: SalesDetail; onChange: (v: SalesDetail) => void }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="mb-1 text-xs text-slate-500">結果（もう一度押すと外れます）</div>
+        <div className="flex flex-wrap gap-1.5">
+          {FIRST_RESULTS.map((r) => {
+            const on = value.firstResult === r.value;
+            return (
+              <button
+                key={r.value}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onChange({ ...value, firstResult: on ? "" : r.value })}
+                className={`rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset transition-colors ${on ? r.on : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {value.firstResult === "scheduled" && (
+        <div className="sm:max-w-xs">
+          <div className="mb-1 text-xs text-slate-500">営業の日時</div>
+          <input type="datetime-local" value={value.firstAt} onChange={(e) => onChange({ ...value, firstAt: e.target.value })} className={inputCls} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 初回訪問の結果の保存用の値。営業の日時は営業時間設定のときだけ */
+export function firstPayload(v: SalesDetail) {
+  return { first_result: v.firstResult || null, first_followup_at: v.firstResult === "scheduled" ? fromLocalInput(v.firstAt) : null };
 }

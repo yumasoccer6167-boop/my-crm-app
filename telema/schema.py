@@ -555,6 +555,11 @@ ALTER TABLE telema_contracts ADD COLUMN gross_profit INTEGER;
 ALTER TABLE telema_contracts ADD COLUMN units INTEGER;
 ALTER TABLE telema_contracts ADD COLUMN source_call_id INTEGER REFERENCES telema_call_logs(id);
 """,
+    # 22: 初回訪問の訪問記録の結果（営業時間設定・見込みなし）と、営業時間設定のときの営業の日時
+    r"""
+ALTER TABLE telema_call_logs ADD COLUMN first_result TEXT CHECK (first_result IN ('scheduled', 'no_prospect'));
+ALTER TABLE telema_call_logs ADD COLUMN first_followup_at TEXT;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

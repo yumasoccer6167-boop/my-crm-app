@@ -100,6 +100,8 @@ export type FieldSource = { field: string; source: string; source_ref: string | 
 export type RecordType = "call" | "visit";
 /** 営業の訪問記録の結果。即決受注・返事待ち・NG・再営業 */
 export type SalesResult = "won" | "waiting" | "ng" | "resales";
+/** 初回訪問の訪問記録の結果。営業時間設定（営業の日時を決めた）・見込みなし */
+export type FirstResult = "scheduled" | "no_prospect";
 export type VisitMethod = "visit" | "zoom";
 
 /** 架電または訪問の記録（タイムラインの1件）。訪問は結果・次回架電・AI整理を持たない */
@@ -120,6 +122,9 @@ export type CallLog = {
   sales_amount: number | null;
   sales_gross_profit: number | null;
   sales_units: number | null;
+  /** 初回訪問の結果。営業時間設定のときは、営業の日時を持つ */
+  first_result: FirstResult | null;
+  first_followup_at: string | null;
   /** 結果が「時間設定」のときの、訪問する日時と事前確認の日時 */
   visit_at: string | null;
   precheck_at: string | null;
@@ -450,6 +455,8 @@ export type SalesResultItem = {
   sales_amount: number | null;
   sales_gross_profit: number | null;
   sales_units: number | null;
+  first_result: FirstResult | null;
+  first_followup_at: string | null;
   later_sales_visits: number;
   later_won: boolean;
 };
@@ -462,6 +469,8 @@ export type SalesScoreRow = {
   first_visits: number;
   user_visits: number;
   sales_visits: number;
+  first_scheduled: number;
+  first_no_prospect: number;
   won: number;
   waiting: number;
   ng: number;

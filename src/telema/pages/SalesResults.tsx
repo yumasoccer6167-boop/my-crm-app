@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import type { SalesResult, SalesResultItem, SalesScoreRow } from "../types";
+import type { FirstResult, SalesResult, SalesResultItem, SalesScoreRow } from "../types";
 import { api, unwrap } from "../lib/api";
 import { fmtDateTime, todayJst } from "../lib/format";
 import { useMasters } from "../lib/masters";
-import { SALES_RESULTS, salesResultLabel, salesTermLabel } from "../lib/record-kind";
+import { FIRST_RESULTS, firstResultLabel, SALES_RESULTS, salesResultLabel, salesTermLabel } from "../lib/record-kind";
 import { useApi } from "../lib/useApi";
 import { Card, Empty, ErrorBox, Loading, selectCls } from "../components/ui";
 
@@ -39,7 +39,7 @@ export function SalesResults() {
   const [from, setFrom] = useState(monthStart(today));
   const [to, setTo] = useState(today);
   const [userId, setUserId] = useState("");
-  const [result, setResult] = useState<SalesResult | "none" | "">("");
+  const [result, setResult] = useState<string>("");
 
   const setRange = (f: string, t: string) => {
     setFrom(f);
@@ -58,7 +58,10 @@ export function SalesResults() {
             key={t.value}
             type="button"
             aria-pressed={tab === t.value}
-            onClick={() => setTab(t.value)}
+            onClick={() => {
+              setTab(t.value);
+              setResult("");
+            }}
             className={`rounded-full px-4 py-1.5 text-sm font-medium ring-1 ring-inset ${tab === t.value ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
           >
             {t.label}
@@ -95,15 +98,15 @@ export function SalesResults() {
             </>
           )}
         </div>
-        {tab === "sales" && (
+        {tab !== "scorecard" && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <span className="mr-1 text-xs text-slate-500">結果</span>
-            {([["", "すべて"], ...SALES_RESULTS.map((r) => [r.value, r.label]), ["none", "結果なし"]] as [string, string][]).map(([v, label]) => (
+            {([["", "すべて"], ...(tab === "sales" ? SALES_RESULTS : FIRST_RESULTS).map((r) => [r.value, r.label]), ["none", "結果なし"]] as [string, string][]).map(([v, label]) => (
               <button
                 key={v}
                 type="button"
                 aria-pressed={result === v}
-                onClick={() => setResult(v as SalesResult | "none" | "")}
+                onClick={() => setResult(v)}
                 className={`rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${result === v ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
               >
                 {label}
@@ -113,7 +116,7 @@ export function SalesResults() {
         )}
       </Card>
 
-      {tab === "scorecard" ? <Scorecard query={common} /> : <ResultList key={tab} kind={tab} query={{ ...common, result: tab === "sales" ? result || undefined : undefined }} />}
+      {tab === "scorecard" ? <Scorecard query={common} /> : <ResultList key={tab} kind={tab} query={{ ...common, result: result || undefined }} />}
     </div>
   );
 }
@@ -149,7 +152,10 @@ function ResultList({ kind, query }: { kind: "sales" | "first"; query: { date_fr
                       <th className="px-2 py-2 text-right font-medium">台数</th>
                     </>
                   ) : (
-                    <th className="px-2 py-2 font-medium">その後</th>
+                    <>
+                      <th className="px-2 py-2 font-medium">結果</th>
+                      <th className="px-2 py-2 font-medium">その後</th>
+                    </>
                   )}
                   <th className="px-2 py-2 font-medium">メモ</th>
                 </tr>
@@ -205,8 +211,24 @@ function SalesCells({ r }: { r: SalesResultItem }) {
   );
 }
 
+const FIRST_BADGE: Record<FirstResult, string> = {
+  scheduled: "bg-sky-50 text-sky-800 ring-sky-200",
+  no_prospect: "bg-slate-100 text-slate-700 ring-slate-300",
+};
+
 function FirstCell({ r }: { r: SalesResultItem }) {
   return (
+    <>
+      <td className="whitespace-nowrap px-2 py-2">
+        {r.first_result ? (
+          <>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${FIRST_BADGE[r.first_result]}`}>{firstResultLabel(r.first_result)}</span>
+            {r.first_followup_at && <div className="mt-0.5 text-xs text-slate-500">営業 {fmtDateTime(r.first_followup_at)}</div>}
+          </>
+        ) : (
+          <span className="text-slate-300">—</span>
+        )}
+      </td>
     <td className="whitespace-nowrap px-2 py-2">
       {r.later_won ? (
         <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200">受注済み（営業{r.later_sales_visits}回）</span>
@@ -216,6 +238,7 @@ function FirstCell({ r }: { r: SalesResultItem }) {
         <span className="text-xs text-slate-400">まだ営業なし</span>
       )}
     </td>
+    </>
   );
 }
 
@@ -228,6 +251,8 @@ function Scorecard({ query }: { query: { date_from: string; date_to: string; use
       first_visits: t.first_visits + r.first_visits,
       user_visits: t.user_visits + r.user_visits,
       sales_visits: t.sales_visits + r.sales_visits,
+      first_scheduled: t.first_scheduled + r.first_scheduled,
+      first_no_prospect: t.first_no_prospect + r.first_no_prospect,
       won: t.won + r.won,
       waiting: t.waiting + r.waiting,
       ng: t.ng + r.ng,
@@ -236,11 +261,13 @@ function Scorecard({ query }: { query: { date_from: string; date_to: string; use
       gross_profit: t.gross_profit + r.gross_profit,
       units: t.units + r.units,
     }),
-    { user_id: null, user_name: "合計", first_visits: 0, user_visits: 0, sales_visits: 0, won: 0, waiting: 0, ng: 0, resales: 0, amount: 0, gross_profit: 0, units: 0 },
+    { user_id: null, user_name: "合計", first_visits: 0, user_visits: 0, sales_visits: 0, first_scheduled: 0, first_no_prospect: 0, won: 0, waiting: 0, ng: 0, resales: 0, amount: 0, gross_profit: 0, units: 0 },
   );
   const cols: { label: string; get: (r: SalesScoreRow) => string }[] = [
     { label: "初回訪問", get: (r) => String(r.first_visits) },
     { label: "ユーザー訪問", get: (r) => String(r.user_visits) },
+    { label: "営業時間設定", get: (r) => String(r.first_scheduled) },
+    { label: "見込みなし", get: (r) => String(r.first_no_prospect) },
     { label: "営業", get: (r) => String(r.sales_visits) },
     { label: "即決受注", get: (r) => String(r.won) },
     { label: "返事待ち", get: (r) => String(r.waiting) },
@@ -261,7 +288,7 @@ function Scorecard({ query }: { query: { date_from: string; date_to: string; use
         <Empty>この期間・条件に当てはまる記録がありません</Empty>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[56rem] text-right text-sm">
+          <table className="w-full min-w-[64rem] text-right text-sm">
             <thead className="text-xs text-slate-500">
               <tr className="border-b border-slate-200">
                 <th className="px-2 py-2 text-left font-medium">担当</th>

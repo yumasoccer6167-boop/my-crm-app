@@ -6,8 +6,8 @@ import { AppointmentCopy } from "./AppointmentCopy";
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
-import { SALES_PURPOSE_NAME, VISIT_METHODS } from "../../lib/record-kind";
-import { emptySales, SalesDetailFields, salesPayload, type SalesDetail } from "./SalesDetailFields";
+import { FIRST_PURPOSE_NAME, SALES_PURPOSE_NAME, VISIT_METHODS } from "../../lib/record-kind";
+import { emptySales, FirstVisitFields, firstPayload, SalesDetailFields, salesPayload, type SalesDetail } from "./SalesDetailFields";
 import { defaultSection, saveLastSection } from "../../lib/section-pref";
 import { Button, Card, CATEGORY_STYLE, ErrorBox, inputCls } from "../ui";
 
@@ -57,6 +57,7 @@ export function CallEntry({
   // 訪問の内容が「営業」のときの、商材・月額・期間
   const [sales, setSales] = useState<SalesDetail>(emptySales);
   const isSalesVisit = visitPurposes.find((p) => p.id === purposeId)?.name === SALES_PURPOSE_NAME;
+  const isFirstVisit = visitPurposes.find((p) => p.id === purposeId)?.name === FIRST_PURPOSE_NAME;
   // 記録の日時。基本は「この記録を書いている時間」で、自分で変えるまでは現在時刻に追従し、保存するときも保存時点の時刻にする
   const [recordedAt, setRecordedAt] = useState(() => toLocalInput(new Date().toISOString()));
   const [atEdited, setAtEdited] = useState(false);
@@ -112,7 +113,7 @@ export function CallEntry({
         api.companies[":id"].calls.$post({
           param: { id: String(companyId) },
           json: isVisit
-            ? { ...common, record_type: "visit", visit_method: visitMethod, visit_purpose_id: purposeId, ...(isSalesVisit ? salesPayload(sales) : {}) }
+            ? { ...common, record_type: "visit", visit_method: visitMethod, visit_purpose_id: purposeId, ...(isSalesVisit ? salesPayload(sales) : {}), ...(isFirstVisit ? firstPayload(sales) : {}) }
             : {
                 ...common,
                 result_status_id: statusId ?? undefined,
@@ -246,6 +247,7 @@ export function CallEntry({
         )}
 
         {isVisit && isSalesVisit && <SalesDetailFields value={sales} onChange={setSales} />}
+        {isVisit && isFirstVisit && <FirstVisitFields value={sales} onChange={setSales} />}
 
         {isVisit && (
           <div className="grid gap-3 sm:grid-cols-2">

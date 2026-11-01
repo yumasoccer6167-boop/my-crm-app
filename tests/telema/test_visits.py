@@ -274,3 +274,29 @@ def test_契約情報に受注金額_粗利_台数を登録できる(client):
     assert (status, ct['amount'], ct['gross_profit'], ct['units']) == (201, 300000, 90000, 1)
     assert client.api(f'/contracts/{ct["id"]}', {'units': None}, method='PATCH')[1]['units'] is None
     assert client.api(f'/contracts/{ct["id"]}', {'amount': -1}, method='PATCH')[0] == 400
+
+
+def test_初回訪問の結果として営業時間設定と見込みなしを残せ_営業の日時は営業時間設定だけに付く(client):
+    cid = make_company(client, '初回結果園')
+    p = {r['name']: r['id'] for r in client.api('/visit-purposes')[1]}
+    post = lambda purpose='初回訪問', **kw: client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '初回', 'visit_purpose_id': p[purpose], **kw})
+    status, a = post(first_result='scheduled', first_followup_at='2026-11-20T01:00:00Z')
+    assert status == 201 and (a['first_result'], a['first_followup_at']) == ('scheduled', '2026-11-20T01:00:00.000Z')
+    b = post(first_result='no_prospect')[1]
+    assert (b['first_result'], b['first_followup_at']) == ('no_prospect', None)
+    assert post()[1]['first_result'] is None                                                            # 結果は任意
+    assert post(first_result='no_prospect', first_followup_at='2026-11-20T01:00:00Z')[0] == 400         # 営業の日時は営業時間設定だけ
+    assert post(first_result='other')[0] == 400
+    assert post('営業', first_result='scheduled')[0] == 400 and post('ユーザー訪問', first_result='no_prospect')[0] == 400    # 初回訪問以外には付けられない
+    assert client.api(f'/companies/{cid}/calls', {'raw_note': '架電', 'first_result': 'no_prospect'})[0] == 400
+    # 編集：結果を見込みなしに直すと営業の日時は外れる。初回訪問以外の内容に直すと結果も外れる
+    row = client.api(f'/calls/{a["id"]}', {'first_result': 'no_prospect'}, method='PATCH')[1]
+    assert (row['first_result'], row['first_followup_at']) == ('no_prospect', None)
+    row = client.api(f'/calls/{a["id"]}', {'first_result': 'scheduled', 'first_followup_at': '2026-11-21T01:00:00Z'}, method='PATCH')[1]
+    assert row['first_followup_at'] == '2026-11-21T01:00:00.000Z'
+    row = client.api(f'/calls/{a["id"]}', {'visit_purpose_id': p['営業']}, method='PATCH')[1]
+    assert (row['first_result'], row['first_followup_at']) == (None, None)
+    # 初回訪問結果管理に出て、結果で絞り込める
+    items = client.api('/sales-results?kind=first&result=no_prospect')[1]['items']
+    assert any(i['id'] == b['id'] and i['first_result'] == 'no_prospect' for i in items)
+    assert client.api('/sales-results?kind=first&result=won')[0] == 400
