@@ -19,6 +19,10 @@ CONTRACT_BODY = {
     'product_url': Str(max=1000, pattern=r'https?://\S+', pattern_msg='リンクは http:// または https:// から始まるURLで入力してください', nullable=True, optional=True),
     'appointment_user_name': Str(max=100, nullable=True, optional=True),
     # 課題（集客・採用・クチコミ対策など。選択肢は画面側 src/telema/shared/constants.ts の CONTRACT_ISSUES。増やしても保存済みのデータは壊れないよう、ここでは文字列として受ける）
+    # 受注金額・粗利（円）・台数。数値分析の元（未入力は null）
+    'amount': Int(min=0, nullable=True, optional=True),
+    'gross_profit': Int(min=0, nullable=True, optional=True),
+    'units': Int(min=0, nullable=True, optional=True),
     'issues': StrList(max_len=20, item_max=50, optional=True),
     'memo': Str(max=2000, nullable=True, optional=True),
 }
@@ -43,10 +47,10 @@ def create_contract(id):
     d = db()
     _check_assignee(d, user, b.get('assigned_user_id'))
     new_id = d.value(
-        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, delivery_date, assigned_user_id, product_url, appointment_user_name, issues, memo, created_by)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, delivery_date, assigned_user_id, product_url, appointment_user_name, issues, memo, amount, gross_profit, units, created_by)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b['product_name'], b['contract_date'], b.get('delivery_date') or None, b.get('assigned_user_id'), b.get('product_url') or None,
-         b.get('appointment_user_name') or None, b.get('issues') or [], b.get('memo') or None, user['id']),
+         b.get('appointment_user_name') or None, b.get('issues') or [], b.get('memo') or None, b.get('amount'), b.get('gross_profit'), b.get('units'), user['id']),
     )
     row = d.first(f'{CONTRACT_SELECT} WHERE ct.id = %s', (new_id,))
     audit(d, user['id'], 'create', 'contract', new_id, None, row)

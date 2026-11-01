@@ -1,7 +1,9 @@
 """架電履歴。原文(raw_note)を最優先で保存し、AI解析はこの保存とは独立して後から実行する（AI障害で履歴が失われない）。"""
+from datetime import datetime
+
 from flask import jsonify
 
-from .common import audit, can_edit_company
+from .common import JST, audit, can_edit_company
 from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found
 from .routes import bp
@@ -10,7 +12,12 @@ from .validate import Enum, Int, IsoDatetime, Str, now_iso, parse, parse_id
 # 訪問の内容が「営業」のときだけ残せる項目（名前で判定する）。期間は現金一括（cash）か、12〜84か月
 SALES_PURPOSE_NAME = '営業'
 SALES_TERMS = ['cash', '12', '24', '36', '48', '60', '72', '84']
-_SALES_FIELDS = {'sales_product': '商材', 'sales_monthly_fee': '月額', 'sales_term': '期間'}
+# 営業の結果。即決受注（won）・返事待ち（waiting）・NG（ng）・再営業（resales）。返事待ち／再営業は次回日時を付けられ、即決受注は受注金額・粗利・台数を残せる
+SALES_RESULTS = ['won', 'waiting', 'ng', 'resales']
+_SALES_FIELDS = {'sales_product': '商材', 'sales_monthly_fee': '月額', 'sales_term': '期間', 'sales_result': '結果', 'sales_followup_at': '次回日時',
+                 'sales_amount': '受注金額', 'sales_gross_profit': '粗利', 'sales_units': '台数'}
+_FOLLOWUP_RESULTS = ('waiting', 'resales')
+_WON_FIELDS = {'sales_amount': '受注金額', 'sales_gross_profit': '粗利', 'sales_units': '台数'}
 
 
 CALL_BODY = {
@@ -30,6 +37,12 @@ CALL_BODY = {
     'sales_product': Str(max=200, nullable=True, optional=True),
     'sales_monthly_fee': Int(min=0, nullable=True, optional=True),
     'sales_term': Enum(SALES_TERMS, nullable=True, optional=True),
+    # 営業の結果（即決受注・返事待ち・NG・再営業）。返事待ち／再営業の次回日時。即決受注の受注金額（円）・粗利（円）・台数
+    'sales_result': Enum(SALES_RESULTS, nullable=True, optional=True),
+    'sales_followup_at': IsoDatetime(nullable=True, optional=True),
+    'sales_amount': Int(min=0, nullable=True, optional=True),
+    'sales_gross_profit': Int(min=0, nullable=True, optional=True),
+    'sales_units': Int(min=0, nullable=True, optional=True),
     # 記録の種類。省略は架電。訪問（visit）のときは方法（visit＝訪問／zoom）が必須
     'record_type': Enum(['call', 'visit'], default='call'),
     'visit_method': Enum(['visit', 'zoom'], nullable=True, optional=True),
@@ -72,6 +85,38 @@ def _check_visit_purpose(d, purpose_id, current_purpose_id=None):
 def _is_sales_purpose(d, purpose_id):
     """訪問の内容が「営業」か"""
     return purpose_id is not None and d.value('SELECT name FROM telema_visit_purposes WHERE id = %s', (purpose_id,)) == SALES_PURPOSE_NAME
+
+
+def _check_sales_result(get):
+    """営業の結果と、結果ごとに付けられる項目の組み合わせを確かめる。get(キー) はその項目の最終的な値"""
+    result = get('sales_result')
+    if get('sales_followup_at') is not None and result not in _FOLLOWUP_RESULTS:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（次回日時は、結果が「返事待ち」「再営業」のときだけ設定できます）')
+    sent = [label for k, label in _WON_FIELDS.items() if get(k) is not None]
+    if sent and result != 'won':
+        raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent)}は、結果が「即決受注」のときだけ設定できます）')
+    if result == 'won' and not get('sales_product'):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（即決受注にするときは、商材を選んでください）')
+
+
+def _sync_won_contract(d, user, call_id):
+    """結果が「即決受注」の営業の訪問記録から、契約情報を1件作る（受注金額・粗利・台数も引き継ぐ）。作った契約は元の記録と結びつけ、
+    記録の商材・日付・金額などを直したら契約にも反映する。契約を画面から外した（無効にした）あとは作り直さない。結果を即決受注から変えても、契約は消さない"""
+    call = d.first('SELECT * FROM telema_call_logs WHERE id = %s AND is_active = 1', (call_id,))
+    if not call or call['record_type'] != 'visit' or call['sales_result'] != 'won':
+        return
+    day = datetime.fromisoformat(call['called_at'].replace('Z', '+00:00')).astimezone(JST).strftime('%Y-%m-%d')
+    values = (call['sales_product'], day, call['sales_amount'], call['sales_gross_profit'], call['sales_units'])
+    linked = d.first('SELECT id, is_active FROM telema_contracts WHERE source_call_id = %s ORDER BY id LIMIT 1', (call_id,))
+    if not linked:
+        new_id = d.value(
+            """INSERT INTO telema_contracts (company_id, product_name, contract_date, amount, gross_profit, units, assigned_user_id, created_by, source_call_id)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+            (call['company_id'], call['sales_product'], day, call['sales_amount'], call['sales_gross_profit'], call['sales_units'], call['user_id'], user['id'], call_id))
+        audit(d, user['id'], 'create', 'contract', new_id, None, {'source_call_id': call_id, 'company_id': call['company_id'], 'product_name': call['sales_product']})
+    elif linked['is_active']:
+        d.run('UPDATE telema_contracts SET product_name = %s, contract_date = %s, amount = %s, gross_profit = %s, units = %s, updated_at = telema_now() WHERE id = %s',
+              (*values, linked['id']))
 
 
 def _check_section(d, section_id, current_section_id=None):
@@ -120,22 +165,26 @@ def create_call(id):
     sent_sales = [label for k, label in _SALES_FIELDS.items() if b.get(k) is not None]
     if sent_sales and not (is_visit and _is_sales_purpose(d, b.get('visit_purpose_id'))):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent_sales)}は、訪問の内容が「営業」の訪問記録だけに付けられます）')
+    _check_sales_result(b.get)
     called_at = b.get('called_at') or now_iso()
     call_id = d.value(
         '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id,
                                           record_type, visit_method, visit_at, precheck_at, visit_purpose_id,
-                                          sales_product, sales_monthly_fee, sales_term)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                                          sales_product, sales_monthly_fee, sales_term,
+                                          sales_result, sales_followup_at, sales_amount, sales_gross_profit, sales_units)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b.get('contact_id'), user['id'], called_at, None if is_visit else (b.get('phone_number') or company['phone']), b.get('result_status_id'),
          b['raw_note'], 'pending' if b['raw_note'].strip() and not is_visit else 'skipped', b.get('section_id'),
          b['record_type'], b.get('visit_method'), b.get('visit_at'), b.get('precheck_at'), b.get('visit_purpose_id'),
-         b.get('sales_product'), b.get('sales_monthly_fee'), b.get('sales_term')),
+         b.get('sales_product'), b.get('sales_monthly_fee'), b.get('sales_term'),
+         b.get('sales_result'), b.get('sales_followup_at'), b.get('sales_amount'), b.get('sales_gross_profit'), b.get('sales_units')),
     )
     # 履歴を先に確定させる（この後の会社更新で失敗しても架電メモは残す）
     d.commit()
     if is_visit:
         # 訪問は施設の「現在の状態」（ステータス・次回架電・架電件数・最終架電日時・担当）を変えない
         audit(d, user['id'], 'create', 'call_log', call_id, None, {'company_id': id, **b})
+        _sync_won_contract(d, user, call_id)
         return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (call_id,))), 201
 
     # 会社の「現在の状態」を更新（利用者が入力した値のみ）
@@ -170,6 +219,11 @@ CALL_PATCH = {
     'sales_product': Str(max=200, nullable=True),
     'sales_monthly_fee': Int(min=0, nullable=True),
     'sales_term': Enum(SALES_TERMS, nullable=True),
+    'sales_result': Enum(SALES_RESULTS, nullable=True),
+    'sales_followup_at': IsoDatetime(nullable=True),
+    'sales_amount': Int(min=0, nullable=True),
+    'sales_gross_profit': Int(min=0, nullable=True),
+    'sales_units': Int(min=0, nullable=True),
     'visit_at': IsoDatetime(nullable=True),
     'precheck_at': IsoDatetime(nullable=True),
     'user_id': Int(min=1),     # この記録の担当者（誰の架電・訪問として数えるか）。一般以上は誰でも付け替えられる
@@ -263,6 +317,15 @@ def update_call(id):
         if any(b.get(k) is not None for k in _SALES_FIELDS):
             raise ApiError(400, 'validation_error', '入力内容に誤りがあります（商材・月額・期間は、訪問の内容が「営業」の訪問記録だけに付けられます）')
         b.update({k: None for k in _SALES_FIELDS if call[k] is not None})
+    else:
+        # 結果を変えたら、その結果では付けられない項目（次回日時・受注金額など）は外す。明示的に送られたものは _check_sales_result で弾く
+        new_result = b['sales_result'] if 'sales_result' in b else call['sales_result']
+        if 'sales_result' in b:
+            dependent = [k for k in ('sales_followup_at', *_WON_FIELDS) if k not in b and call[k] is not None]
+            for k in dependent:
+                if (k == 'sales_followup_at' and new_result not in _FOLLOWUP_RESULTS) or (k in _WON_FIELDS and new_result != 'won'):
+                    b[k] = None
+        _check_sales_result(lambda k: b[k] if k in b else call[k])
     changes = {k: v for k, v in b.items() if call[k] != v}
     # 訪問する日時・事前確認日時を直した（または外れた）ときは、「対応済み」も外す（新しい予定として、また表示される）
     for k, done in (('visit_at', 'visit_done_at'), ('precheck_at', 'precheck_done_at')):
@@ -286,6 +349,8 @@ def update_call(id):
         _recalc_company_calls(d, call['company_id'])
     _sync_company_status(d, user, call, changes)
     audit(d, user['id'], 'update', 'call_log', id, {k: call[k] for k in changes}, changes)
+    if any(k in changes for k in ('sales_result', 'sales_product', 'called_at', *_WON_FIELDS)):
+        _sync_won_contract(d, user, id)
     return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (id,)))
 
 
@@ -304,5 +369,7 @@ def deactivate_call(id):
     d.run('UPDATE telema_call_logs SET is_active = 0, updated_at = telema_now() WHERE id = %s', (id,))
     if call['record_type'] == 'call':
         _recalc_company_calls(d, call['company_id'])
+    # 即決受注の訪問記録から自動で作った契約も、記録といっしょに画面から外す
+    d.run('UPDATE telema_contracts SET is_active = 0, updated_at = telema_now() WHERE source_call_id = %s AND is_active = 1', (id,))
     audit(d, user['id'], 'deactivate', 'call_log', id, call)
     return jsonify({'ok': True})

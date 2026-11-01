@@ -220,3 +220,57 @@ def test_訪問の内容が営業のとき_商材_月額_期間を残せる(clie
     assert row['sales_product'] is None and row['sales_monthly_fee'] is None and row['sales_term'] is None
     assert client.api(f'/calls/{v["id"]}', {'sales_term': '12'}, method='PATCH')[0] == 400
     assert client.api(f'/calls/{v["id"]}', {'visit_purpose_id': purposes['営業'], 'sales_term': 'cash', 'sales_monthly_fee': 0}, method='PATCH')[1]['sales_term'] == 'cash'
+
+
+def test_営業の結果を残せ_即決受注は契約情報に自動で登録され_返事待ちと再営業は次回日時を持つ(client):
+    cid = make_company(client, '営業結果園')
+    purposes = {r['name']: r['id'] for r in client.api('/visit-purposes')[1]}
+    post = lambda **kw: client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '提案', 'visit_purpose_id': purposes['営業'], **kw})
+    contracts = lambda: client.api(f'/companies/{cid}')[1]['contracts']
+    assert contracts() == []
+
+    # 即決受注：商材が必要。受注金額・粗利・台数が契約情報に入る（日付は訪問日のJST）
+    assert post(sales_result='won')[0] == 400
+    status, won = post(sales_result='won', sales_product='SP-結果', sales_amount=480000, sales_gross_profit=150000, sales_units=2, called_at='2026-10-05T16:00:00Z')
+    assert status == 201 and (won['sales_result'], won['sales_amount'], won['sales_gross_profit'], won['sales_units']) == ('won', 480000, 150000, 2)
+    (ct,) = contracts()
+    assert (ct['product_name'], ct['contract_date'], ct['amount'], ct['gross_profit'], ct['units'], ct['source_call_id'], ct['can_edit']) == ('SP-結果', '2026-10-06', 480000, 150000, 2, won['id'], True)
+
+    # 記録を直すと契約にも反映され、二重には登録されない
+    client.api(f'/calls/{won["id"]}', {'sales_gross_profit': 200000, 'sales_units': 3}, method='PATCH')
+    (ct,) = contracts()
+    assert (ct['gross_profit'], ct['units']) == (200000, 3)
+    # 即決受注以外に直しても契約は残るが、受注金額などは外れる
+    row = client.api(f'/calls/{won["id"]}', {'sales_result': 'ng'}, method='PATCH')[1]
+    assert (row['sales_result'], row['sales_amount'], row['sales_gross_profit'], row['sales_units']) == ('ng', None, None, None) and len(contracts()) == 1
+    # 契約を画面から外したあとは、記録を直しても作り直さない
+    client.api(f'/contracts/{ct["id"]}', {'is_active': False}, method='PATCH')
+    client.api(f'/calls/{won["id"]}', {'sales_result': 'won', 'sales_amount': 1}, method='PATCH')
+    assert contracts() == []
+
+    # 返事待ち・再営業は次回日時を付けられる。それ以外の結果には付けられない
+    waiting = post(sales_result='waiting', sales_followup_at='2026-11-01T01:00:00Z')
+    assert waiting[0] == 201 and waiting[1]['sales_followup_at'] == '2026-11-01T01:00:00.000Z'
+    assert post(sales_result='resales', sales_followup_at='2026-11-02T01:00:00Z')[0] == 201
+    assert post(sales_result='ng', sales_followup_at='2026-11-02T01:00:00Z')[0] == 400
+    assert post(sales_result='waiting', sales_amount=1)[0] == 400                                   # 受注金額などは即決受注だけ
+    assert post(sales_result='unknown')[0] == 400
+    # 結果を変えると、前の結果の次回日時は外れる
+    assert client.api(f'/calls/{waiting[1]["id"]}', {'sales_result': 'ng'}, method='PATCH')[1]['sales_followup_at'] is None
+    # 営業以外の訪問・架電には付けられない
+    assert client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': 'x', 'visit_purpose_id': purposes['初回訪問'], 'sales_result': 'ng'})[0] == 400
+    assert client.api(f'/companies/{cid}/calls', {'raw_note': '架電', 'sales_result': 'ng'})[0] == 400
+
+    # 即決受注の記録を削除（無効化）すると、自動で作った契約も外れる
+    again = post(sales_result='won', sales_product='SP-結果2', called_at='2026-10-07T01:00:00Z')[1]
+    assert len(contracts()) == 1
+    client.api(f'/calls/{again["id"]}/deactivate', {})
+    assert contracts() == []
+
+
+def test_契約情報に受注金額_粗利_台数を登録できる(client):
+    cid = make_company(client, '契約金額園')
+    status, ct = client.api(f'/companies/{cid}/contracts', {'product_name': 'SP', 'contract_date': '2026-10-01', 'amount': 300000, 'gross_profit': 90000, 'units': 1})
+    assert (status, ct['amount'], ct['gross_profit'], ct['units']) == (201, 300000, 90000, 1)
+    assert client.api(f'/contracts/{ct["id"]}', {'units': None}, method='PATCH')[1]['units'] is None
+    assert client.api(f'/contracts/{ct["id"]}', {'amount': -1}, method='PATCH')[0] == 400

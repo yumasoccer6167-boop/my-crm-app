@@ -542,6 +542,19 @@ ALTER TABLE telema_companies ADD COLUMN line_url TEXT;
 ALTER TABLE telema_contracts ADD COLUMN issues TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE telema_contracts ADD COLUMN memo TEXT;
 """,
+    # 21: 営業の訪問記録の結果（即決受注・返事待ち・NG・再営業）と、返事待ち／再営業の次回日時、即決受注の受注金額・粗利・台数。
+    #     契約情報にも受注金額・粗利・台数を持たせる（数値分析の元）。即決受注の訪問記録から自動で作った契約は、元の記録を source_call_id で持つ
+    r"""
+ALTER TABLE telema_call_logs ADD COLUMN sales_result TEXT CHECK (sales_result IN ('won', 'waiting', 'ng', 'resales'));
+ALTER TABLE telema_call_logs ADD COLUMN sales_followup_at TEXT;
+ALTER TABLE telema_call_logs ADD COLUMN sales_amount INTEGER;
+ALTER TABLE telema_call_logs ADD COLUMN sales_gross_profit INTEGER;
+ALTER TABLE telema_call_logs ADD COLUMN sales_units INTEGER;
+ALTER TABLE telema_contracts ADD COLUMN amount INTEGER;
+ALTER TABLE telema_contracts ADD COLUMN gross_profit INTEGER;
+ALTER TABLE telema_contracts ADD COLUMN units INTEGER;
+ALTER TABLE telema_contracts ADD COLUMN source_call_id INTEGER REFERENCES telema_call_logs(id);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

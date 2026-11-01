@@ -1,5 +1,6 @@
 // 記録の種類（架電／訪問）と、訪問の方法（訪問／Zoom）の表示名・絞り込み。
-import type { CallLog, VisitMethod } from "../types";
+import type { CallLog, SalesResult, VisitMethod } from "../types";
+import { fmtDateTime } from "./format";
 
 export const VISIT_METHODS: { value: VisitMethod; label: string }[] = [
   { value: "visit", label: "訪問" },
@@ -16,9 +17,28 @@ export const SALES_TERMS: { value: string; label: string }[] = [
 ];
 export const salesTermLabel = (t: string | null) => SALES_TERMS.find((x) => x.value === t)?.label ?? "";
 
-/** 営業の内容（商材・月額・期間）を1行の文にする。何も無ければ空 */
-export function salesSummary(c: Pick<CallLog, "sales_product" | "sales_monthly_fee" | "sales_term">): string {
-  return [c.sales_product, c.sales_monthly_fee != null ? `月額 ${c.sales_monthly_fee.toLocaleString()}円` : "", c.sales_term ? `期間 ${salesTermLabel(c.sales_term)}` : ""].filter(Boolean).join(" ／ ");
+/** 営業の結果（即決受注・返事待ち・NG・再営業）。on は選んだときのボタンの色 */
+export const SALES_RESULTS: { value: SalesResult; label: string; on: string }[] = [
+  { value: "won", label: "即決受注", on: "bg-emerald-600 text-white ring-emerald-600" },
+  { value: "waiting", label: "返事待ち", on: "bg-amber-500 text-white ring-amber-500" },
+  { value: "ng", label: "NG", on: "bg-rose-600 text-white ring-rose-600" },
+  { value: "resales", label: "再営業", on: "bg-indigo-600 text-white ring-indigo-600" },
+];
+export const salesResultLabel = (r: SalesResult | null) => SALES_RESULTS.find((x) => x.value === r)?.label ?? "";
+
+type SalesFields = Pick<CallLog, "sales_product" | "sales_monthly_fee" | "sales_term" | "sales_result" | "sales_followup_at" | "sales_amount" | "sales_gross_profit" | "sales_units">;
+
+/** 営業の内容（商材・月額・期間・結果）を1行の文にする。何も無ければ空 */
+export function salesSummary(c: SalesFields): string {
+  return [
+    c.sales_product,
+    c.sales_monthly_fee != null ? `月額 ${c.sales_monthly_fee.toLocaleString()}円` : "",
+    c.sales_term ? `期間 ${salesTermLabel(c.sales_term)}` : "",
+    c.sales_result ? `結果 ${salesResultLabel(c.sales_result)}${c.sales_followup_at ? `（${fmtDateTime(c.sales_followup_at)}）` : ""}` : "",
+    c.sales_amount != null ? `受注金額 ${c.sales_amount.toLocaleString()}円` : "",
+    c.sales_gross_profit != null ? `粗利 ${c.sales_gross_profit.toLocaleString()}円` : "",
+    c.sales_units != null ? `${c.sales_units}台` : "",
+  ].filter(Boolean).join(" ／ ");
 }
 
 /** タイムラインの種類フィルタ。all＝すべて */

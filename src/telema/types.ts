@@ -98,6 +98,8 @@ export type FieldSource = { field: string; source: string; source_ref: string | 
 
 /** 記録の種類。架電（call）か訪問（visit）。訪問は方法（visit＝訪問／zoom）を持つ */
 export type RecordType = "call" | "visit";
+/** 営業の訪問記録の結果。即決受注・返事待ち・NG・再営業 */
+export type SalesResult = "won" | "waiting" | "ng" | "resales";
 export type VisitMethod = "visit" | "zoom";
 
 /** 架電または訪問の記録（タイムラインの1件）。訪問は結果・次回架電・AI整理を持たない */
@@ -112,6 +114,12 @@ export type CallLog = {
   sales_product: string | null;
   sales_monthly_fee: number | null;
   sales_term: string | null;
+  /** 営業の結果。返事待ち／再営業は次回日時、即決受注は受注金額・粗利（円）・台数を持つ */
+  sales_result: SalesResult | null;
+  sales_followup_at: string | null;
+  sales_amount: number | null;
+  sales_gross_profit: number | null;
+  sales_units: number | null;
   /** 結果が「時間設定」のときの、訪問する日時と事前確認の日時 */
   visit_at: string | null;
   precheck_at: string | null;
@@ -158,6 +166,10 @@ export type Contract = {
   /** 課題（集客・採用・クチコミ対策など） */
   issues: string[];
   memo: string | null;
+  /** 受注金額・粗利（円）・台数。未入力は null */
+  amount: number | null;
+  gross_profit: number | null;
+  units: number | null;
   /** カルテの契約情報だけに付く。company_id が開いている施設と違うものは、同じ法人の施設（姉妹園）の契約 */
   company_name?: string;
   /** その契約の施設を編集できるか（カルテの契約情報だけに付く） */

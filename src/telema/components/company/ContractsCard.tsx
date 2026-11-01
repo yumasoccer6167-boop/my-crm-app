@@ -7,9 +7,10 @@ import { useMasters } from "../../lib/masters";
 import { useApi } from "../../lib/useApi";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../ui";
 
-type Draft = { product_name: string; contract_date: string; delivery_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string; issues: string[]; memo: string };
+type Draft = { product_name: string; contract_date: string; delivery_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string; issues: string[]; memo: string; amount: string; gross_profit: string; units: string };
 
 const URL_RE = /^https?:\/\/\S+$/;
+const num = (v: string) => (v.trim() === "" ? null : Math.max(0, Math.round(Number(v))));
 
 /** 契約情報（商材・契約日・納品日・営業担当）。1施設に複数件登録できる */
 export function ContractsCard({
@@ -49,6 +50,9 @@ export function ContractsCard({
             appointment_user_name: c.appointment_user_name ?? "",
             issues: c.issues ?? [],
             memo: c.memo ?? "",
+            amount: c.amount == null ? "" : String(c.amount),
+            gross_profit: c.gross_profit == null ? "" : String(c.gross_profit),
+            units: c.units == null ? "" : String(c.units),
           }
         : {
             product_name: "",
@@ -59,6 +63,9 @@ export function ContractsCard({
             appointment_user_name: "",
             issues: [],
             memo: "",
+            amount: "",
+            gross_profit: "",
+            units: "",
           },
     );
   }
@@ -85,6 +92,9 @@ export function ContractsCard({
       appointment_user_name: draft.appointment_user_name.trim() || null,
       issues: draft.issues,
       memo: draft.memo.trim() || null,
+      amount: num(draft.amount),
+      gross_profit: num(draft.gross_profit),
+      units: num(draft.units),
     };
     setSaving(true);
     setError(null);
@@ -183,6 +193,14 @@ export function ContractsCard({
             ))}
           </datalist>
         </label>
+        <div className="col-span-2 grid grid-cols-3 gap-2">
+          {([["amount", "受注金額（円）"], ["gross_profit", "粗利（円）"], ["units", "台数"]] as const).map(([k, label]) => (
+            <label key={k} className="block">
+              <div className="mb-1 text-xs text-slate-500">{label}</div>
+              <input type="number" min={0} step={1} inputMode="numeric" className={inputCls} value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
+            </label>
+          ))}
+        </div>
         <div className="col-span-2">
           <div className="mb-1 text-xs text-slate-500">課題（複数選べます）</div>
           <div className="flex flex-wrap gap-1.5">
@@ -269,6 +287,11 @@ export function ContractsCard({
                 営業担当：{c.assigned_user_name ?? "未設定"}
                 {c.appointment_user_name && <span className="ml-2">アポ担当：{c.appointment_user_name}</span>}
               </div>
+              {(c.amount != null || c.gross_profit != null || c.units != null) && (
+                <div className="text-xs text-slate-500">
+                  {[c.amount != null ? `受注金額 ${c.amount.toLocaleString()}円` : "", c.gross_profit != null ? `粗利 ${c.gross_profit.toLocaleString()}円` : "", c.units != null ? `${c.units}台` : ""].filter(Boolean).join(" ／ ")}
+                </div>
+              )}
               {(c.issues ?? []).length > 0 && (
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   <span className="text-xs text-slate-500">課題：</span>

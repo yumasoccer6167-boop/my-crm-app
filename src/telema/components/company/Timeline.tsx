@@ -8,7 +8,7 @@ import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput, isOverdue, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
 import { callsOfKind, KIND_FILTERS, type KindFilter, SALES_PURPOSE_NAME, salesSummary, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
-import { SalesDetailFields, salesPayload, type SalesDetail } from "./SalesDetailFields";
+import { SalesDetailFields, salesFromCall, salesPayload, type SalesDetail } from "./SalesDetailFields";
 import { ALL_TAB, callsInTab, timelineTabs } from "../../lib/timeline-tabs";
 import { Button, Card, CATEGORY_STYLE, Empty, ErrorBox, inputCls, StatusBadge } from "../ui";
 
@@ -44,7 +44,7 @@ function CallEditForm({
 }) {
   const { statuses, sections, users, visitPurposes } = useMasters();
   const [purposeId, setPurposeId] = useState<number | null>(call.visit_purpose_id);
-  const [sales, setSales] = useState<SalesDetail>({ product: call.sales_product ?? "", fee: call.sales_monthly_fee == null ? "" : String(call.sales_monthly_fee), term: call.sales_term ?? "" });
+  const [sales, setSales] = useState<SalesDetail>(salesFromCall(call));
   const isSalesVisit = call.record_type === "visit" && visitPurposes.find((p) => p.id === purposeId)?.name === SALES_PURPOSE_NAME;
   const [userId, setUserId] = useState<number | null>(call.user_id);
   const [calledAt, setCalledAt] = useState(toLocalInput(call.called_at));
