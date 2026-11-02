@@ -3,6 +3,8 @@ from datetime import datetime
 
 from flask import jsonify
 
+from .agenda import check_recall_slot
+from .analytics import SCHEDULING_STATUS
 from .common import JST, audit, can_edit_company
 from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found
@@ -80,8 +82,8 @@ CALL_SELECT = '''SELECT cl.*, ct.name AS contact_name, u.display_name AS user_na
 
 
 def _is_appointment(d, status_id):
-    """結果が「時間設定」（ステータス区分 appointment）か"""
-    return bool(status_id) and bool(d.first("SELECT 1 FROM telema_call_statuses WHERE id = %s AND category = 'appointment'", (status_id,)))
+    """結果が「時間設定」（ステータス区分 appointment）か、「初回訪問時間設定」か。この結果のときだけ、訪問日時・事前確認日時を付けられる"""
+    return bool(status_id) and bool(d.first("SELECT 1 FROM telema_call_statuses WHERE id = %s AND (category = 'appointment' OR label = %s)", (status_id, SCHEDULING_STATUS)))
 
 
 def _check_visit_purpose(d, purpose_id, current_purpose_id=None):
@@ -188,6 +190,8 @@ def create_call(id):
         raise forbidden()
 
     _check_section(d, b.get('section_id'))
+    if b['record_type'] == 'call' and b.get('next_call_at'):
+        check_recall_slot(d, company['assigned_user_id'] or user['id'], b['next_call_at'])     # 訪問の時間帯には再コールを入れられない
     is_visit = b['record_type'] == 'visit'
     is_reply = b['record_type'] == 'reply'
     reply_to = _check_reply(b, d, id) if is_reply else None
@@ -205,7 +209,7 @@ def create_call(id):
     elif b.get('visit_method') is not None:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 架電の記録には付けられません）')
     elif any(b.get(k) is not None for k in _APPOINTMENT_ONLY) and not _is_appointment(d, b.get('result_status_id')):
-        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問日時・事前確認日時は結果が「時間設定」のときだけ設定できます）')
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問日時・事前確認日時は結果が「時間設定」「初回訪問時間設定」のときだけ設定できます）')
     sent_sales = [label for k, label in _SALES_FIELDS.items() if b.get(k) is not None]
     if sent_sales and not (is_reply or (is_visit and _is_sales_purpose(d, b.get('visit_purpose_id')))):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent_sales)}は、訪問の内容が「営業」の訪問記録だけに付けられます）')
@@ -353,7 +357,7 @@ def update_call(id):
     final_status = b['result_status_id'] if 'result_status_id' in b else call['result_status_id']
     if call['record_type'] == 'call' and not _is_appointment(d, final_status):
         if any(b.get(k) is not None for k in _APPOINTMENT_ONLY):
-            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問日時・事前確認日時は結果が「時間設定」のときだけ設定できます）')
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問日時・事前確認日時は結果が「時間設定」「初回訪問時間設定」のときだけ設定できます）')
         b.update({k: None for k in _APPOINTMENT_ONLY if call[k] is not None})
     elif call['record_type'] in ('visit', 'reply') and any(b.get(k) is not None for k in _APPOINTMENT_ONLY):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には付けられません）')
@@ -394,6 +398,8 @@ def update_call(id):
     for k, done in (('visit_at', 'visit_done_at'), ('precheck_at', 'precheck_done_at')):
         if k in changes and call[done] is not None:
             changes[done] = None
+    if next_call_given and next_call and next_call != company['next_call_at']:
+        check_recall_slot(d, company['assigned_user_id'] or user['id'], next_call)
     if next_call_given and next_call != company['next_call_at']:
         d.run('UPDATE telema_companies SET next_call_at = %s, updated_at = telema_now() WHERE id = %s', (next_call, company['id']))
         audit(d, user['id'], 'update', 'company', company['id'], {'next_call_at': company['next_call_at']}, {'next_call_at': next_call})

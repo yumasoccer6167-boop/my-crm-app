@@ -7,7 +7,7 @@ import { QUICK } from "./CallEntry";
 import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput, isOverdue, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
-import { callsOfKind, FIRST_PURPOSE_NAME, firstSummary, KIND_FILTERS, type KindFilter, SALES_PURPOSE_NAME, salesResultLabel, salesSummary, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
+import { callsOfKind, FIRST_PURPOSE_NAME, FIRST_SCHEDULING_STATUS, firstSummary, KIND_FILTERS, type KindFilter, SALES_PURPOSE_NAME, salesResultLabel, salesSummary, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
 import { FirstVisitFields, firstPayload, ReplyFields, replyPayload, SalesDetailFields, salesFromCall, salesPayload, type SalesDetail } from "./SalesDetailFields";
 import { ALL_TAB, callsInTab, timelineTabs } from "../../lib/timeline-tabs";
 import { Button, Card, CATEGORY_STYLE, Empty, ErrorBox, inputCls, StatusBadge } from "../ui";
@@ -66,7 +66,8 @@ function CallEditForm({
   const isReply = call.record_type === "reply";
   const isCall = !isVisit && !isReply;
   // 結果が「時間設定」のときだけ、訪問する日時・事前確認日時を設定できる
-  const isAppointment = isCall && statuses.find((s) => s.id === statusId)?.category === "appointment";
+  const chosenStatus = statuses.find((s) => s.id === statusId);
+  const isAppointment = isCall && (chosenStatus?.category === "appointment" || chosenStatus?.label === FIRST_SCHEDULING_STATUS);
   const options = statuses.filter((s) => (s.is_active && s.category !== "not_started") || s.id === call.result_status_id);
   const noteChanged = note !== call.raw_note;
   const hasAI = call.ai_status === "done" || !!call.ai_summary;

@@ -1,7 +1,7 @@
 """数値分析。営業の目標に対する今週・今日のペースと、期間の実績（訪問・受注・単価・テレアポ）。
  - 目標：営業ごと・月ごとの粗利・台数（telema_targets）。管理者は誰の分も、それ以外は自分の分を設定できる
  - ペース：月の目標 − 今月の受注（契約情報の契約日・営業担当ごとの粗利・台数）＝月の残。月の残を、残りの稼働日で割って、今週の残り稼働日の分を「今週の必要粗利・台数」とする。
-   必要な訪問件数は、直近90日の「1訪問あたりの粗利」（初回訪問・ユーザー訪問・営業の訪問件数と契約の粗利から）で割り戻す。稼働日はいまは平日（月〜金）。カレンダーの稼働日設定ができたら差し替える（is_workday）
+   必要な訪問件数は、直近90日の「1訪問あたりの粗利」（初回訪問・ユーザー訪問・営業の訪問件数と契約の粗利から）で割り戻す。稼働日はカレンダーの稼働日設定（なければ平日の月〜金）
  - 実績：期間内の訪問・営業の結果・受注（契約情報）・受注単価・商材別の平均粗利・テレアポ（架電）の件数
  営業（一般）は自分の分だけ、マネージャー・管理者は全員分（担当者で絞り込める）"""
 from datetime import datetime, timedelta, timezone
@@ -20,18 +20,26 @@ SCHEDULING_STATUS = '初回訪問時間設定'     # 架電の結果フラグ。
 
 
 # ---------- 稼働日 ----------
-def is_workday(day):
-    """稼働日か。いまは平日（月〜金）。稼働日の設定ができたら、ここで設定を見る"""
+def is_workday(day, overrides=None):
+    """稼働日か。カレンダーで日ごとに設定した稼働日／休み（overrides＝{日付: True/False}）があればそれ、なければ平日（月〜金）"""
+    if overrides and day in overrides:
+        return overrides[day]
     return day.weekday() < 5
 
 
-def workdays(start, end):
+def workdays(start, end, overrides=None):
     """start〜end（両端を含む）の稼働日の日数"""
     n, d = 0, start
     while d <= end:
-        n += is_workday(d)
+        n += is_workday(d, overrides)
         d += timedelta(days=1)
     return n
+
+
+def workday_overrides(d, user_id, start, end):
+    """営業 user_id がカレンダーで設定した、start〜end（日付）の稼働日／休みの上書き。{date: bool}"""
+    rows = d.all('SELECT day, is_workday FROM telema_workdays WHERE user_id = %s AND day >= %s AND day <= %s', (user_id, start.isoformat(), end.isoformat()))
+    return {datetime.strptime(r['day'], '%Y-%m-%d').date(): bool(r['is_workday']) for r in rows}
 
 
 def _today():
@@ -130,7 +138,8 @@ def analytics_pace():
         '''SELECT COALESCE(SUM(gross_profit), 0)::bigint AS gross_profit, COALESCE(SUM(units), 0)::bigint AS units
              FROM telema_contracts WHERE is_active = 1 AND assigned_user_id = %s AND contract_date::date >= %s AND contract_date::date <= %s''',
         (uid, month_start, today))
-    month_days, week_days = workdays(today, month_end), workdays(today, week_end)
+    over = workday_overrides(d, uid, today, month_end)
+    month_days, week_days = workdays(today, month_end, over), workdays(today, week_end, over)
 
     # 直近90日の、1訪問あたりの粗利・台数（必要な訪問件数に直す元）
     since = today - timedelta(days=PACE_WINDOW_DAYS)
@@ -172,17 +181,8 @@ def analytics_pace():
 
 
 # ---------- 期間の実績 ----------
-@bp.get('/analytics')
-def analytics():
-    user, d = current_user(), db()
-    uid = _target_user(user, default_all=True)
-    today = _today()
-    date_from = _date_arg('date_from') or datetime.strptime(jst_month_range()[0] + '-01', '%Y-%m-%d').date()
-    date_to = _date_arg('date_to') or today
-    if date_to < date_from:
-        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（date_to: 期間の終わりは始まり以降にしてください）')
-    if (date_to - date_from).days > 366:
-        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（期間は1年以内で指定してください）')
+def actuals(d, uid, date_from, date_to):
+    """期間（日付）の実績。uid が None なら全員分。数値分析と、日報の元になる"""
     start, end = _day_bounds(date_from, date_to)
     who_call, who_contract = ('TRUE', []) if uid is None else ('cl.user_id = %s', [uid])
     who_ct = 'TRUE' if uid is None else 'ct.assigned_user_id = %s'
@@ -237,7 +237,7 @@ def analytics():
              WHERE cl.is_active = 1 AND cl.record_type = 'call' AND cl.called_at::timestamptz >= %s AND cl.called_at::timestamptz < %s AND {who_call}''',
         [SCHEDULING_STATUS, start, end, *who_contract])
 
-    return jsonify({
+    return {
         'user_id': uid, 'date_from': date_from.isoformat(), 'date_to': date_to.isoformat(),
         # 営業落ち率＝NG ÷ 営業件数（返事待ち対応でのNGも含む）
         'visits': {**v, 'fall_rate': _ratio(v['ng'] + v['reply_ng'], v['sales_visits'])},
@@ -248,4 +248,18 @@ def analytics():
         },
         'products': products,
         'teleappt': t,
-    })
+    }
+
+
+@bp.get('/analytics')
+def analytics():
+    user, d = current_user(), db()
+    uid = _target_user(user, default_all=True)
+    today = _today()
+    date_from = _date_arg('date_from') or datetime.strptime(jst_month_range()[0] + '-01', '%Y-%m-%d').date()
+    date_to = _date_arg('date_to') or today
+    if date_to < date_from:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（date_to: 期間の終わりは始まり以降にしてください）')
+    if (date_to - date_from).days > 366:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（期間は1年以内で指定してください）')
+    return jsonify(actuals(d, uid, date_from, date_to))

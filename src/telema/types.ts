@@ -536,3 +536,40 @@ export type AnalyticsData = {
   products: { product_name: string; orders: number; units: number; gross_profit: number; avg_gross_profit: number | null; avg_amount: number | null }[];
   teleappt: { calls: number; rep_contacts: number; staff_contacts: number; scheduling: number; appointments: number };
 };
+
+/** カレンダーの予定（記録から自動で出る。種類はサーバーの agenda.py と同じ。再コールは「再コール」ページ） */
+export type AgendaKind = "first_visit" | "visit" | "followup" | "precheck";
+export type AgendaItem = {
+  kind: AgendaKind;
+  label: string;
+  id: number;
+  company_id: number;
+  company_name: string;
+  user_name: string | null;
+  at: string;
+  note: string | null;
+  done: boolean;
+  /** 営業フォローなら「返事待ち」「再営業」 */
+  detail: string | null;
+};
+export type CalendarDay = { day: string; is_workday: boolean; custom: boolean };
+/** user_id が null は全員分（稼働日は持たない） */
+export type CalendarData = { month: string; user_id: number | null; days: CalendarDay[]; items: AgendaItem[] };
+export type WorkdayResult = { user_id: number; day: string; is_workday: boolean; custom: boolean };
+/** 再コール一覧：次回架電が入っている施設。counts は範囲で絞る前の全体（week は期限超過を含む） */
+export type RecallItem = {
+  id: number;
+  company_name: string;
+  phone: string | null;
+  is_user: number;
+  at: string;
+  next_action: string | null;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
+  status_label: string | null;
+  status_category: string | null;
+  contact_name: string | null;
+  overdue: boolean;
+};
+export type RecallRange = "all" | "overdue" | "today" | "week";
+export type RecallsData = { user_id: number | null; range: RecallRange; counts: { overdue: number; today: number; week: number; total: number }; items: RecallItem[] };

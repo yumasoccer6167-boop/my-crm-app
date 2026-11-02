@@ -17,6 +17,9 @@ export const SALES_TERMS: { value: string; label: string }[] = [
 ];
 export const salesTermLabel = (t: string | null) => SALES_TERMS.find((x) => x.value === t)?.label ?? "";
 
+/** 架電の結果「初回訪問時間設定」。この結果と「時間設定」のときだけ、訪問する日時・事前確認日時を付けられる（名前で判定する） */
+export const FIRST_SCHEDULING_STATUS = "初回訪問時間設定";
+
 /** 訪問の内容が「初回訪問」のときだけ、結果（営業時間設定・見込みなし）を残せる（名前で判定する） */
 export const FIRST_PURPOSE_NAME = "初回訪問";
 export const FIRST_RESULTS: { value: FirstResult; label: string; on: string }[] = [

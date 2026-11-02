@@ -3,6 +3,7 @@ import json
 
 from flask import jsonify, request
 
+from .agenda import check_recall_slot
 from .common import ASSOCIATION, ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_CHAIR_EXISTS, ASSOCIATION_OFFICER_EXISTS, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, LATEST_VISIT_PURPOSE_ID, TAG_KINDS, VISIT_STATUS_COLUMN, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
@@ -533,6 +534,8 @@ def update_company(id):
     if 'assigned_user_id' in b and user['role'] == 'sales' and b['assigned_user_id'] not in (user['id'], None):
         raise ApiError(403, 'forbidden', '担当営業の変更は自分自身への割当のみ可能です')
     d = db()
+    if b.get('next_call_at') and b['next_call_at'] != before['next_call_at']:
+        check_recall_slot(d, (b['assigned_user_id'] if 'assigned_user_id' in b else before['assigned_user_id']) or user['id'], b['next_call_at'])
     if 'organization_name' in b:
         change_company_organization(d, user, before, b.pop('organization_name'))      # 会社名（法人名）。同じ会社名の施設どうしが姉妹園になる
     values = {**b, **derived_columns(b)}

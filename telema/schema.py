@@ -584,6 +584,17 @@ INSERT INTO telema_call_statuses (label, category, sort_order) VALUES ('初回�
     r"""
 INSERT INTO telema_visit_purposes (name, sort_order) VALUES ('取り直し', 40) ON CONFLICT (name) DO NOTHING;
 """,
+    # 26: 稼働日の設定。営業ごと・日ごとに「稼働日／休み」を持つ。設定のない日は平日（月〜金）が稼働日。数値分析の残り稼働日と、カレンダーの表示に使う
+    r"""
+CREATE TABLE telema_workdays (
+  user_id     INTEGER NOT NULL,
+  day         TEXT NOT NULL CHECK (day ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
+  is_workday  INTEGER NOT NULL CHECK (is_workday IN (0, 1)),
+  updated_by  INTEGER,
+  updated_at  TEXT NOT NULL DEFAULT telema_now(),
+  PRIMARY KEY (user_id, day)
+);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

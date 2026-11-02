@@ -7,7 +7,7 @@ import { ReplyEntry } from "./ReplyEntry";
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
-import { FIRST_PURPOSE_NAME, SALES_PURPOSE_NAME, VISIT_METHODS } from "../../lib/record-kind";
+import { FIRST_PURPOSE_NAME, FIRST_SCHEDULING_STATUS, SALES_PURPOSE_NAME, VISIT_METHODS } from "../../lib/record-kind";
 import { emptySales, FirstVisitFields, firstPayload, SalesDetailFields, salesPayload, type SalesDetail } from "./SalesDetailFields";
 import { defaultSection, saveLastSection } from "../../lib/section-pref";
 import { Button, Card, CATEGORY_STYLE, ErrorBox, inputCls } from "../ui";
@@ -95,7 +95,8 @@ export function CallEntry({
 
   const active = statuses.filter((s) => s.is_active && s.category !== "not_started");
   const isVisit = kind === "visit";
-  const isAppointment = !isVisit && statuses.find((s) => s.id === statusId)?.category === "appointment";
+  const chosenStatus = statuses.find((s) => s.id === statusId);
+  const isAppointment = !isVisit && (chosenStatus?.category === "appointment" || chosenStatus?.label === FIRST_SCHEDULING_STATUS);
   const atValid = !!fromLocalInput(recordedAt) && (!atEdited || new Date(recordedAt).getTime() <= Date.now() + 60_000);   // 未来の日時は記録できない
   const canSave = atValid && (isVisit ? note.trim() !== "" : note.trim() !== "" || statusId !== null);
 
@@ -319,7 +320,7 @@ export function CallEntry({
               <div className="mb-1 text-xs text-slate-600">事前確認日時</div>
               <input type="datetime-local" value={precheckAt} onChange={(e) => setPrecheckAt(e.target.value)} className={inputCls} />
             </div>
-            <p className="text-xs text-slate-500 sm:col-span-2">どちらも後から変えられます。保存すると、カレンダー・アジェンダ登録用の文面をコピーできます。</p>
+            <p className="text-xs text-slate-500 sm:col-span-2">どちらも後から変えられます。カレンダーに予定として出ます。{chosenStatus?.category === "appointment" && "保存すると、カレンダー・アジェンダ登録用の文面をコピーできます。"}</p>
           </div>
         )}
 

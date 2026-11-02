@@ -27,6 +27,9 @@ import type {
   AnalyticsData,
   AnalyticsPace,
   TargetsData,
+  CalendarData,
+  RecallsData,
+  WorkdayResult,
   Facet,
   AssociationGroup,
   AssociationPeers,
@@ -68,6 +71,9 @@ type Api = {
   "sales-scorecard": { $get: Call<SalesScorecardData> };
   analytics: { $get: Call<AnalyticsData>; pace: { $get: Call<AnalyticsPace> } };
   targets: { $get: Call<TargetsData>; ":user_id": { ":month": { $put: Call<{ user_id: number; month: string; gross_profit: number; units: number }> } } };
+  calendar: { $get: Call<CalendarData> };
+  recalls: { $get: Call<RecallsData> };
+  workdays: { ":user_id": { ":day": { $put: Call<WorkdayResult> } } };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
   "association-structure": { bulk: { $post: Call<{ updated: number }> } };
   "association-overview": { $get: Call<AssociationOverview>; ":id": { members: { $get: Call<AssociationMembers> } } };
