@@ -1,5 +1,6 @@
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, toLocalInput } from "../../lib/format";
+import { pToYen, yenToP } from "../../lib/points";
 import { FIRST_RESULTS, REPLY_RESULTS, SALES_RESULTS, SALES_TERMS } from "../../lib/record-kind";
 import type { CallLog, FirstResult, SalesResult } from "../../types";
 import { useApi } from "../../lib/useApi";
@@ -19,7 +20,7 @@ export function salesFromCall(c: CallLog): SalesDetail {
     result: c.sales_result ?? "",
     followupAt: toLocalInput(c.sales_followup_at),
     amount: numStr(c.sales_amount),
-    grossProfit: numStr(c.sales_gross_profit),
+    grossProfit: yenToP(c.sales_gross_profit),
     units: numStr(c.sales_units),
     firstResult: c.first_result ?? "",
     firstAt: toLocalInput(c.first_followup_at),
@@ -89,10 +90,10 @@ export function SalesDetailFields({ value, onChange, currentProduct }: { value: 
     )}
     {value.result === "won" && (
       <div className="grid gap-3 sm:grid-cols-3">
-        {([["amount", "受注金額（円）", "例：480000"], ["grossProfit", "粗利（円）", "例：150000"], ["units", "台数", "例：1"]] as const).map(([k, label, ph]) => (
+        {([["amount", "受注金額（円）", "例：480000"], ["grossProfit", "粗利（P）", "例：15（1万円＝1P）"], ["units", "台数", "例：1"]] as const).map(([k, label, ph]) => (
           <div key={k}>
             <div className="mb-1 text-xs text-slate-500">{label}</div>
-            <input type="number" min={0} step={1} inputMode="numeric" value={value[k]} onChange={(e) => onChange({ ...value, [k]: e.target.value })} placeholder={ph} className={inputCls} />
+            <input type="number" min={0} step={k === "grossProfit" ? "any" : 1} inputMode={k === "grossProfit" ? "decimal" : "numeric"} value={value[k]} onChange={(e) => onChange({ ...value, [k]: e.target.value })} placeholder={ph} className={inputCls} />
           </div>
         ))}
         <p className="text-xs text-slate-400 sm:col-span-3">即決受注で保存すると、契約情報にも自動で登録されます（商材の選択が必要です）。</p>
@@ -114,7 +115,7 @@ export function salesPayload(v: SalesDetail) {
     sales_result: v.result || null,
     sales_followup_at: followup ? fromLocalInput(v.followupAt) : null,
     sales_amount: won ? num(v.amount) : null,
-    sales_gross_profit: won ? num(v.grossProfit) : null,
+    sales_gross_profit: won ? pToYen(v.grossProfit) : null,
     sales_units: won ? num(v.units) : null,
   };
 }
@@ -202,10 +203,10 @@ export function ReplyFields({ value, onChange, currentProduct }: { value: SalesD
               ))}
             </select>
           </div>
-          {([["amount", "受注金額（円）", "例：480000"], ["grossProfit", "粗利（円）", "例：150000"], ["units", "台数", "例：1"]] as const).map(([k, label, ph]) => (
+          {([["amount", "受注金額（円）", "例：480000"], ["grossProfit", "粗利（P）", "例：15（1万円＝1P）"], ["units", "台数", "例：1"]] as const).map(([k, label, ph]) => (
             <div key={k}>
               <div className="mb-1 text-xs text-slate-500">{label}</div>
-              <input type="number" min={0} step={1} inputMode="numeric" value={value[k]} onChange={(e) => onChange({ ...value, [k]: e.target.value })} placeholder={ph} className={inputCls} />
+              <input type="number" min={0} step={k === "grossProfit" ? "any" : 1} inputMode={k === "grossProfit" ? "decimal" : "numeric"} value={value[k]} onChange={(e) => onChange({ ...value, [k]: e.target.value })} placeholder={ph} className={inputCls} />
             </div>
           ))}
           <p className="text-xs text-slate-400 sm:col-span-4">受注で保存すると、契約情報にも自動で登録されます（商材の選択が必要です）。</p>
@@ -223,7 +224,7 @@ export function replyPayload(v: SalesDetail) {
     sales_result: v.result || null,
     sales_product: won ? v.product || null : null,
     sales_amount: won ? num(v.amount) : null,
-    sales_gross_profit: won ? num(v.grossProfit) : null,
+    sales_gross_profit: won ? pToYen(v.grossProfit) : null,
     sales_units: won ? num(v.units) : null,
     sales_followup_at: v.result === "resales" ? fromLocalInput(v.followupAt) : null,
   };

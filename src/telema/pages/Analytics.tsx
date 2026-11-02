@@ -3,6 +3,7 @@ import type { AnalyticsPace } from "../types";
 import { api, unwrap } from "../lib/api";
 import { todayJst } from "../lib/format";
 import { useMasters } from "../lib/masters";
+import { fmtP, pToYen, yenToP } from "../lib/points";
 import { useApi } from "../lib/useApi";
 import { Button, Card, Empty, ErrorBox, inputCls, Loading, selectCls } from "../components/ui";
 
@@ -115,9 +116,9 @@ function Pace({ userId, canEdit }: { userId: number; canEdit: boolean }) {
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="今月の残り（粗利）" value={yen(data.month_remaining?.gross_profit)} sub={`目標 ${yen(data.target.gross_profit)} ／ 実績 ${yen(data.month_actual.gross_profit)}`} />
+            <Stat label="今月の残り（粗利）" value={fmtP(data.month_remaining?.gross_profit)} sub={`目標 ${fmtP(data.target.gross_profit)} ／ 実績 ${fmtP(data.month_actual.gross_profit)}`} />
             <Stat label="今月の残り（台数）" value={`${data.month_remaining?.units ?? 0}台`} sub={`目標 ${data.target.units}台 ／ 実績 ${data.month_actual.units}台`} />
-            <Stat label="今週の必要粗利" value={yen(data.week_need?.gross_profit)} sub={`今週の残り稼働日 ${data.week_workdays_left}日（月末まで ${data.month_workdays_left}日）`} />
+            <Stat label="今週の必要粗利" value={fmtP(data.week_need?.gross_profit)} sub={`今週の残り稼働日 ${data.week_workdays_left}日（月末まで ${data.month_workdays_left}日）`} />
             <Stat label="今週の必要台数" value={`${data.week_need?.units ?? 0}台`} />
           </div>
           {data.week_visits_need != null ? (
@@ -128,12 +129,12 @@ function Pace({ userId, canEdit }: { userId: number; canEdit: boolean }) {
             </div>
           ) : (
             <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              直近{data.basis.days}日の訪問と受注の実績がまだ足りないため、必要な訪問件数は出せません（訪問 {data.basis.visits}件・粗利 {yen(data.basis.gross_profit)}）。
+              直近{data.basis.days}日の訪問と受注の実績がまだ足りないため、必要な訪問件数は出せません（訪問 {data.basis.visits}件・粗利 {fmtP(data.basis.gross_profit)}）。
             </p>
           )}
           <p className="text-xs text-slate-400">
             今週の必要粗利・台数は、今月の残りを残りの稼働日で割って、今週の残り稼働日の分にしたものです（稼働日は平日）。
-            必要な訪問件数は、直近{data.basis.days}日の1訪問あたりの粗利（{yen(data.basis.gross_profit_per_visit)}）で割り戻しています。
+            必要な訪問件数は、直近{data.basis.days}日の1訪問あたりの粗利（{fmtP(data.basis.gross_profit_per_visit)}）で割り戻しています。
           </p>
         </>
       )}
@@ -142,7 +143,7 @@ function Pace({ userId, canEdit }: { userId: number; canEdit: boolean }) {
 }
 
 function TargetForm({ pace, canEdit, onSaved }: { pace: AnalyticsPace; canEdit: boolean; onSaved: () => void }) {
-  const [gp, setGp] = useState(pace.target ? String(pace.target.gross_profit) : "");
+  const [gp, setGp] = useState(pace.target ? yenToP(pace.target.gross_profit) : "");
   const [units, setUnits] = useState(pace.target ? String(pace.target.units) : "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,7 +161,7 @@ function TargetForm({ pace, canEdit, onSaved }: { pace: AnalyticsPace; canEdit: 
       await unwrap(
         api.targets[":user_id"][":month"].$put({
           param: { user_id: String(pace.user_id), month: pace.month },
-          json: { gross_profit: Math.max(0, Math.round(Number(gp) || 0)), units: Math.max(0, Math.round(Number(units) || 0)) },
+          json: { gross_profit: pToYen(gp) ?? 0, units: Math.max(0, Math.round(Number(units) || 0)) },
         }),
       );
       setSaved(true);
@@ -176,8 +177,8 @@ function TargetForm({ pace, canEdit, onSaved }: { pace: AnalyticsPace; canEdit: 
     <div className="flex flex-wrap items-end gap-3">
       <div className="text-sm font-medium text-slate-700">{pace.month} の目標</div>
       <label className="block">
-        <div className="mb-1 text-xs text-slate-500">粗利（円）</div>
-        <input type="number" min={0} step={1} inputMode="numeric" value={gp} disabled={!canEdit} onChange={(e) => setGp(e.target.value)} placeholder="例：3000000" className={`${inputCls} w-40`} />
+        <div className="mb-1 text-xs text-slate-500">粗利（P）</div>
+        <input type="number" min={0} step="any" inputMode="decimal" value={gp} disabled={!canEdit} onChange={(e) => setGp(e.target.value)} placeholder="例：300（1万円＝1P）" className={`${inputCls} w-40`} />
       </label>
       <label className="block">
         <div className="mb-1 text-xs text-slate-500">台数</div>
@@ -216,7 +217,7 @@ function Results({ from, to, who }: { from: string; to: string; who: string }) {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="受注件数" value={`${o.orders}件`} sub={`${o.corporations}法人`} />
           <Stat label="受注金額" value={yen(o.amount)} />
-          <Stat label="粗利" value={yen(o.gross_profit)} />
+          <Stat label="粗利" value={fmtP(o.gross_profit)} />
           <Stat label="台数" value={`${o.units}台`} />
           <Stat label="1台あたり受注単価" value={yen(o.unit_price)} sub="受注金額 ÷ 台数" />
           <Stat label="1法人あたり受注単価" value={yen(o.corporation_price)} sub="受注金額 ÷ 受注した法人数" />
@@ -243,8 +244,8 @@ function Results({ from, to, who }: { from: string; to: string; who: string }) {
                     <td className="px-2 py-2 text-left">{p.product_name}</td>
                     <td className="px-2 py-2">{p.orders}</td>
                     <td className="px-2 py-2">{p.units}</td>
-                    <td className="px-2 py-2">{yen(p.gross_profit)}</td>
-                    <td className="px-2 py-2 font-medium">{yen(p.avg_gross_profit)}</td>
+                    <td className="px-2 py-2">{fmtP(p.gross_profit)}</td>
+                    <td className="px-2 py-2 font-medium">{fmtP(p.avg_gross_profit)}</td>
                     <td className="px-2 py-2">{yen(p.avg_amount)}</td>
                   </tr>
                 ))}

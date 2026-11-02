@@ -1,6 +1,7 @@
 // 記録の種類（架電／訪問）と、訪問の方法（訪問／Zoom）の表示名・絞り込み。
 import type { CallLog, FirstResult, SalesResult, VisitMethod } from "../types";
 import { fmtDateTime } from "./format";
+import { fmtP } from "./points";
 
 export const VISIT_METHODS: { value: VisitMethod; label: string }[] = [
   { value: "visit", label: "訪問" },
@@ -59,7 +60,7 @@ export function salesSummary(c: SalesFields, reply = false): string {
     c.sales_term ? `期間 ${salesTermLabel(c.sales_term)}` : "",
     c.sales_result ? `結果 ${salesResultLabel(c.sales_result, reply)}${c.sales_followup_at ? `（${fmtDateTime(c.sales_followup_at)}）` : ""}` : "",
     c.sales_amount != null ? `受注金額 ${c.sales_amount.toLocaleString()}円` : "",
-    c.sales_gross_profit != null ? `粗利 ${c.sales_gross_profit.toLocaleString()}円` : "",
+    c.sales_gross_profit != null ? `粗利 ${fmtP(c.sales_gross_profit)}` : "",
     c.sales_units != null ? `${c.sales_units}台` : "",
   ].filter(Boolean).join(" ／ ");
 }

@@ -4,6 +4,7 @@ import type { FirstResult, SalesResult, SalesResultItem, SalesScoreRow } from ".
 import { api, unwrap } from "../lib/api";
 import { fmtDateTime, todayJst } from "../lib/format";
 import { useMasters } from "../lib/masters";
+import { fmtP } from "../lib/points";
 import { FIRST_RESULTS, firstResultLabel, SALES_RESULTS, salesResultLabel, salesTermLabel } from "../lib/record-kind";
 import { useApi } from "../lib/useApi";
 import { Card, Empty, ErrorBox, Loading, selectCls } from "../components/ui";
@@ -208,7 +209,7 @@ function SalesCells({ r }: { r: SalesResultItem }) {
         )}
       </td>
       <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{yen(r.sales_amount)}</td>
-      <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{yen(r.sales_gross_profit)}</td>
+      <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{fmtP(r.sales_gross_profit)}</td>
       <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{r.sales_units ?? "—"}</td>
     </>
   );
@@ -282,7 +283,7 @@ function Scorecard({ query }: { query: { date_from: string; date_to: string; use
     { label: "再営業", get: (r) => String(r.resales + r.reply_resales) },
     { label: "受注率", get: (r) => rate(r.won + r.reply_won, r.sales_visits) },
     { label: "受注金額", get: (r) => yen(r.amount) },
-    { label: "粗利", get: (r) => yen(r.gross_profit) },
+    { label: "粗利", get: (r) => fmtP(r.gross_profit) },
     { label: "台数", get: (r) => String(r.units) },
   ];
   return (

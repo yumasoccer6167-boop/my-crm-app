@@ -3,6 +3,7 @@ import type { Contract } from "../../types";
 import { api, unwrap } from "../../lib/api";
 import { CONTRACT_ISSUES } from "../../shared/constants";
 import { fmtDate, todayJst } from "../../lib/format";
+import { fmtP, pToYen, yenToP } from "../../lib/points";
 import { useMasters } from "../../lib/masters";
 import { useApi } from "../../lib/useApi";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../ui";
@@ -51,7 +52,7 @@ export function ContractsCard({
             issues: c.issues ?? [],
             memo: c.memo ?? "",
             amount: c.amount == null ? "" : String(c.amount),
-            gross_profit: c.gross_profit == null ? "" : String(c.gross_profit),
+            gross_profit: yenToP(c.gross_profit),
             units: c.units == null ? "" : String(c.units),
           }
         : {
@@ -93,7 +94,7 @@ export function ContractsCard({
       issues: draft.issues,
       memo: draft.memo.trim() || null,
       amount: num(draft.amount),
-      gross_profit: num(draft.gross_profit),
+      gross_profit: pToYen(draft.gross_profit),
       units: num(draft.units),
     };
     setSaving(true);
@@ -194,10 +195,10 @@ export function ContractsCard({
           </datalist>
         </label>
         <div className="col-span-2 grid grid-cols-3 gap-2">
-          {([["amount", "受注金額（円）"], ["gross_profit", "粗利（円）"], ["units", "台数"]] as const).map(([k, label]) => (
+          {([["amount", "受注金額（円）"], ["gross_profit", "粗利（P）"], ["units", "台数"]] as const).map(([k, label]) => (
             <label key={k} className="block">
               <div className="mb-1 text-xs text-slate-500">{label}</div>
-              <input type="number" min={0} step={1} inputMode="numeric" className={inputCls} value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
+              <input type="number" min={0} step={k === "gross_profit" ? "any" : 1} inputMode={k === "gross_profit" ? "decimal" : "numeric"} className={inputCls} value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
             </label>
           ))}
         </div>
@@ -289,7 +290,7 @@ export function ContractsCard({
               </div>
               {(c.amount != null || c.gross_profit != null || c.units != null) && (
                 <div className="text-xs text-slate-500">
-                  {[c.amount != null ? `受注金額 ${c.amount.toLocaleString()}円` : "", c.gross_profit != null ? `粗利 ${c.gross_profit.toLocaleString()}円` : "", c.units != null ? `${c.units}台` : ""].filter(Boolean).join(" ／ ")}
+                  {[c.amount != null ? `受注金額 ${c.amount.toLocaleString()}円` : "", c.gross_profit != null ? `粗利 ${fmtP(c.gross_profit)}` : "", c.units != null ? `${c.units}台` : ""].filter(Boolean).join(" ／ ")}
                 </div>
               )}
               {(c.issues ?? []).length > 0 && (
