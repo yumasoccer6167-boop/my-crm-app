@@ -30,6 +30,7 @@ import type {
   CalendarData,
   RecallsData,
   WorkdayResult,
+  DailyReportData,
   Facet,
   AssociationGroup,
   AssociationPeers,
@@ -74,6 +75,7 @@ type Api = {
   calendar: { $get: Call<CalendarData> };
   recalls: { $get: Call<RecallsData> };
   workdays: { ":user_id": { ":day": { $put: Call<WorkdayResult> } } };
+  "daily-report": { $get: Call<DailyReportData> };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
   "association-structure": { bulk: { $post: Call<{ updated: number }> } };
   "association-overview": { $get: Call<AssociationOverview>; ":id": { members: { $get: Call<AssociationMembers> } } };

@@ -573,3 +573,5 @@ export type RecallItem = {
 };
 export type RecallRange = "all" | "overdue" | "today" | "week";
 export type RecallsData = { user_id: number | null; range: RecallRange; counts: { overdue: number; today: number; week: number; total: number }; items: RecallItem[] };
+/** 日報。user_ids は対象メンバー（省略時は自分と同じ部署）、department は見出しに入れた部署名 */
+export type DailyReportData = { date: string; user_ids: number[]; members: { id: number; name: string }[]; department: string; next_workday: string; plans: number; text: string };

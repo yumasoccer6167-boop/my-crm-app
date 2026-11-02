@@ -11,6 +11,7 @@ const NAV = [
   { to: "/analytics", label: "数値分析" },
   { to: "/calendar", label: "カレンダー" },
   { to: "/recalls", label: "再コール" },
+  { to: "/report", label: "日報" },
   { to: "/visits", label: "訪問ルート" },
   { to: "/import", label: "取り込み" },
   { to: "/settings", label: "設定" },
