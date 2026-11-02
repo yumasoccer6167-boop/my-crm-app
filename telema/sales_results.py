@@ -1,7 +1,7 @@
 """営業結果管理・初回訪問結果管理・営業成績表。訪問記録（訪問の内容が「営業」「初回訪問」「ユーザー訪問」）を、登録すると自動でそのまま一覧・集計に反映する（別に登録しない）。
- - 営業結果管理：訪問の内容が「営業」の記録（商材・結果・次回日時・受注金額・粗利・台数）
+ - 営業結果管理：訪問の内容が「営業」の記録と、返事待ち対応の記録（商材・結果・次回日時・受注金額・粗利・台数）
  - 初回訪問結果管理：訪問の内容が「初回訪問」の記録（結果：営業時間設定・見込みなし）。その後に同じ施設で営業の訪問があったか・受注したかも添える
- - 営業成績表：営業担当ごとの、初回訪問・ユーザー訪問・営業の件数と、営業の結果の内訳、受注の金額・粗利・台数
+ - 営業成績表：営業担当ごとの、初回訪問・ユーザー訪問・営業の件数と、営業の結果の内訳（返事待ち対応の結果も含む）、受注の金額・粗利・台数
  一般（sales）は自分の記録だけ、マネージャー・管理者は全員分（担当者で絞り込める）"""
 from datetime import datetime, timedelta, timezone
 
@@ -65,7 +65,9 @@ def sales_results():
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（result の値が正しくありません）')
     date_from, date_to, start, end = _range()
     user_sql, user_params = _user_filter(user)
-    where = ["cl.is_active = 1", "cl.record_type = 'visit'", 'vp.name = %s', 'cl.called_at::timestamptz >= %s', 'cl.called_at::timestamptz < %s', 'c.is_active = 1', user_sql]
+    # 営業結果管理には、返事待ち対応の記録も入れる（返事待ちのその後の、受注・NG・再営業）
+    kind_sql = "(cl.record_type = 'reply' OR (cl.record_type = 'visit' AND vp.name = %s))" if kind == 'sales' else "(cl.record_type = 'visit' AND vp.name = %s)"
+    where = ["cl.is_active = 1", kind_sql, 'cl.called_at::timestamptz >= %s', 'cl.called_at::timestamptz < %s', 'c.is_active = 1', user_sql]
     params = [KINDS[kind], start, end, *user_params]
     if result:
         col = 'cl.sales_result' if kind == 'sales' else 'cl.first_result'
@@ -75,16 +77,17 @@ def sales_results():
     clause = ' AND '.join(where)
     d = db()
     rows = d.all(
-        f'''SELECT cl.id, cl.company_id, c.company_name, cl.called_at, cl.user_id, u.display_name AS user_name, cl.visit_method, cl.raw_note,
+        f'''SELECT cl.id, cl.record_type, cl.company_id, c.company_name, cl.called_at, cl.user_id, u.display_name AS user_name, cl.visit_method, cl.raw_note,
                    cl.sales_product, cl.sales_monthly_fee, cl.sales_term, cl.sales_result, cl.sales_followup_at,
                    cl.sales_amount, cl.sales_gross_profit, cl.sales_units, cl.first_result, cl.first_followup_at,
+                   (SELECT r.sales_result FROM telema_call_logs r WHERE r.reply_to_id = cl.id AND r.is_active = 1 ORDER BY r.id DESC LIMIT 1) AS replied_result,
                    (SELECT COUNT(*) FROM telema_call_logs n JOIN telema_visit_purposes nv ON nv.id = n.visit_purpose_id AND nv.name = '営業'
                      WHERE n.company_id = cl.company_id AND n.is_active = 1 AND n.record_type = 'visit' AND n.called_at > cl.called_at) AS later_sales_visits,
                    EXISTS (SELECT 1 FROM telema_call_logs n JOIN telema_visit_purposes nv ON nv.id = n.visit_purpose_id AND nv.name = '営業'
                             WHERE n.company_id = cl.company_id AND n.is_active = 1 AND n.record_type = 'visit' AND n.called_at > cl.called_at
                               AND n.sales_result = 'won') AS later_won
               FROM telema_call_logs cl
-              JOIN telema_visit_purposes vp ON vp.id = cl.visit_purpose_id
+              LEFT JOIN telema_visit_purposes vp ON vp.id = cl.visit_purpose_id
               JOIN telema_companies c ON c.id = cl.company_id
               LEFT JOIN users u ON u.id = cl.user_id
              WHERE {clause}
@@ -106,17 +109,20 @@ def sales_scorecard():
                    COUNT(*) FILTER (WHERE vp.name = '営業')::int AS sales_visits,
                    COUNT(*) FILTER (WHERE vp.name = '初回訪問' AND cl.first_result = 'scheduled')::int AS first_scheduled,
                    COUNT(*) FILTER (WHERE vp.name = '初回訪問' AND cl.first_result = 'no_prospect')::int AS first_no_prospect,
-                   COUNT(*) FILTER (WHERE vp.name = '営業' AND cl.sales_result = 'won')::int AS won,
-                   COUNT(*) FILTER (WHERE vp.name = '営業' AND cl.sales_result = 'waiting')::int AS waiting,
-                   COUNT(*) FILTER (WHERE vp.name = '営業' AND cl.sales_result = 'ng')::int AS ng,
-                   COUNT(*) FILTER (WHERE vp.name = '営業' AND cl.sales_result = 'resales')::int AS resales,
+                   COUNT(*) FILTER (WHERE cl.record_type = 'visit' AND vp.name = '営業' AND cl.sales_result = 'won')::int AS won,
+                   COUNT(*) FILTER (WHERE cl.record_type = 'reply' AND cl.sales_result = 'won')::int AS reply_won,
+                   COUNT(*) FILTER (WHERE cl.record_type = 'reply' AND cl.sales_result = 'ng')::int AS reply_ng,
+                   COUNT(*) FILTER (WHERE cl.record_type = 'reply' AND cl.sales_result = 'resales')::int AS reply_resales,
+                   COUNT(*) FILTER (WHERE cl.record_type = 'visit' AND vp.name = '営業' AND cl.sales_result = 'waiting')::int AS waiting,
+                   COUNT(*) FILTER (WHERE cl.record_type = 'visit' AND vp.name = '営業' AND cl.sales_result = 'ng')::int AS ng,
+                   COUNT(*) FILTER (WHERE cl.record_type = 'visit' AND vp.name = '営業' AND cl.sales_result = 'resales')::int AS resales,
                    COALESCE(SUM(cl.sales_amount) FILTER (WHERE cl.sales_result = 'won'), 0)::bigint AS amount,
                    COALESCE(SUM(cl.sales_gross_profit) FILTER (WHERE cl.sales_result = 'won'), 0)::bigint AS gross_profit,
                    COALESCE(SUM(cl.sales_units) FILTER (WHERE cl.sales_result = 'won'), 0)::bigint AS units
               FROM telema_call_logs cl
-              JOIN telema_visit_purposes vp ON vp.id = cl.visit_purpose_id
+              LEFT JOIN telema_visit_purposes vp ON vp.id = cl.visit_purpose_id
               JOIN telema_companies c ON c.id = cl.company_id AND c.is_active = 1
               LEFT JOIN users u ON u.id = cl.user_id
-             WHERE cl.is_active = 1 AND cl.record_type = 'visit' AND cl.called_at::timestamptz >= %s AND cl.called_at::timestamptz < %s AND {user_sql}
+             WHERE cl.is_active = 1 AND cl.record_type IN ('visit', 'reply') AND cl.called_at::timestamptz >= %s AND cl.called_at::timestamptz < %s AND {user_sql}
              GROUP BY cl.user_id, u.display_name ORDER BY gross_profit DESC, won DESC, user_name''', [start, end, *user_params])
     return jsonify({'items': rows, 'date_from': date_from.isoformat(), 'date_to': date_to.isoformat()})

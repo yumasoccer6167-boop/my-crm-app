@@ -7,8 +7,8 @@ import { QUICK } from "./CallEntry";
 import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput, isOverdue, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
-import { callsOfKind, FIRST_PURPOSE_NAME, firstSummary, KIND_FILTERS, type KindFilter, SALES_PURPOSE_NAME, salesSummary, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
-import { FirstVisitFields, firstPayload, SalesDetailFields, salesFromCall, salesPayload, type SalesDetail } from "./SalesDetailFields";
+import { callsOfKind, FIRST_PURPOSE_NAME, firstSummary, KIND_FILTERS, type KindFilter, SALES_PURPOSE_NAME, salesResultLabel, salesSummary, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
+import { FirstVisitFields, firstPayload, ReplyFields, replyPayload, SalesDetailFields, salesFromCall, salesPayload, type SalesDetail } from "./SalesDetailFields";
 import { ALL_TAB, callsInTab, timelineTabs } from "../../lib/timeline-tabs";
 import { Button, Card, CATEGORY_STYLE, Empty, ErrorBox, inputCls, StatusBadge } from "../ui";
 
@@ -16,12 +16,13 @@ const KIND_BADGE: Record<string, string> = {
   call: "bg-slate-100 text-slate-600 ring-slate-200",
   visit: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   zoom: "bg-violet-50 text-violet-700 ring-violet-200",
+  reply: "bg-amber-50 text-amber-800 ring-amber-200",
 };
 
 /** 記録の種類のバッジ（架電／訪問／Zoom） */
 function KindBadge({ call }: { call: CallLog }) {
-  const key = call.record_type === "visit" ? (call.visit_method ?? "visit") : "call";
-  const label = call.record_type === "visit" ? visitMethodLabel(call.visit_method) || "訪問" : "架電";
+  const key = call.record_type === "visit" ? (call.visit_method ?? "visit") : call.record_type;
+  const label = call.record_type === "visit" ? visitMethodLabel(call.visit_method) || "訪問" : call.record_type === "reply" ? "返事待ち対応" : "架電";
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${KIND_BADGE[key]}`}>{label}</span>;
 }
 
@@ -62,8 +63,10 @@ function CallEditForm({
 
   // 無効になったステータスでも、この履歴が今そのステータスなら選べるように残す
   const isVisit = call.record_type === "visit";
+  const isReply = call.record_type === "reply";
+  const isCall = !isVisit && !isReply;
   // 結果が「時間設定」のときだけ、訪問する日時・事前確認日時を設定できる
-  const isAppointment = !isVisit && statuses.find((s) => s.id === statusId)?.category === "appointment";
+  const isAppointment = isCall && statuses.find((s) => s.id === statusId)?.category === "appointment";
   const options = statuses.filter((s) => (s.is_active && s.category !== "not_started") || s.id === call.result_status_id);
   const noteChanged = note !== call.raw_note;
   const hasAI = call.ai_status === "done" || !!call.ai_summary;
@@ -85,7 +88,9 @@ function CallEditForm({
             called_at: iso,
             contact_id: contactId,
             ...(userId != null && userId !== call.user_id ? { user_id: userId } : {}),
-            ...(isVisit
+            ...(isReply
+              ? replyPayload(sales)
+              : isVisit
               ? { visit_method: visitMethod, ...(purposeId !== call.visit_purpose_id ? { visit_purpose_id: purposeId } : {}), ...(isSalesVisit ? salesPayload(sales) : {}), ...(isFirstVisit ? firstPayload(sales) : {}) }
               : { result_status_id: statusId, visit_at: isAppointment ? fromLocalInput(visitAt) : null, precheck_at: isAppointment ? fromLocalInput(precheckAt) : null }),
             ...(isUser ? { section_id: sectionId } : {}),
@@ -105,7 +110,7 @@ function CallEditForm({
     <div className="mt-2 space-y-3 rounded-md bg-slate-50 p-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <div className="mb-1 text-xs text-slate-500">{isVisit ? "訪問日時" : "架電日時"}</div>
+          <div className="mb-1 text-xs text-slate-500">{isVisit ? "訪問日時" : isReply ? "対応日時" : "架電日時"}</div>
           <input type="datetime-local" value={calledAt} onChange={(e) => setCalledAt(e.target.value)} className={inputCls} />
         </div>
         <div>
@@ -122,7 +127,7 @@ function CallEditForm({
       </div>
 
       <div>
-        <div className="mb-1 text-xs text-slate-500">担当者（この記録を誰の{isVisit ? "訪問" : "架電"}にするか）</div>
+        <div className="mb-1 text-xs text-slate-500">担当者（この記録を誰の{isVisit ? "訪問" : isReply ? "対応" : "架電"}にするか）</div>
         <select value={userId ?? ""} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : null)} className={`${inputCls} sm:max-w-xs`}>
           {call.user_id == null && <option value="">（未設定）</option>}
           {users.map((u) => (
@@ -179,6 +184,7 @@ function CallEditForm({
 
       {isSalesVisit && <SalesDetailFields value={sales} onChange={setSales} currentProduct={call.sales_product} />}
       {isFirstVisit && <FirstVisitFields value={sales} onChange={setSales} />}
+      {isReply && <ReplyFields value={sales} onChange={setSales} currentProduct={call.sales_product} />}
 
       {isVisit && (
         <div>
@@ -198,7 +204,7 @@ function CallEditForm({
         </div>
       )}
 
-      {!isVisit && (
+      {isCall && (
       <div>
         <div className="mb-1 text-xs text-slate-500">結果</div>
         <div className="flex flex-wrap gap-1.5">
@@ -229,7 +235,7 @@ function CallEditForm({
         </div>
       )}
 
-      {!isVisit && (
+      {isCall && (
         <div>
           <div className="mb-1 text-xs text-slate-500">次回架電（施設の予定。ここで変えると施設の次回架電が変わります）</div>
           <div className="mb-1.5 flex flex-wrap gap-1">
@@ -251,12 +257,12 @@ function CallEditForm({
       <div>
         <div className="mb-1 text-xs text-slate-500">メモ</div>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={4} className={`${inputCls} resize-y leading-relaxed`} />
-        {noteChanged && hasAI && !isVisit && <p className="mt-1 text-xs text-amber-700">メモを変えると、この履歴のAI要約は消えます（保存後に「AIで整理」し直せます）。</p>}
+        {noteChanged && hasAI && isCall && <p className="mt-1 text-xs text-amber-700">メモを変えると、この履歴のAI要約は消えます（保存後に「AIで整理」し直せます）。</p>}
       </div>
 
       <p className="text-xs text-slate-500">
-        {isVisit
-          ? "訪問の記録は、施設のステータス・次回架電には影響しません。"
+        {isVisit || isReply
+          ? "訪問・返事待ち対応の記録は、施設のステータス・次回架電には影響しません。"
           : "結果の付いた記録で一番新しいものの結果を直すと、施設のステータスもその結果に変わります（古い記録なら変わりません）。次回架電は、変えたときだけ施設の予定に反映されます。"}
       </p>
       {error && <ErrorBox message={`保存できませんでした：${error}`} />}
@@ -495,7 +501,14 @@ export function Timeline({
                     </p>
                   )}
                   {firstSummary(cl) && <p className="mt-1 rounded bg-sky-50 px-2 py-1 text-sm text-sky-900">初回訪問の結果：{firstSummary(cl)}</p>}
-                  {salesSummary(cl) && <p className="mt-1 rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-900">営業：{salesSummary(cl)}</p>}
+                  {salesSummary(cl, cl.record_type === "reply") && (
+                    <p className="mt-1 rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-900">
+                      {cl.record_type === "reply" ? "返事待ち対応" : "営業"}：{salesSummary(cl, cl.record_type === "reply")}
+                    </p>
+                  )}
+                  {cl.record_type === "visit" && cl.sales_result === "waiting" && (
+                    <p className="mt-1 text-xs text-amber-700">{cl.replied_result ? `返事待ち → 対応済み（${salesResultLabel(cl.replied_result, true)}）` : "返事待ち中（「返事待ち対応」から結果を記録できます）"}</p>
+                  )}
                   {cl.raw_note && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{cl.raw_note}</p>}
                   {cl.result_category === "appointment" && (
                     <div className="mt-1">

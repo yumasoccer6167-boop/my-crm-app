@@ -3,6 +3,7 @@ import type { CallLog, Company, Contact, RecordType, VisitMethod } from "../../t
 import type { CallExtraction } from "../../types";
 import { AIResult } from "./AIResult";
 import { AppointmentCopy } from "./AppointmentCopy";
+import { ReplyEntry } from "./ReplyEntry";
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
@@ -22,6 +23,7 @@ export const QUICK = [
 const KINDS: { value: RecordType; label: string }[] = [
   { value: "call", label: "架電結果" },
   { value: "visit", label: "訪問記録" },
+  { value: "reply", label: "返事待ち対応" },
 ];
 
 /**
@@ -146,6 +148,34 @@ export function CallEntry({
     }
   }
 
+  const tabs = (
+    <div role="tablist" aria-label="記録の種類" className="inline-flex rounded-md bg-slate-100 p-0.5">
+      {KINDS.map((k) => (
+        <button
+          key={k.value}
+          type="button"
+          role="tab"
+          aria-selected={kind === k.value}
+          onClick={() => setKind(k.value)}
+          className={`rounded px-3 py-1 text-sm font-medium ${kind === k.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+        >
+          {k.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (kind === "reply") {
+    return (
+      <Card title="返事待ち対応を入力">
+        <div className="space-y-3">
+          {tabs}
+          <ReplyEntry companyId={companyId} contacts={contacts} onSaved={onSaved} />
+        </div>
+      </Card>
+    );
+  }
+
   const recordedAtField = (
     <div>
       <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
@@ -181,20 +211,7 @@ export function CallEntry({
   return (
     <Card title={isVisit ? "訪問記録を入力" : "架電結果を入力"}>
       <div className="space-y-3">
-        <div role="tablist" aria-label="記録の種類" className="inline-flex rounded-md bg-slate-100 p-0.5">
-          {KINDS.map((k) => (
-            <button
-              key={k.value}
-              type="button"
-              role="tab"
-              aria-selected={kind === k.value}
-              onClick={() => setKind(k.value)}
-              className={`rounded px-3 py-1 text-sm font-medium ${kind === k.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-            >
-              {k.label}
-            </button>
-          ))}
-        </div>
+        {tabs}
 
         <textarea
           value={note}

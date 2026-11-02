@@ -8,6 +8,7 @@ const NAV = [
   { to: "/network", label: "つながり" },
   { to: "/associations", label: "協会" },
   { to: "/results", label: "営業結果" },
+  { to: "/analytics", label: "数値分析" },
   { to: "/visits", label: "訪問ルート" },
   { to: "/import", label: "取り込み" },
   { to: "/settings", label: "設定" },

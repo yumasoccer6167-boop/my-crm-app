@@ -36,17 +36,25 @@ export const SALES_RESULTS: { value: SalesResult; label: string; on: string }[] 
   { value: "ng", label: "NG", on: "bg-rose-600 text-white ring-rose-600" },
   { value: "resales", label: "再営業", on: "bg-indigo-600 text-white ring-indigo-600" },
 ];
-export const salesResultLabel = (r: SalesResult | null) => SALES_RESULTS.find((x) => x.value === r)?.label ?? "";
+/** 結果の表示名。返事待ち対応（reply）の「受注」は、営業の訪問の「即決受注」と区別して「受注」と出す */
+export const salesResultLabel = (r: SalesResult | null, reply = false) => (reply && r === "won" ? "受注" : (SALES_RESULTS.find((x) => x.value === r)?.label ?? ""));
+
+/** 返事待ち対応で選べる結果（受注・NG・再営業） */
+export const REPLY_RESULTS: { value: SalesResult; label: string; on: string }[] = [
+  { value: "won", label: "受注", on: "bg-emerald-600 text-white ring-emerald-600" },
+  { value: "ng", label: "NG", on: "bg-rose-600 text-white ring-rose-600" },
+  { value: "resales", label: "再営業", on: "bg-indigo-600 text-white ring-indigo-600" },
+];
 
 type SalesFields = Pick<CallLog, "sales_product" | "sales_monthly_fee" | "sales_term" | "sales_result" | "sales_followup_at" | "sales_amount" | "sales_gross_profit" | "sales_units">;
 
 /** 営業の内容（商材・月額・期間・結果）を1行の文にする。何も無ければ空 */
-export function salesSummary(c: SalesFields): string {
+export function salesSummary(c: SalesFields, reply = false): string {
   return [
     c.sales_product,
     c.sales_monthly_fee != null ? `月額 ${c.sales_monthly_fee.toLocaleString()}円` : "",
     c.sales_term ? `期間 ${salesTermLabel(c.sales_term)}` : "",
-    c.sales_result ? `結果 ${salesResultLabel(c.sales_result)}${c.sales_followup_at ? `（${fmtDateTime(c.sales_followup_at)}）` : ""}` : "",
+    c.sales_result ? `結果 ${salesResultLabel(c.sales_result, reply)}${c.sales_followup_at ? `（${fmtDateTime(c.sales_followup_at)}）` : ""}` : "",
     c.sales_amount != null ? `受注金額 ${c.sales_amount.toLocaleString()}円` : "",
     c.sales_gross_profit != null ? `粗利 ${c.sales_gross_profit.toLocaleString()}円` : "",
     c.sales_units != null ? `${c.sales_units}台` : "",
@@ -54,12 +62,13 @@ export function salesSummary(c: SalesFields): string {
 }
 
 /** タイムラインの種類フィルタ。all＝すべて */
-export type KindFilter = "all" | "call" | "visit";
+export type KindFilter = "all" | "call" | "visit" | "reply";
 
 export const KIND_FILTERS: { value: KindFilter; label: string }[] = [
   { value: "all", label: "すべて" },
   { value: "call", label: "架電" },
   { value: "visit", label: "訪問" },
+  { value: "reply", label: "返事待ち対応" },
 ];
 
 export const callsOfKind = (calls: CallLog[], kind: KindFilter) => (kind === "all" ? calls : calls.filter((c) => c.record_type === kind));

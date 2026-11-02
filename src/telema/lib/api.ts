@@ -24,6 +24,9 @@ import type {
   MonthlyCallsData,
   SalesResultsData,
   SalesScorecardData,
+  AnalyticsData,
+  AnalyticsPace,
+  TargetsData,
   Facet,
   AssociationGroup,
   AssociationPeers,
@@ -63,6 +66,8 @@ type Api = {
   dashboard: { $get: Call<DashboardData>; "calls-monthly": { $get: Call<MonthlyCallsData> } };
   "sales-results": { $get: Call<SalesResultsData> };
   "sales-scorecard": { $get: Call<SalesScorecardData> };
+  analytics: { $get: Call<AnalyticsData>; pace: { $get: Call<AnalyticsPace> } };
+  targets: { $get: Call<TargetsData>; ":user_id": { ":month": { $put: Call<{ user_id: number; month: string; gross_profit: number; units: number }> } } };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
   "association-structure": { bulk: { $post: Call<{ updated: number }> } };
   "association-overview": { $get: Call<AssociationOverview>; ":id": { members: { $get: Call<AssociationMembers> } } };
@@ -157,6 +162,7 @@ function endpoint(segments: string[]): unknown {
       if (key === "$get") return (a?: Args) => request("GET", segments, a);
       if (key === "$post") return (a?: Args) => request("POST", segments, a);
       if (key === "$patch") return (a?: Args) => request("PATCH", segments, a);
+      if (key === "$put") return (a?: Args) => request("PUT", segments, a);
       return endpoint([...segments, key]);
     },
   });

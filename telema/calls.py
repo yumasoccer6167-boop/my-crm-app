@@ -21,6 +21,9 @@ _FOLLOWUP_RESULTS = ('waiting', 'resales')
 FIRST_PURPOSE_NAME = '初回訪問'
 FIRST_RESULTS = ['scheduled', 'no_prospect']
 _FIRST_FIELDS = {'first_result': '結果', 'first_followup_at': '営業の日時'}
+# 返事待ち対応（record_type = reply）。営業で「返事待ち」にした訪問への、その後の対応。結果は 受注（won）・NG（ng）・再営業（resales）の3つで、営業の訪問記録と同じ列（sales_*）に持つ。
+# 受注は商材・受注金額・粗利・台数、再営業は次回日時を付けられる。どの返事待ちへの対応かは reply_to_id（省略すると、その施設で対応していない一番新しい返事待ち）
+REPLY_RESULTS = ('won', 'ng', 'resales')
 _WON_FIELDS = {'sales_amount': '受注金額', 'sales_gross_profit': '粗利', 'sales_units': '台数'}
 
 
@@ -51,7 +54,9 @@ CALL_BODY = {
     'first_result': Enum(FIRST_RESULTS, nullable=True, optional=True),
     'first_followup_at': IsoDatetime(nullable=True, optional=True),
     # 記録の種類。省略は架電。訪問（visit）のときは方法（visit＝訪問／zoom）が必須
-    'record_type': Enum(['call', 'visit'], default='call'),
+    'record_type': Enum(['call', 'visit', 'reply'], default='call'),
+    # 返事待ち対応のときの、対応する返事待ちの訪問記録
+    'reply_to_id': Int(nullable=True, optional=True),
     'visit_method': Enum(['visit', 'zoom'], nullable=True, optional=True),
     # 「時間設定」の結果のときの、訪問する日時と事前確認の日時（任意）
     'visit_at': IsoDatetime(nullable=True, optional=True),
@@ -64,7 +69,8 @@ _APPOINTMENT_ONLY = {'visit_at': '訪問日時', 'precheck_at': '事前確認日
 _CALL_ONLY = {'result_status_id': '結果', 'next_call_at': '次回架電', 'next_action': '次回アクション', 'phone_number': '電話番号', **{k: v for k, v in _APPOINTMENT_ONLY.items()}}
 
 CALL_SELECT = '''SELECT cl.*, ct.name AS contact_name, u.display_name AS user_name, s.label AS result_label, s.category AS result_category,
-    sec.name AS section_name, vp.name AS visit_purpose_name
+    sec.name AS section_name, vp.name AS visit_purpose_name,
+    (SELECT r.sales_result FROM telema_call_logs r WHERE r.reply_to_id = cl.id AND r.is_active = 1 ORDER BY r.id DESC LIMIT 1) AS replied_result
   FROM telema_call_logs cl
   LEFT JOIN telema_contacts ct ON ct.id = cl.contact_id
   LEFT JOIN users u ON u.id = cl.user_id
@@ -120,7 +126,7 @@ def _sync_won_contract(d, user, call_id):
     """結果が「即決受注」の営業の訪問記録から、契約情報を1件作る（受注金額・粗利・台数も引き継ぐ）。作った契約は元の記録と結びつけ、
     記録の商材・日付・金額などを直したら契約にも反映する。契約を画面から外した（無効にした）あとは作り直さない。結果を即決受注から変えても、契約は消さない"""
     call = d.first('SELECT * FROM telema_call_logs WHERE id = %s AND is_active = 1', (call_id,))
-    if not call or call['record_type'] != 'visit' or call['sales_result'] != 'won':
+    if not call or call['record_type'] not in ('visit', 'reply') or call['sales_result'] != 'won':
         return
     day = datetime.fromisoformat(call['called_at'].replace('Z', '+00:00')).astimezone(JST).strftime('%Y-%m-%d')
     values = (call['sales_product'], day, call['sales_amount'], call['sales_gross_profit'], call['sales_units'])
@@ -134,6 +140,23 @@ def _sync_won_contract(d, user, call_id):
     elif linked['is_active']:
         d.run('UPDATE telema_contracts SET product_name = %s, contract_date = %s, amount = %s, gross_profit = %s, units = %s, updated_at = telema_now() WHERE id = %s',
               (*values, linked['id']))
+
+
+def _check_reply(b, d, company_id):
+    """返事待ち対応の入力を確かめ、対応する返事待ちの訪問記録の id を返す（なければ None）"""
+    if b.get('sales_result') not in REPLY_RESULTS:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（返事待ち対応の結果は「受注」「NG」「再営業」から選んでください）')
+    sent = [label for k, label in {**_CALL_ONLY, 'visit_method': '訪問の方法', 'visit_purpose_id': '訪問の内容', **_FIRST_FIELDS}.items() if b.get(k) is not None]
+    if sent:
+        raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（返事待ち対応には{"・".join(sent)}は付けられません）')
+    open_waiting = ("cl.company_id = %s AND cl.is_active = 1 AND cl.record_type = 'visit' AND cl.sales_result = 'waiting' "
+                    "AND NOT EXISTS (SELECT 1 FROM telema_call_logs r WHERE r.reply_to_id = cl.id AND r.is_active = 1)")
+    target = b.get('reply_to_id')
+    if target is None:
+        return d.value(f'SELECT cl.id FROM telema_call_logs cl WHERE {open_waiting} ORDER BY cl.called_at DESC, cl.id DESC LIMIT 1', (company_id,))
+    if not d.first(f'SELECT 1 FROM telema_call_logs cl WHERE cl.id = %s AND {open_waiting}', (target, company_id)):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（reply_to_id: 対応できる返事待ちの訪問記録ではありません）')
+    return target
 
 
 def _check_section(d, section_id, current_section_id=None):
@@ -166,6 +189,10 @@ def create_call(id):
 
     _check_section(d, b.get('section_id'))
     is_visit = b['record_type'] == 'visit'
+    is_reply = b['record_type'] == 'reply'
+    reply_to = _check_reply(b, d, id) if is_reply else None
+    if not is_reply and b.get('reply_to_id') is not None:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（reply_to_id: 返事待ち対応の記録だけに付けられます）')
     _check_visit_purpose(d, b.get('visit_purpose_id'))
     if not is_visit and b.get('visit_purpose_id') is not None:
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_purpose_id: 架電の記録には付けられません）')
@@ -180,7 +207,7 @@ def create_call(id):
     elif any(b.get(k) is not None for k in _APPOINTMENT_ONLY) and not _is_appointment(d, b.get('result_status_id')):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問日時・事前確認日時は結果が「時間設定」のときだけ設定できます）')
     sent_sales = [label for k, label in _SALES_FIELDS.items() if b.get(k) is not None]
-    if sent_sales and not (is_visit and _is_sales_purpose(d, b.get('visit_purpose_id'))):
+    if sent_sales and not (is_reply or (is_visit and _is_sales_purpose(d, b.get('visit_purpose_id')))):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent_sales)}は、訪問の内容が「営業」の訪問記録だけに付けられます）')
     _check_sales_result(b.get)
     sent_first = [label for k, label in _FIRST_FIELDS.items() if b.get(k) is not None]
@@ -192,19 +219,19 @@ def create_call(id):
         '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id,
                                           record_type, visit_method, visit_at, precheck_at, visit_purpose_id,
                                           sales_product, sales_monthly_fee, sales_term,
-                                          sales_result, sales_followup_at, sales_amount, sales_gross_profit, sales_units, first_result, first_followup_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
-        (id, b.get('contact_id'), user['id'], called_at, None if is_visit else (b.get('phone_number') or company['phone']), b.get('result_status_id'),
-         b['raw_note'], 'pending' if b['raw_note'].strip() and not is_visit else 'skipped', b.get('section_id'),
+                                          sales_result, sales_followup_at, sales_amount, sales_gross_profit, sales_units, first_result, first_followup_at, reply_to_id)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        (id, b.get('contact_id'), user['id'], called_at, None if (is_visit or is_reply) else (b.get('phone_number') or company['phone']), b.get('result_status_id'),
+         b['raw_note'], 'pending' if b['raw_note'].strip() and not (is_visit or is_reply) else 'skipped', b.get('section_id'),
          b['record_type'], b.get('visit_method'), b.get('visit_at'), b.get('precheck_at'), b.get('visit_purpose_id'),
          b.get('sales_product'), b.get('sales_monthly_fee'), b.get('sales_term'),
          b.get('sales_result'), b.get('sales_followup_at'), b.get('sales_amount'), b.get('sales_gross_profit'), b.get('sales_units'),
-         b.get('first_result'), b.get('first_followup_at')),
+         b.get('first_result'), b.get('first_followup_at'), reply_to),
     )
     # 履歴を先に確定させる（この後の会社更新で失敗しても架電メモは残す）
     d.commit()
-    if is_visit:
-        # 訪問は施設の「現在の状態」（ステータス・次回架電・架電件数・最終架電日時・担当）を変えない
+    if is_visit or is_reply:
+        # 訪問・返事待ち対応は施設の「現在の状態」（ステータス・次回架電・架電件数・最終架電日時・担当）を変えない
         audit(d, user['id'], 'create', 'call_log', call_id, None, {'company_id': id, **b})
         _sync_won_contract(d, user, call_id)
         return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (call_id,))), 201
@@ -313,14 +340,14 @@ def update_call(id):
     if 'section_id' in b:
         _check_section(d, b['section_id'], call['section_id'])
     # 記録の種類は変えられない。方法（訪問／Zoom）は訪問だけ、結果は架電だけ
-    if call['record_type'] == 'visit' and b.get('result_status_id') is not None:
-        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には結果は付けられません）')
+    if call['record_type'] in ('visit', 'reply') and b.get('result_status_id') is not None:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問・返事待ち対応の記録には結果フラグは付けられません）')
     if 'visit_purpose_id' in b:
         _check_visit_purpose(d, b['visit_purpose_id'], call['visit_purpose_id'])
-        if call['record_type'] == 'call' and b['visit_purpose_id'] is not None:
-            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_purpose_id: 架電の記録には付けられません）')
-    if call['record_type'] == 'call' and 'visit_method' in b:
-        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 架電の記録には付けられません）')
+        if call['record_type'] != 'visit' and b['visit_purpose_id'] is not None:
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_purpose_id: 訪問の記録だけに付けられます）')
+    if call['record_type'] != 'visit' and 'visit_method' in b:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（visit_method: 訪問の記録だけに付けられます）')
 
     # 訪問日時・事前確認日時は結果が「時間設定」のときだけ。結果を時間設定以外に直したら、付いていた日時は外す
     final_status = b['result_status_id'] if 'result_status_id' in b else call['result_status_id']
@@ -328,16 +355,17 @@ def update_call(id):
         if any(b.get(k) is not None for k in _APPOINTMENT_ONLY):
             raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問日時・事前確認日時は結果が「時間設定」のときだけ設定できます）')
         b.update({k: None for k in _APPOINTMENT_ONLY if call[k] is not None})
-    elif call['record_type'] == 'visit' and any(b.get(k) is not None for k in _APPOINTMENT_ONLY):
+    elif call['record_type'] in ('visit', 'reply') and any(b.get(k) is not None for k in _APPOINTMENT_ONLY):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には付けられません）')
 
-    if 'next_call_at' in b and call['record_type'] == 'visit':
+    if 'next_call_at' in b and call['record_type'] != 'call':
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（訪問の記録には次回架電は付けられません）')
     next_call_given = 'next_call_at' in b
     next_call = b.pop('next_call_at', None)
     # 商材・月額・期間は、訪問の内容が「営業」の訪問記録だけ。内容を「営業」以外に直したら、付いていた営業の内容は外す
     final_purpose = b['visit_purpose_id'] if 'visit_purpose_id' in b else call['visit_purpose_id']
-    if not (call['record_type'] == 'visit' and _is_sales_purpose(d, final_purpose)):
+    is_reply = call['record_type'] == 'reply'
+    if not (is_reply or (call['record_type'] == 'visit' and _is_sales_purpose(d, final_purpose))):
         if any(b.get(k) is not None for k in _SALES_FIELDS):
             raise ApiError(400, 'validation_error', '入力内容に誤りがあります（商材・月額・期間は、訪問の内容が「営業」の訪問記録だけに付けられます）')
         b.update({k: None for k in _SALES_FIELDS if call[k] is not None})
@@ -350,6 +378,8 @@ def update_call(id):
                 if (k == 'sales_followup_at' and new_result not in _FOLLOWUP_RESULTS) or (k in _WON_FIELDS and new_result != 'won'):
                     b[k] = None
         _check_sales_result(lambda k: b[k] if k in b else call[k])
+        if is_reply and (b['sales_result'] if 'sales_result' in b else call['sales_result']) not in REPLY_RESULTS:
+            raise ApiError(400, 'validation_error', '入力内容に誤りがあります（返事待ち対応の結果は「受注」「NG」「再営業」から選んでください）')
     # 初回訪問の結果・営業の日時は、訪問の内容が「初回訪問」の訪問記録だけ。内容を直したら外す。結果を営業時間設定以外に直したら、営業の日時も外す
     if not (call['record_type'] == 'visit' and _is_first_purpose(d, final_purpose)):
         if any(b.get(k) is not None for k in _FIRST_FIELDS):

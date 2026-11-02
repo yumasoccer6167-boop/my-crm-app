@@ -560,6 +560,26 @@ ALTER TABLE telema_contracts ADD COLUMN source_call_id INTEGER REFERENCES telema
 ALTER TABLE telema_call_logs ADD COLUMN first_result TEXT CHECK (first_result IN ('scheduled', 'no_prospect'));
 ALTER TABLE telema_call_logs ADD COLUMN first_followup_at TEXT;
 """,
+    # 23: 営業ごと・月ごとの目標（粗利・台数）。数値分析の「今週の必要粗利・台数」「必要訪問件数」の元。管理者は誰の分も、それ以外は自分の分を設定できる
+    r"""
+CREATE TABLE telema_targets (
+  user_id      INTEGER NOT NULL,
+  month        TEXT NOT NULL CHECK (month ~ '^[0-9]{4}-[0-9]{2}$'),
+  gross_profit BIGINT NOT NULL DEFAULT 0 CHECK (gross_profit >= 0),
+  units        INTEGER NOT NULL DEFAULT 0 CHECK (units >= 0),
+  updated_by   INTEGER,
+  updated_at   TEXT NOT NULL DEFAULT telema_now(),
+  PRIMARY KEY (user_id, month)
+);
+""",
+    # 24: 記録の種類に「返事待ち対応」（reply）を追加。営業で「返事待ち」にした訪問への、その後の対応（結果：受注・NG・再営業）。結果などは営業の訪問記録と同じ列（sales_*）に持ち、
+    #     どの返事待ちへの対応かを reply_to_id で持つ。架電の結果ステータスに「初回訪問時間設定」を追加（数値分析のスケジューリング数の元。区分は進行中）
+    r"""
+ALTER TABLE telema_call_logs DROP CONSTRAINT telema_call_logs_record_type_check;
+ALTER TABLE telema_call_logs ADD CONSTRAINT telema_call_logs_record_type_check CHECK (record_type IN ('call', 'visit', 'reply'));
+ALTER TABLE telema_call_logs ADD COLUMN reply_to_id INTEGER REFERENCES telema_call_logs(id);
+INSERT INTO telema_call_statuses (label, category, sort_order) VALUES ('初回訪問時間設定', 'in_progress', 75) ON CONFLICT (label) DO NOTHING;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

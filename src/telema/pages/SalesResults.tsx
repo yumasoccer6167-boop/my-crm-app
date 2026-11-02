@@ -186,6 +186,7 @@ function ResultList({ kind, query }: { kind: "sales" | "first"; query: { date_fr
 }
 
 function SalesCells({ r }: { r: SalesResultItem }) {
+  const reply = r.record_type === "reply";
   return (
     <>
       <td className="px-2 py-2 text-slate-700">
@@ -197,8 +198,10 @@ function SalesCells({ r }: { r: SalesResultItem }) {
       <td className="whitespace-nowrap px-2 py-2">
         {r.sales_result ? (
           <>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${RESULT_BADGE[r.sales_result]}`}>{salesResultLabel(r.sales_result)}</span>
+            {reply && <span className="mr-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-800 ring-1 ring-inset ring-amber-200">返事待ち対応</span>}
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${RESULT_BADGE[r.sales_result]}`}>{salesResultLabel(r.sales_result, reply)}</span>
             {r.sales_followup_at && <div className="mt-0.5 text-xs text-slate-500">{fmtDateTime(r.sales_followup_at)}</div>}
+            {r.sales_result === "waiting" && r.replied_result && <div className="mt-0.5 text-xs text-amber-700">→ 対応済み（{salesResultLabel(r.replied_result, true)}）</div>}
           </>
         ) : (
           <span className="text-slate-300">—</span>
@@ -251,6 +254,9 @@ function Scorecard({ query }: { query: { date_from: string; date_to: string; use
       first_visits: t.first_visits + r.first_visits,
       user_visits: t.user_visits + r.user_visits,
       sales_visits: t.sales_visits + r.sales_visits,
+      reply_won: t.reply_won + r.reply_won,
+      reply_ng: t.reply_ng + r.reply_ng,
+      reply_resales: t.reply_resales + r.reply_resales,
       first_scheduled: t.first_scheduled + r.first_scheduled,
       first_no_prospect: t.first_no_prospect + r.first_no_prospect,
       won: t.won + r.won,
@@ -261,7 +267,7 @@ function Scorecard({ query }: { query: { date_from: string; date_to: string; use
       gross_profit: t.gross_profit + r.gross_profit,
       units: t.units + r.units,
     }),
-    { user_id: null, user_name: "合計", first_visits: 0, user_visits: 0, sales_visits: 0, first_scheduled: 0, first_no_prospect: 0, won: 0, waiting: 0, ng: 0, resales: 0, amount: 0, gross_profit: 0, units: 0 },
+    { user_id: null, user_name: "合計", first_visits: 0, user_visits: 0, sales_visits: 0, reply_won: 0, reply_ng: 0, reply_resales: 0, first_scheduled: 0, first_no_prospect: 0, won: 0, waiting: 0, ng: 0, resales: 0, amount: 0, gross_profit: 0, units: 0 },
   );
   const cols: { label: string; get: (r: SalesScoreRow) => string }[] = [
     { label: "初回訪問", get: (r) => String(r.first_visits) },
@@ -271,9 +277,10 @@ function Scorecard({ query }: { query: { date_from: string; date_to: string; use
     { label: "営業", get: (r) => String(r.sales_visits) },
     { label: "即決受注", get: (r) => String(r.won) },
     { label: "返事待ち", get: (r) => String(r.waiting) },
-    { label: "NG", get: (r) => String(r.ng) },
-    { label: "再営業", get: (r) => String(r.resales) },
-    { label: "受注率", get: (r) => rate(r.won, r.sales_visits) },
+    { label: "返事待ち後の受注", get: (r) => String(r.reply_won) },
+    { label: "NG", get: (r) => String(r.ng + r.reply_ng) },
+    { label: "再営業", get: (r) => String(r.resales + r.reply_resales) },
+    { label: "受注率", get: (r) => rate(r.won + r.reply_won, r.sales_visits) },
     { label: "受注金額", get: (r) => yen(r.amount) },
     { label: "粗利", get: (r) => yen(r.gross_profit) },
     { label: "台数", get: (r) => String(r.units) },
@@ -288,7 +295,7 @@ function Scorecard({ query }: { query: { date_from: string; date_to: string; use
         <Empty>この期間・条件に当てはまる記録がありません</Empty>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[64rem] text-right text-sm">
+          <table className="w-full min-w-[72rem] text-right text-sm">
             <thead className="text-xs text-slate-500">
               <tr className="border-b border-slate-200">
                 <th className="px-2 py-2 text-left font-medium">担当</th>
@@ -312,7 +319,7 @@ function Scorecard({ query }: { query: { date_from: string; date_to: string; use
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-left text-xs text-slate-400">受注率＝即決受注 ÷ 営業の件数。受注金額・粗利・台数は、即決受注の記録の合計です。</p>
+          <p className="mt-2 text-left text-xs text-slate-400">受注率＝（即決受注＋返事待ち後の受注）÷ 営業の件数。NG・再営業は、返事待ち対応の結果も含みます。受注金額・粗利・台数は、受注の記録の合計です。</p>
         </div>
       )}
     </Card>

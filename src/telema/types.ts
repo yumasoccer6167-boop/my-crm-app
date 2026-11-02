@@ -97,7 +97,7 @@ export type Contact = {
 export type FieldSource = { field: string; source: string; source_ref: string | null; confidence: number | null; updated_at: string };
 
 /** 記録の種類。架電（call）か訪問（visit）。訪問は方法（visit＝訪問／zoom）を持つ */
-export type RecordType = "call" | "visit";
+export type RecordType = "call" | "visit" | "reply";
 /** 営業の訪問記録の結果。即決受注・返事待ち・NG・再営業 */
 export type SalesResult = "won" | "waiting" | "ng" | "resales";
 /** 初回訪問の訪問記録の結果。営業時間設定（営業の日時を決めた）・見込みなし */
@@ -125,6 +125,9 @@ export type CallLog = {
   /** 初回訪問の結果。営業時間設定のときは、営業の日時を持つ */
   first_result: FirstResult | null;
   first_followup_at: string | null;
+  /** 返事待ち対応の記録が対応している、返事待ちの訪問記録。返事待ちの訪問記録には、対応の結果（受注・NG・再営業）が replied_result に入る */
+  reply_to_id: number | null;
+  replied_result: SalesResult | null;
   /** 結果が「時間設定」のときの、訪問する日時と事前確認の日時 */
   visit_at: string | null;
   precheck_at: string | null;
@@ -440,6 +443,8 @@ export type AssigneeMappingItem = { name: string; total: number; unassigned: num
 /** 営業結果管理・初回訪問結果管理の1件（訪問記録）。later_* は初回訪問結果管理で、その後に同じ施設で営業の訪問があったか／受注したか */
 export type SalesResultItem = {
   id: number;
+  record_type: RecordType;
+  replied_result: SalesResult | null;
   company_id: number;
   company_name: string;
   called_at: string;
@@ -469,6 +474,9 @@ export type SalesScoreRow = {
   first_visits: number;
   user_visits: number;
   sales_visits: number;
+  reply_won: number;
+  reply_ng: number;
+  reply_resales: number;
   first_scheduled: number;
   first_no_prospect: number;
   won: number;
@@ -480,3 +488,51 @@ export type SalesScoreRow = {
   units: number;
 };
 export type SalesScorecardData = { items: SalesScoreRow[]; date_from: string; date_to: string };
+
+/** 営業ごと・月ごとの目標（粗利・台数）。未設定の月は null */
+export type TargetsData = { month: string; items: { user_id: number; user_name: string; gross_profit: number | null; units: number | null }[] };
+
+/** 数値分析：目標に対する今週・今日のペース。目標が未設定なら target 以降が null */
+export type AnalyticsPace = {
+  user_id: number;
+  month: string;
+  today: string;
+  week_end: string;
+  target: { gross_profit: number; units: number } | null;
+  month_actual: { gross_profit: number; units: number };
+  month_remaining: { gross_profit: number; units: number } | null;
+  month_workdays_left: number;
+  week_workdays_left: number;
+  week_need: { gross_profit: number; units: number } | null;
+  week_visits_need: number | null;
+  today_visits_need: number | null;
+  today_visits_left: number | null;
+  visits_done_today: number;
+  /** 必要な訪問件数に直す元（直近 days 日の、1訪問あたりの粗利・台数） */
+  basis: { days: number; visits: number; gross_profit: number; units: number; gross_profit_per_visit: number | null; units_per_visit: number | null };
+};
+
+/** 数値分析：期間の実績 */
+export type AnalyticsData = {
+  user_id: number | null;
+  date_from: string;
+  date_to: string;
+  visits: {
+    first_visits: number;
+    user_visits: number;
+    sales_visits: number;
+    won: number;
+    waiting: number;
+    ng: number;
+    resales: number;
+    reply_won: number;
+    reply_ng: number;
+    reply_resales: number;
+    first_scheduled: number;
+    first_no_prospect: number;
+    fall_rate: number | null;
+  };
+  orders: { orders: number; amount: number; gross_profit: number; units: number; corporations: number; unit_price: number | null; corporation_price: number | null };
+  products: { product_name: string; orders: number; units: number; gross_profit: number; avg_gross_profit: number | null; avg_amount: number | null }[];
+  teleappt: { calls: number; rep_contacts: number; staff_contacts: number; scheduling: number; appointments: number };
+};

@@ -300,3 +300,57 @@ def test_初回訪問の結果として営業時間設定と見込みなしを�
     items = client.api('/sales-results?kind=first&result=no_prospect')[1]['items']
     assert any(i['id'] == b['id'] and i['first_result'] == 'no_prospect' for i in items)
     assert client.api('/sales-results?kind=first&result=won')[0] == 400
+
+
+def test_初回訪問時間設定の結果フラグがあり_進行中の区分で選べる(client):
+    row = client.sql("SELECT label, category, is_active FROM telema_call_statuses WHERE label = '初回訪問時間設定'")
+    assert row == [{'label': '初回訪問時間設定', 'category': 'in_progress', 'is_active': 1}]
+    cid = make_company(client, '初回時間設定園')
+    sid = client.status_id('初回訪問時間設定')
+    status, call = client.api(f'/companies/{cid}/calls', {'raw_note': '初回訪問の日程を決めた', 'result_status_id': sid})
+    assert status == 201 and call['result_label'] == '初回訪問時間設定' and company(client, cid)['status_id'] == sid
+
+
+def test_返事待ち対応で受注_NG_再営業を記録でき_受注は契約情報と営業結果に反映される(client):
+    cid = make_company(client, '返事待ち対応園')
+    p = {r['name']: r['id'] for r in client.api('/visit-purposes')[1]}
+    post_v = lambda **kw: client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '提案', 'visit_purpose_id': p['営業'], 'sales_result': 'waiting', **kw})[1]
+    reply = lambda **kw: client.api(f'/companies/{cid}/calls', {'record_type': 'reply', 'raw_note': '返事あり', **kw})
+    contracts = lambda: client.api(f'/companies/{cid}')[1]['contracts']
+
+    # 返事待ちが無いと、紐づけなしで記録される（reply_to_id は空）
+    status, loose = reply(sales_result='ng')
+    assert status == 201 and loose['record_type'] == 'reply' and loose['reply_to_id'] is None and loose['visit_method'] is None
+    assert company(client, cid)['call_count'] == 0                                                     # 施設の架電件数・ステータスは変えない
+
+    w1 = post_v(called_at='2026-10-01T01:00:00Z')
+    w2 = post_v(called_at='2026-10-02T01:00:00Z')
+    # 返事待ち対応の結果は 受注・NG・再営業 のどれか。それ以外・結果なしは不可。架電の項目・訪問の項目は付けられない
+    assert reply()[0] == 400 and reply(sales_result='waiting')[0] == 400
+    assert reply(sales_result='ng', result_status_id=client.status_id('再コール'))[0] == 400
+    assert reply(sales_result='ng', visit_method='visit')[0] == 400
+    assert reply(sales_result='ng', first_result='no_prospect')[0] == 400
+    assert reply(sales_result='ng', sales_followup_at='2026-11-01T01:00:00Z')[0] == 400                 # 次回日時は再営業だけ
+    assert reply(sales_result='won')[0] == 400                                                          # 受注は商材が必要
+    assert client.api(f'/companies/{cid}/calls', {'raw_note': 'x', 'sales_result': 'ng', 'reply_to_id': w1['id']})[0] == 400   # 架電には付けられない
+    # 紐づけを省くと、対応していない一番新しい返事待ち（w2）への対応になる
+    status, a = reply(sales_result='won', sales_product='SP-返事', sales_amount=240000, sales_gross_profit=80000, sales_units=1, called_at='2026-10-05T01:00:00Z')
+    assert status == 201 and a['reply_to_id'] == w2['id']
+    (ct,) = contracts()
+    assert (ct['product_name'], ct['contract_date'], ct['amount'], ct['gross_profit'], ct['units'], ct['source_call_id']) == ('SP-返事', '2026-10-05', 240000, 80000, 1, a['id'])
+    # 同じ返事待ちには二重に対応できない。ほかの返事待ちは指定して対応できる
+    assert reply(sales_result='ng', reply_to_id=w2['id'])[0] == 400
+    b = reply(sales_result='resales', reply_to_id=w1['id'], sales_followup_at='2026-11-05T01:00:00Z')[1]
+    assert (b['reply_to_id'], b['sales_followup_at']) == (w1['id'], '2026-11-05T01:00:00.000Z')
+    shown = {c['id']: c for c in client.api(f'/companies/{cid}/calls')[1]}
+    assert (shown[w1['id']]['replied_result'], shown[w2['id']]['replied_result']) == ('resales', 'won')    # 返事待ちの訪問に、対応の結果が付く
+    # 編集：結果の変更・金額の修正が契約に反映される。結果は3つのまま。削除すると契約も外れる
+    assert client.api(f'/calls/{a["id"]}', {'sales_gross_profit': 90000}, method='PATCH')[1]['sales_gross_profit'] == 90000
+    assert contracts()[0]['gross_profit'] == 90000
+    assert client.api(f'/calls/{a["id"]}', {'sales_result': 'waiting'}, method='PATCH')[0] == 400
+    assert client.api(f'/calls/{a["id"]}', {'sales_result': None}, method='PATCH')[0] == 400
+    assert client.api(f'/calls/{a["id"]}', {'visit_method': 'zoom'}, method='PATCH')[0] == 400
+    client.api(f'/calls/{a["id"]}/deactivate', {})
+    assert contracts() == []
+    # 対応を削除すると、その返事待ちはまた対応できる
+    assert reply(sales_result='ng', reply_to_id=w2['id'])[1]['reply_to_id'] == w2['id']

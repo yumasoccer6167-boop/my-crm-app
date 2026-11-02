@@ -68,3 +68,25 @@ def test_営業成績表は営業担当ごとに件数と結果の内訳_受注�
         assert all(i['user_id'] != other for i in client.api(f'/sales-results?kind=sales&{q}')[1]['items'])
     finally:
         client.set_my_role('admin')
+
+
+def test_返事待ち対応は営業結果管理と営業成績表に反映される(client):
+    p = {r['name']: r['id'] for r in client.api('/visit-purposes')[1]}
+    c = make_company(client, '返事待ち反映園')
+    q = 'date_from=2025-07-01&date_to=2025-07-31'
+    w = visit(client, c, p['営業'], '2025-07-02T01:00:00Z', sales_result='waiting')
+    visit(client, c, p['営業'], '2025-07-03T01:00:00Z', sales_result='waiting')
+    ok = lambda **kw: client.api(f'/companies/{c}/calls', {'record_type': 'reply', 'raw_note': '返事', **kw})
+    assert ok(sales_result='won', sales_product='SP', sales_amount=200000, sales_gross_profit=60000, sales_units=1, called_at='2025-07-10T01:00:00Z', reply_to_id=w['id'])[0] == 201
+    assert ok(sales_result='ng', called_at='2025-07-11T01:00:00Z')[0] == 201
+    items = client.api(f'/sales-results?kind=sales&{q}')[1]['items']
+    assert [(i['record_type'], i['sales_result']) for i in items] == [('reply', 'ng'), ('reply', 'won'), ('visit', 'waiting'), ('visit', 'waiting')]
+    assert next(i for i in items if i['id'] == w['id'])['replied_result'] == 'won'
+    assert [i['sales_result'] for i in client.api(f'/sales-results?kind=sales&result=won&{q}')[1]['items']] == ['won']
+    row = client.api(f'/sales-scorecard?{q}')[1]['items'][0]
+    assert {k: row[k] for k in ('sales_visits', 'won', 'waiting', 'reply_won', 'reply_ng', 'reply_resales', 'amount', 'gross_profit', 'units')} == {
+        'sales_visits': 2, 'won': 0, 'waiting': 2, 'reply_won': 1, 'reply_ng': 1, 'reply_resales': 0, 'amount': 200000, 'gross_profit': 60000, 'units': 1}
+    # 数値分析にも反映：営業落ち率にNGを含み、受注は契約から数える
+    a = client.api(f'/analytics?{q}')[1]
+    assert (a['visits']['reply_won'], a['visits']['reply_ng'], a['orders']['gross_profit']) == (1, 1, 60000)
+    assert abs(a['visits']['fall_rate'] - 1 / 2) < 1e-9
