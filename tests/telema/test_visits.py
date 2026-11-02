@@ -135,7 +135,7 @@ def test_架電を直したり無効化したりしても_再計算に訪問は�
 def test_訪問記録に訪問の内容を付けられ_設定で増やせる(client):
     cid = client.sql("INSERT INTO telema_companies (company_name, company_name_normalized) VALUES ('訪問内容園', '訪問内容園') RETURNING id")[0]['id']
     status, rows = client.api('/visit-purposes')
-    assert status == 200 and [r['name'] for r in rows] == ['ユーザー訪問', '初回訪問', '営業']
+    assert status == 200 and [r['name'] for r in rows] == ['ユーザー訪問', '初回訪問', '営業', '取り直し']
     first = next(r['id'] for r in rows if r['name'] == '初回訪問')
     status, v = client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '面談', 'visit_purpose_id': first})
     assert status == 201 and v['visit_purpose_id'] == first and v['visit_purpose_name'] == '初回訪問'

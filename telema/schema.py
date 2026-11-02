@@ -580,6 +580,10 @@ ALTER TABLE telema_call_logs ADD CONSTRAINT telema_call_logs_record_type_check C
 ALTER TABLE telema_call_logs ADD COLUMN reply_to_id INTEGER REFERENCES telema_call_logs(id);
 INSERT INTO telema_call_statuses (label, category, sort_order) VALUES ('初回訪問時間設定', 'in_progress', 75) ON CONFLICT (label) DO NOTHING;
 """,
+    # 25: 訪問の内容に「取り直し」を追加（訪問記録の訪問の内容のフラグ）
+    r"""
+INSERT INTO telema_visit_purposes (name, sort_order) VALUES ('取り直し', 40) ON CONFLICT (name) DO NOTHING;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く
