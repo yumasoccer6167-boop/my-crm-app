@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { STATUS_CATEGORIES, TEMPERATURES } from "../shared/constants";
 import { CompanyTable } from "../components/CompanyTable";
+import { SearchSelect } from "../components/SearchSelect";
 import { Button, Card, Empty, ErrorBox, inputCls, Loading, selectCls } from "../components/ui";
 import { api, unwrap } from "../lib/api";
 import { lastOpened, saveListQuery } from "../lib/list-query";
@@ -224,16 +225,13 @@ export function Companies() {
               </option>
             ))}
           </select>
-          <select {...sel("association")}>
-            <option value="">加盟協会</option>
-            <option value="none">未設定</option>
-            {associations.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-                {!a.is_active && "（無効）"}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            value={query.association ?? ""}
+            onChange={(v) => update({ association: v || undefined })}
+            placeholder="加盟協会"
+            pinned={[{ value: "", label: "加盟協会（絞り込まない）" }, { value: "none", label: "未設定" }]}
+            options={associations.map((a) => ({ value: String(a.id), label: `${a.name}${a.is_active ? "" : "（無効）"}` }))}
+          />
           <select {...sel("association_role")}>
             <option value="">協会の役職</option>
             <option value="any">協会会長・協会役員の園</option>
@@ -401,16 +399,27 @@ function BulkTagControl({
           </option>
         ))}
       </select>
-      <select value={target} onChange={(e) => setTarget(e.target.value)} className={selectCls} aria-label={`割り振る${label}`}>
-        <option value="">{label}を選ぶ</option>
-        {options.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
-            {!t.is_active && "（無効）"}
-          </option>
-        ))}
-        {mode === "replace" && <option value="none">（{label}をすべて外す）</option>}
-      </select>
+      {options.length > 10 ? (
+        <SearchSelect
+          value={target}
+          onChange={setTarget}
+          placeholder={`${label}を選ぶ`}
+          ariaLabel={`割り振る${label}`}
+          pinned={mode === "replace" ? [{ value: "none", label: `（${label}をすべて外す）` }] : []}
+          options={options.map((t) => ({ value: String(t.id), label: `${t.name}${t.is_active ? "" : "（無効）"}` }))}
+        />
+      ) : (
+        <select value={target} onChange={(e) => setTarget(e.target.value)} className={selectCls} aria-label={`割り振る${label}`}>
+          <option value="">{label}を選ぶ</option>
+          {options.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+              {!t.is_active && "（無効）"}
+            </option>
+          ))}
+          {mode === "replace" && <option value="none">（{label}をすべて外す）</option>}
+        </select>
+      )}
       <Button variant="primary" size="sm" disabled={!target || saving || disabled} onClick={run}>
         {saving ? "処理中…" : `${label}を一括割当`}
       </Button>

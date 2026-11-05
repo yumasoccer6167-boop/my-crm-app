@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Tag } from "../../types";
 import { useMasters } from "../../lib/masters";
+import { filterByQuery } from "../SearchSelect";
 import { Button, ErrorBox } from "../ui";
 
 /**
@@ -31,12 +32,14 @@ export function TagsRow({
   const [ids, setIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const keptInactive = selected.filter((a) => !a.is_active);
   const options = [...master.filter((a) => a.is_active), ...keptInactive.filter((a) => !master.some((m) => m.id === a.id && m.is_active))];
 
   function start() {
     setIds(selected.map((a) => a.id));
+    setSearch("");
     setError(null);
     setEditing(true);
   }
@@ -55,6 +58,10 @@ export function TagsRow({
     }
   }
 
+  // 候補が多いときは名前で絞り込める。選んでいるものは、絞り込みに合わなくても出す
+  const searchable = options.length > 10;
+  const shown = searchable ? options.filter((a) => ids.includes(a.id) || filterByQuery([a], search, (x) => x.name).length > 0) : options;
+  const hitCount = searchable && search.trim() ? options.filter((a) => filterByQuery([a], search, (x) => x.name).length > 0).length : null;
   const toggle = (id: number) => setIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
 
   return (
@@ -68,8 +75,23 @@ export function TagsRow({
                 選べる{label}がありません。{addHint(me.role === "admin")}
               </p>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {options.map((a) => (
+              <div className="space-y-1.5">
+                {searchable && (
+                  <div>
+                    <input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder={`${label}を検索（名前の一部）`}
+                      className="w-full rounded-md border-0 bg-white px-2.5 py-1.5 text-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      aria-label={`${label}を検索`}
+                    />
+                    <div className="mt-0.5 text-right text-[11px] text-slate-400">
+                      {hitCount == null ? `全${options.length}件（選択中 ${ids.length}件）` : `${hitCount}件が該当 / 全${options.length}件（選択中 ${ids.length}件）`}
+                    </div>
+                  </div>
+                )}
+                <div className="flex max-h-60 flex-wrap gap-1.5 overflow-y-auto">
+                {shown.map((a) => (
                   <label
                     key={a.id}
                     className={`cursor-pointer break-words rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${ids.includes(a.id) ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
@@ -79,6 +101,8 @@ export function TagsRow({
                     {!a.is_active && "（無効）"}
                   </label>
                 ))}
+                {searchable && hitCount === 0 && !ids.length && <span className="text-xs text-slate-400">「{search}」に合う{label}がありません</span>}
+                </div>
               </div>
             )}
             {error && <ErrorBox message={error} />}
