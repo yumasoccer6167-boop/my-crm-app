@@ -595,6 +595,29 @@ CREATE TABLE telema_workdays (
   PRIMARY KEY (user_id, day)
 );
 """,
+    # 27: 組織図。部署のツリー（事業部 > 部 > 課 など、何階層でも）と、メンバーの所属（異動の履歴つき）。所属は「異動日以前で一番新しい記録」が今の所属
+    #     （department_id が NULL は所属なし）。営業成績ダッシュボードの集計、日報の対象メンバー、マイページの経歴の元になる
+    r"""
+CREATE TABLE telema_departments (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  parent_id   INTEGER REFERENCES telema_departments(id),
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  is_active   INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL DEFAULT telema_now(),
+  updated_at  TEXT NOT NULL DEFAULT telema_now()
+);
+CREATE TABLE telema_org_assignments (
+  id             SERIAL PRIMARY KEY,
+  user_id        INTEGER NOT NULL,
+  department_id  INTEGER REFERENCES telema_departments(id),
+  effective_date TEXT NOT NULL CHECK (effective_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
+  note           TEXT,
+  created_by     INTEGER,
+  created_at     TEXT NOT NULL DEFAULT telema_now()
+);
+CREATE INDEX telema_org_assignments_user ON telema_org_assignments (user_id, effective_date);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

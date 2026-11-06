@@ -6,7 +6,7 @@
  - 達成率：実数 ÷ 累計必要数（表示している四捨五入後の数。粗利・台数それぞれ）
  - 累計営業件数／累計受注件数／営業落ち率：その月の初日〜選んだ日の「営業」の訪問記録と返事待ち対応から、訪問・Zoom別（返事待ち対応は元の訪問の方法）
  - 翌アポ：次の稼働日の、初回訪問予定・営業予定（カレンダー）。メンバーごとに時刻と施設を並べる
- 対象メンバーは、選んだメンバー（省略は、自分と同じ部署のメンバー。部署がなければ自分だけ）。一般の営業は自分だけ"""
+ 対象メンバーは、選んだメンバー（省略は、組織図で自分と同じ部署（課）のメンバー。組織図に所属がなければ旧ユーザーの部署、それもなければ自分だけ）。一般の営業は自分だけ"""
 from datetime import datetime, timedelta
 
 from flask import jsonify, request
@@ -15,6 +15,7 @@ from .agenda import agenda_items, month_days, parse_day
 from .analytics import is_workday, workday_overrides, workdays
 from .common import JST
 from .context import ApiError, current_user, db
+from .org import _today, assignments_on, department_of
 from .routes import bp
 from .validate import iso_utc
 
@@ -60,6 +61,11 @@ def _members(d, user, raw):
         if found != set(ids):
             raise ApiError(400, 'validation_error', '入力内容に誤りがあります（user_ids: ユーザーが見つかりません）')
         return ids
+    dept = department_of(d, user['id'])
+    if dept:
+        asg = assignments_on(d, _today())
+        same = {u for u, a in asg.items() if a['department_id'] == dept['id']}
+        return [r['id'] for r in d.all('SELECT id FROM users WHERE id = ANY(%s) ORDER BY display_name, id', (list(same),))]
     mine = d.first('SELECT department FROM users WHERE id = %s', (user['id'],))
     if mine and (mine['department'] or '').strip():
         return [r['id'] for r in d.all('SELECT id FROM users WHERE department = %s ORDER BY display_name, id', (mine['department'],))]
@@ -71,7 +77,8 @@ def build_report(d, uids, day, base_uid, dept=None, label='最終'):
     order = {u: i for i, u in enumerate(uids)}
     members.sort(key=lambda m: order[m['id']])
     if dept is None:
-        depts = [(m['department'] or '').strip() for m in members if (m['department'] or '').strip()]
+        # 見出しの部署名：メンバーの組織図の所属（その日時点）。なければ旧ユーザーの部署。一番多い名前
+        depts = [n for n in ((department_of(d, m['id'], day) or {}).get('name') or (m['department'] or '').strip() for m in members) if n]
         dept = max(set(depts), key=depts.count) if depts else ''
 
     month_start = day.replace(day=1)

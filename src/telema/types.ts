@@ -573,5 +573,38 @@ export type RecallItem = {
 };
 export type RecallRange = "all" | "overdue" | "today" | "week";
 export type RecallsData = { user_id: number | null; range: RecallRange; counts: { overdue: number; today: number; week: number; total: number }; items: RecallItem[] };
+/** 組織図：部署のツリー（parent_id でたどる。兄弟は sort_order 順）と、メンバーのその日時点の所属（department_id が null は所属なし） */
+export type OrgDepartment = { id: number; name: string; parent_id: number | null; sort_order: number };
+export type OrgMember = { user_id: number; name: string; department_id: number | null; since: string | null };
+export type OrgData = { date: string; departments: OrgDepartment[]; members: OrgMember[] };
+export type OrgAssignment = { id: number; user_id: number; department_id: number | null; effective_date: string; note: string | null };
+export type OrgHistoryItem = { id: number; department_id: number | null; department_name: string | null; effective_date: string; note: string | null };
+
+/** 営業成績ダッシュボードの1行（メンバー、または課・部・事業部の小計）。金額は円（画面ではPに直す）。level は見た目（total＝一番上の合計、group＝部、unit＝課） */
+export type SalesBoardRow = {
+  kind: "member" | "dept";
+  level: "member" | "unit" | "group" | "total";
+  name: string;
+  depth: number;
+  user_id?: number;
+  department_id?: number | null;
+  target_gp: number;
+  target_units: number;
+  need_gp: number;
+  need_units: number;
+  act_gp: number;
+  act_units: number;
+  contracts: number;
+  orders: number;
+  rate_gp: number | null;
+  rate_units: number | null;
+  appo_dm: number;
+  appo_staff: number;
+  deals: number;
+  ng: number;
+  rate_fall: number | null;
+};
+export type SalesBoardData = { month: string; workdays_total: number; workdays_elapsed: number; rows: SalesBoardRow[] };
+
 /** 日報。user_ids は対象メンバー（省略時は自分と同じ部署）、department は見出しに入れた部署名 */
 export type DailyReportData = { date: string; user_ids: number[]; members: { id: number; name: string }[]; department: string; next_workday: string; plans: number; text: string };

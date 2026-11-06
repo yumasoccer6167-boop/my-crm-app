@@ -59,3 +59,18 @@ def test_日報はフォーマットの数値を記録から入れる(client):
     assert client.api('/daily-report?date=2027-5-1')[0] == 400
     assert client.api('/daily-report?user_ids=abc')[0] == 400
     assert client.api('/daily-report?user_ids=999999')[0] == 400
+
+
+def test_日報の対象メンバーと部署名は組織図の所属から決まる(client):
+    owner = me(client)
+    org = lambda *a, **k: client.api(*a, **k)
+    kachi = org('/org/departments', {'name': '日報課'})[1]['id']
+    other = client.sql("INSERT INTO users (username, password_hash, display_name, role) VALUES ('nippo2', 'x', '日報 次郎', 'general') RETURNING id")[0]['id']
+    outsider = client.sql("INSERT INTO users (username, password_hash, display_name, role) VALUES ('nippo3', 'x', '別課 三郎', 'general') RETURNING id")[0]['id']
+    for u in (owner['id'], other):
+        assert org('/org/assignments', {'user_id': u, 'department_id': kachi, 'effective_date': '2025-01-01'})[0] == 201
+    r = org('/daily-report?date=2027-05-12')[1]
+    assert r['user_ids'] == sorted([owner['id'], other], key=lambda i: {owner['id']: owner['display_name'], other: '日報 次郎'}[i]) and r['department'] == '日報課'
+    assert r['text'].startswith('5/12_日報課 最終') and '日報　なし' in r['text']                   # 名前は姓だけ
+    # 選んだメンバーで上書きできる
+    assert org(f'/daily-report?date=2027-05-12&user_ids={outsider}')[1]['user_ids'] == [outsider]

@@ -13,6 +13,8 @@ import { Network } from "./pages/Network";
 import { Analytics } from "./pages/Analytics";
 import { Calendar } from "./pages/Calendar";
 import { DailyReport } from "./pages/DailyReport";
+import { Org } from "./pages/Org";
+import { SalesBoard } from "./pages/SalesBoard";
 import { Recalls } from "./pages/Recalls";
 import { SalesResults } from "./pages/SalesResults";
 import { Settings } from "./pages/Settings";
@@ -33,6 +35,8 @@ const router = createMemoryRouter([
       { path: "/calendar", element: <Calendar /> },
       { path: "/recalls", element: <Recalls /> },
       { path: "/report", element: <DailyReport /> },
+      { path: "/board", element: <SalesBoard /> },
+      { path: "/org", element: <Org /> },
       { path: "/visits", element: <VisitRoute /> },
       { path: "/import", element: <ImportPage /> },
       { path: "/settings", element: <Settings /> },

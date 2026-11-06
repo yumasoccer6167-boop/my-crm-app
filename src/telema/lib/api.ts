@@ -31,6 +31,11 @@ import type {
   RecallsData,
   WorkdayResult,
   DailyReportData,
+  OrgAssignment,
+  OrgData,
+  OrgDepartment,
+  OrgHistoryItem,
+  SalesBoardData,
   Facet,
   AssociationGroup,
   AssociationPeers,
@@ -76,6 +81,13 @@ type Api = {
   recalls: { $get: Call<RecallsData> };
   workdays: { ":user_id": { ":day": { $put: Call<WorkdayResult> } } };
   "daily-report": { $get: Call<DailyReportData> };
+  "sales-board": { $get: Call<SalesBoardData> };
+  org: {
+    $get: Call<OrgData>;
+    departments: { $post: Call<OrgDepartment>; ":id": { $patch: Call<OrgDepartment>; $delete: Call<{ id: number }> } };
+    assignments: { $post: Call<OrgAssignment> };
+    history: { $get: Call<{ user_id: number; items: OrgHistoryItem[] }> };
+  };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
   "association-structure": { bulk: { $post: Call<{ updated: number }> } };
   "association-overview": { $get: Call<AssociationOverview>; ":id": { members: { $get: Call<AssociationMembers> } } };
@@ -171,6 +183,7 @@ function endpoint(segments: string[]): unknown {
       if (key === "$post") return (a?: Args) => request("POST", segments, a);
       if (key === "$patch") return (a?: Args) => request("PATCH", segments, a);
       if (key === "$put") return (a?: Args) => request("PUT", segments, a);
+      if (key === "$delete") return (a?: Args) => request("DELETE", segments, a);
       return endpoint([...segments, key]);
     },
   });
