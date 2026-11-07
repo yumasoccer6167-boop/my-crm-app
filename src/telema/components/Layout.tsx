@@ -10,6 +10,7 @@ const NAV = [
   { to: "/results", label: "営業結果" },
   { to: "/board", label: "営業成績" },
   { to: "/analytics", label: "数値分析" },
+  { to: "/teleappt", label: "テレアポ" },
   { to: "/calendar", label: "カレンダー" },
   { to: "/recalls", label: "再コール" },
   { to: "/report", label: "日報" },

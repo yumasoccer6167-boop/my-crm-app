@@ -534,7 +534,6 @@ export type AnalyticsData = {
   };
   orders: { orders: number; amount: number; gross_profit: number; units: number; corporations: number; unit_price: number | null; corporation_price: number | null };
   products: { product_name: string; orders: number; units: number; gross_profit: number; avg_gross_profit: number | null; avg_amount: number | null }[];
-  teleappt: { calls: number; rep_contacts: number; staff_contacts: number; scheduling: number; appointments: number };
 };
 
 /** カレンダーの予定（記録から自動で出る。種類はサーバーの agenda.py と同じ。再コールは「再コール」ページ） */
@@ -573,6 +572,35 @@ export type RecallItem = {
 };
 export type RecallRange = "all" | "overdue" | "today" | "week";
 export type RecallsData = { user_id: number | null; range: RecallRange; counts: { overdue: number; today: number; week: number; total: number }; items: RecallItem[] };
+/** テレアポ（架電）の集計。接触＝代表（決裁者）／担当（決裁者以外）／宛先未選択。スケジューリング＝結果「初回訪問時間設定」、時間設定件数＝結果が「アポ獲得」区分 */
+export type TeleapptMetrics = {
+  calls: number;
+  rep_contacts: number;
+  staff_contacts: number;
+  no_contact: number;
+  scheduling: number;
+  scheduling_rep: number;
+  scheduling_staff: number;
+  scheduling_unknown: number;
+  appointments: number;
+  appointments_rep: number;
+  appointments_staff: number;
+  appointments_unknown: number;
+  /** 架電が1件でもあった1時間の区切りの数。1時間あたりコール数＝コール数 ÷ これ */
+  active_hours: number;
+  calls_per_hour: number | null;
+};
+export type TeleapptGranularity = "day" | "week" | "month";
+export type TeleapptData = {
+  granularity: TeleapptGranularity;
+  date: string;
+  date_from: string;
+  date_to: string;
+  user_id: number | null;
+  totals: TeleapptMetrics;
+  rows: (TeleapptMetrics & { key: string; label: string })[];
+};
+
 /** 組織図：部署のツリー（parent_id でたどる。兄弟は sort_order 順）と、メンバーのその日時点の所属（department_id が null は所属なし） */
 export type OrgDepartment = { id: number; name: string; parent_id: number | null; sort_order: number };
 export type OrgMember = { user_id: number; name: string; department_id: number | null; since: string | null };

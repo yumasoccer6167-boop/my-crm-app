@@ -15,6 +15,7 @@ import { Calendar } from "./pages/Calendar";
 import { DailyReport } from "./pages/DailyReport";
 import { Org } from "./pages/Org";
 import { SalesBoard } from "./pages/SalesBoard";
+import { Teleappt } from "./pages/Teleappt";
 import { Recalls } from "./pages/Recalls";
 import { SalesResults } from "./pages/SalesResults";
 import { Settings } from "./pages/Settings";
@@ -36,6 +37,7 @@ const router = createMemoryRouter([
       { path: "/recalls", element: <Recalls /> },
       { path: "/report", element: <DailyReport /> },
       { path: "/board", element: <SalesBoard /> },
+      { path: "/teleappt", element: <Teleappt /> },
       { path: "/org", element: <Org /> },
       { path: "/visits", element: <VisitRoute /> },
       { path: "/import", element: <ImportPage /> },

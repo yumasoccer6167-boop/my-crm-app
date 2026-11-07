@@ -36,6 +36,7 @@ import type {
   OrgDepartment,
   OrgHistoryItem,
   SalesBoardData,
+  TeleapptData,
   Facet,
   AssociationGroup,
   AssociationPeers,
@@ -82,6 +83,7 @@ type Api = {
   workdays: { ":user_id": { ":day": { $put: Call<WorkdayResult> } } };
   "daily-report": { $get: Call<DailyReportData> };
   "sales-board": { $get: Call<SalesBoardData> };
+  teleappt: { $get: Call<TeleapptData> };
   org: {
     $get: Call<OrgData>;
     departments: { $post: Call<OrgDepartment>; ":id": { $patch: Call<OrgDepartment>; $delete: Call<{ id: number }> } };

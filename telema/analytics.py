@@ -2,7 +2,7 @@
  - 目標：営業ごと・月ごとの粗利・台数（telema_targets）。管理者は誰の分も、それ以外は自分の分を設定できる
  - ペース：月の目標 − 今月の受注（契約情報の契約日・営業担当ごとの粗利・台数）＝月の残。月の残を、残りの稼働日で割って、今週の残り稼働日の分を「今週の必要粗利・台数」とする。
    必要な訪問件数は、直近90日の「1訪問あたりの粗利」（初回訪問・ユーザー訪問・営業の訪問件数と契約の粗利から）で割り戻す。稼働日はカレンダーの稼働日設定（なければ平日の月〜金）
- - 実績：期間内の訪問・営業の結果・受注（契約情報）・受注単価・商材別の平均粗利・テレアポ（架電）の件数
+ - 実績：期間内の訪問・営業の結果・受注（契約情報）・受注単価・商材別の平均粗利（テレアポ（架電）の集計は teleappt.py）
  営業（一般）は自分の分だけ、マネージャー・管理者は全員分（担当者で絞り込める）"""
 from datetime import datetime, timedelta, timezone
 from math import ceil
@@ -225,18 +225,6 @@ def actuals(d, uid, date_from, date_to):
              GROUP BY ct.product_name ORDER BY gross_profit DESC, ct.product_name''',
         [date_from, date_to, *([] if uid is None else [uid])])
 
-    # テレアポ：架電の件数。接触＝話した相手が選ばれている架電（代表＝決裁者、それ以外は担当）。スケジューリング＝結果が「初回訪問時間設定」の架電、アポ＝結果が「アポ獲得」区分の架電
-    t = d.first(
-        f'''SELECT COUNT(*)::int AS calls,
-                   COUNT(*) FILTER (WHERE cl.contact_id IS NOT NULL AND k.is_decision_maker = 1)::int AS rep_contacts,
-                   COUNT(*) FILTER (WHERE cl.contact_id IS NOT NULL AND COALESCE(k.is_decision_maker, 0) <> 1)::int AS staff_contacts,
-                   COUNT(*) FILTER (WHERE s.label = %s)::int AS scheduling,
-                   COUNT(*) FILTER (WHERE s.category = 'appointment')::int AS appointments
-              FROM telema_call_logs cl JOIN telema_companies c ON c.id = cl.company_id AND c.is_active = 1
-              LEFT JOIN telema_contacts k ON k.id = cl.contact_id LEFT JOIN telema_call_statuses s ON s.id = cl.result_status_id
-             WHERE cl.is_active = 1 AND cl.record_type = 'call' AND cl.called_at::timestamptz >= %s AND cl.called_at::timestamptz < %s AND {who_call}''',
-        [SCHEDULING_STATUS, start, end, *who_contract])
-
     return {
         'user_id': uid, 'date_from': date_from.isoformat(), 'date_to': date_to.isoformat(),
         # 営業落ち率＝NG ÷ 営業件数（返事待ち対応でのNGも含む）
@@ -247,7 +235,6 @@ def actuals(d, uid, date_from, date_to):
             'corporation_price': _ratio(ct['amount_known'], ct['corporations']),
         },
         'products': products,
-        'teleappt': t,
     }
 
 

@@ -65,8 +65,7 @@ def test_期間の実績は訪問_受注_単価_商材別の粗利_テレアポ�
     assert o['corporation_price'] == 700000 / 2                                                         # 1法人あたり＝金額 ÷ 金額のある契約の法人数（同じ法人の施設は1法人）
     prod = {r['product_name']: r for r in body['products']}
     assert (prod['SP']['avg_gross_profit'], prod['SP-MEO']['avg_gross_profit'], prod['SP-MEO']['orders']) == (120000, 60000, 2)
-    t = body['teleappt']
-    assert {k: t[k] for k in ('calls', 'rep_contacts', 'staff_contacts', 'scheduling', 'appointments')} == {'calls': 4, 'rep_contacts': 1, 'staff_contacts': 1, 'scheduling': 1, 'appointments': 1}
+    assert 'teleappt' not in body                                                                       # テレアポの集計は別ページ（/teleappt）
     assert client.api('/analytics?date_from=2025-08-31&date_to=2025-08-01')[0] == 400
     # 期間外・別の担当者で絞ると 0
     assert client.api('/analytics?date_from=2025-09-01&date_to=2025-09-30')[1]['visits']['sales_visits'] == 0

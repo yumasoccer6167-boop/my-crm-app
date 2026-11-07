@@ -200,7 +200,7 @@ function Results({ from, to, who }: { from: string; to: string; who: string }) {
   if (error) return <ErrorBox message={error} onRetry={reload} />;
   if (loading && !data) return <Loading />;
   if (!data) return null;
-  const { visits: v, orders: o, products, teleappt: t } = data;
+  const { visits: v, orders: o, products } = data;
   return (
     <>
       <Card title="訪問">
@@ -253,16 +253,6 @@ function Results({ from, to, who }: { from: string; to: string; who: string }) {
             </table>
           </div>
         )}
-      </Card>
-
-      <Card title="テレアポ（架電）">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Stat label="コール数" value={`${t.calls}件`} />
-          <Stat label="代表接触数" value={`${t.rep_contacts}件`} sub="話した相手が決裁者" />
-          <Stat label="担当接触数" value={`${t.staff_contacts}件`} sub="話した相手が決裁者以外" />
-          <Stat label="スケジューリング数" value={`${t.scheduling}件`} sub="結果が「初回訪問時間設定」" />
-          <Stat label="アポ数" value={`${t.appointments}件`} sub="結果が「アポ獲得」区分" />
-        </div>
       </Card>
     </>
   );
