@@ -5,7 +5,7 @@ import {
   Trash2, Package, Settings, CheckCircle, Filter, Mail, Globe,
   Star, Camera, Upload, Download, Copy, BarChart,
   Sparkles, FileText, ClipboardList, CalendarDays,
-  ChevronLeft, ChevronRight, CheckSquare, Square, Mic, LayoutGrid, List,
+  CheckSquare, Square, Mic, LayoutGrid, List,
   Heart, Briefcase, AlertTriangle, PieChart, User, Link2, XCircle, PhoneCall, Trophy, TrendingUp
 } from 'lucide-react';
 
@@ -615,7 +615,7 @@ function LoginView({ onLogin }) {
 }
 
 // ---------- HOME ----------
-function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, members, departments, associationTypes, onNavigate, onOpenCustomer }) {
+function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, members, departments, associationTypes, onOpenCustomer }) {
   const [period, setPeriod] = useState(thisMonth);
   const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
   const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
@@ -887,7 +887,6 @@ function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, m
         <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-slate-600 flex items-center gap-1.5"><CalendarDays className="w-4 h-4" />直近の予定</h3>
-            <button onClick={() => onNavigate('calendar')} className="text-xs text-indigo-600 font-medium">カレンダーを見る</button>
           </div>
           {upcoming.length === 0 ? (
             <p className="text-sm text-slate-400">直近の予定はありません。</p>
@@ -2385,561 +2384,6 @@ function RecordFields({ customer, setRecords, activityTypes, products, members, 
   );
 }
 
-const WEEKDAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
-
-// ---------- 再コール管理 ----------
-// 「今」を YYYY-MM-DD HH:MM 形式の文字列にする（日付と時間の比較を単純な文字列比較で行うため）
-function nowStampKey() {
-  const pad = (n) => String(n).padStart(2, '0');
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-// 再コール記録の予定日時キー（未設定は一番後ろに来るようにする）
-function recallStampKey(r) {
-  return `${r.scheduledDate || '9999-12-31'} ${r.scheduledTime || '23:59'}`;
-}
-
-// 予定時刻を過ぎた未対応の再コール件数（左メニューの赤バッジで使う）
-function countOverdueRecalls(records) {
-  const nowKey = nowStampKey();
-  return (records || []).filter(r =>
-    r.flag === '再コール' && !r.recallDone && r.scheduledDate && recallStampKey(r) < nowKey
-  ).length;
-}
-
-function RecallView({ records, setRecords, customers, members, currentUser, isOwner, associationTypes, onOpenCustomer, showAlert }) {
-  const [tab, setTab] = useState('pending'); // 'pending' | 'done'
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [assigneeFilter, setAssigneeFilter] = useState(currentUser?.displayName || '');
-  const [associationFilter, setAssociationFilter] = useState('');
-  const [rankFilter, setRankFilter] = useState('');
-
-  const nowKey = nowStampKey();
-  const todayStr = new Date().toISOString().substring(0, 10);
-  const isOverdue = (r) => !!r.scheduledDate && recallStampKey(r) < nowKey;
-  const isToday = (r) => r.scheduledDate === todayStr;
-
-  const customerById = useMemo(() => {
-    const map = {};
-    (customers || []).forEach(c => { map[c.id] = c; });
-    return map;
-  }, [customers]);
-  const effectiveAssignee = (r) => r.assignedTo || customerById[r.customerId]?.assignedTo || '';
-
-  const associationOptions = useMemo(
-    () => [...new Set([...(associationTypes || []).map(a => a.name), ...(customers || []).flatMap(c => parseAssociationTypes(c.associationType))])],
-    [customers, associationTypes]
-  );
-
-  const allRecalls = (records || []).filter(r => r.flag === '再コール');
-  const scoped = allRecalls.filter(r => {
-    const matchesAssignee = !assigneeFilter || effectiveAssignee(r) === assigneeFilter;
-    const matchesAssociation = !associationFilter || parseAssociationTypes(customerById[r.customerId]?.associationType).includes(associationFilter);
-    const matchesDate = (!dateFrom && !dateTo)
-      ? true
-      : (!!r.scheduledDate && (!dateFrom || r.scheduledDate >= dateFrom) && (!dateTo || r.scheduledDate <= dateTo));
-    const matchesRank = !rankFilter || (r.recallRank || 'A') === rankFilter;
-    return matchesAssignee && matchesAssociation && matchesDate && matchesRank;
-  });
-
-  const rankOrder = (r) => ({ A: 0, B: 1, C: 2 }[r.recallRank || 'A'] ?? 3);
-  const pending = scoped.filter(r => !r.recallDone).slice()
-    .sort((a, b) => recallStampKey(a).localeCompare(recallStampKey(b)) || rankOrder(a) - rankOrder(b));
-  const done = scoped.filter(r => r.recallDone).slice()
-    .sort((a, b) => recallStampKey(b).localeCompare(recallStampKey(a)) || rankOrder(a) - rankOrder(b));
-  const list = tab === 'pending' ? pending : done;
-
-  // 上部の警告サマリーは、担当フィルタに関わらず常にログイン中アカウント本人の再コールのみを対象にする
-  const myPending = allRecalls.filter(r => !r.recallDone && effectiveAssignee(r) === (currentUser?.displayName || ''));
-  const overdueCount = myPending.filter(isOverdue).length;
-  const todayCount = myPending.filter(r => isToday(r) && !isOverdue(r)).length;
-  const noDateCount = myPending.filter(r => !r.scheduledDate).length;
-
-  const setDone = (id, val) => {
-    setRecords(prev => prev.map(r => r.id === id ? { ...r, recallDone: val } : r));
-    showAlert(val ? '再コールを対応済みにしました。' : '再コールを未対応に戻しました。');
-  };
-
-  return (
-    <div className="space-y-4 max-w-4xl">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-2">
-          <button onClick={() => setTab('pending')}
-            className={`px-4 py-2 rounded-md text-sm font-medium ${tab === 'pending' ? 'bg-indigo-600 text-white' : 'bg-white ring-1 ring-inset ring-slate-300 text-slate-600'}`}>
-            未対応（{pending.length}件）
-          </button>
-          <button onClick={() => setTab('done')}
-            className={`px-4 py-2 rounded-md text-sm font-medium ${tab === 'done' ? 'bg-indigo-600 text-white' : 'bg-white ring-1 ring-inset ring-slate-300 text-slate-600'}`}>
-            対応済み（{done.length}件）
-          </button>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {isOwner && (
-            <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)}
-              className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-              <option value="">すべての担当者</option>
-              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-            </select>
-          )}
-          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)}
-            className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-            <option value="">すべての協会</option>
-            {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={rankFilter} onChange={e => setRankFilter(e.target.value)}
-            className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-            <option value="">全ランク</option>
-            {RECALL_RANKS.map(r => <option key={r} value={r}>{r}ランク</option>)}
-          </select>
-          <div className="flex items-center gap-1.5">
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-2 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" title="予定日（この日以降）" />
-            <span className="text-xs text-slate-400">〜</span>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-2 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" title="予定日（この日以前）" />
-            {(dateFrom || dateTo) && (
-              <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-xs text-slate-400 hover:text-red-500 font-medium">クリア</button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {tab === 'pending' && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className={`rounded-lg p-4 ${overdueCount > 0 ? 'bg-red-50 border-red-300' : 'bg-white ring-1 ring-slate-200'}`}>
-            <p className={`text-2xl font-extrabold ${overdueCount > 0 ? 'text-red-600' : 'text-slate-800'}`}>{overdueCount}</p>
-            <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
-              {overdueCount > 0 && <AlertTriangle className="w-3 h-3 text-red-500" />}時間超過
-            </p>
-          </div>
-          <div className="bg-white rounded-lg p-4 ring-1 ring-slate-200">
-            <p className="text-2xl font-extrabold text-indigo-600">{todayCount}</p>
-            <p className="text-[11px] text-slate-500 font-semibold">本日この後</p>
-          </div>
-          <div className="bg-white rounded-lg p-4 ring-1 ring-slate-200">
-            <p className="text-2xl font-extrabold text-slate-400">{noDateCount}</p>
-            <p className="text-[11px] text-slate-500 font-semibold">日時未設定</p>
-          </div>
-        </div>
-      )}
-
-      {list.length === 0 ? (
-        <p className="text-sm text-slate-400 text-center py-10">
-          {tab === 'pending'
-            ? '未対応の再コールはありません。テレアポの記録で結果フラグ「再コール」を選び、予定日時を設定するとここに一覧表示されます。'
-            : '対応済みの再コールはありません。'}
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {list.map(r => {
-            const cust = customerById[r.customerId];
-            const overdue = tab === 'pending' && isOverdue(r);
-            const today = tab === 'pending' && isToday(r) && !overdue;
-            return (
-              <li key={r.id}
-                className={`rounded-lg p-4 ${overdue ? 'bg-red-50 border-red-300' : today ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white ring-1 ring-slate-200'}`}>
-                <div className="flex flex-wrap justify-between items-start gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-slate-400">
-                      {cust?.gakuenName || ''}{cust?.associationType ? ` ・ ${cust.associationType}` : ''}
-                    </p>
-                    <p className="font-semibold text-slate-800 flex items-center gap-2">
-                      {r.customerName || cust?.enName || '不明な顧客'}
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${{'A':'bg-rose-100 text-rose-700','B':'bg-amber-100 text-amber-700','C':'bg-slate-100 text-slate-500'}[r.recallRank || 'A']}`}>{r.recallRank || 'A'}ランク</span>
-                    </p>
-                    <p className={`text-sm font-semibold mt-1 flex flex-wrap items-center gap-1.5 ${overdue ? 'text-red-600' : today ? 'text-indigo-700' : 'text-slate-600'}`}>
-                      <CalendarDays className="w-4 h-4 shrink-0" />
-                      {r.scheduledDate ? `${r.scheduledDate} ${r.scheduledTime || '（時間未設定）'}` : '予定日時が未設定です'}
-                      {overdue && <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-[10px]">時間超過</span>}
-                      {today && <span className="px-2 py-0.5 bg-indigo-600 text-white rounded-full text-[10px]">本日</span>}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      担当: {effectiveAssignee(r) || '未設定'} ／ 記録日: {r.date} {r.time || ''}
-                    </p>
-                    {r.memo && <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{r.memo}</p>}
-                    <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                      {cust?.tel && (
-                        <a href={`tel:${cust.tel}`} className="inline-flex items-center gap-1 text-xs text-indigo-700 font-semibold">
-                          <Phone className="w-3.5 h-3.5" />{cust.tel}
-                        </a>
-                      )}
-                      {cust?.mobile && (
-                        <a href={`tel:${cust.mobile}`} className="inline-flex items-center gap-1 text-xs text-indigo-700 font-semibold">
-                          <Phone className="w-3.5 h-3.5" />{cust.mobile}（携帯）
-                        </a>
-                      )}
-                      {cust?.chairman && <span className="text-[11px] text-slate-400">理事長: {cust.chairman}{cust.chairmanKana ? `（${cust.chairmanKana}）` : ''}</span>}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5 shrink-0 w-full sm:w-auto">
-                    <button onClick={() => onOpenCustomer(r.customerId)}
-                      className="px-3 py-1.5 bg-white ring-1 ring-inset ring-slate-300 text-slate-600 rounded-md text-xs font-medium hover:bg-slate-50">
-                      顧客カードを開く
-                    </button>
-                    <button onClick={() => onOpenCustomer(r.customerId, true)}
-                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700 flex items-center justify-center gap-1">
-                      <PenTool className="w-3.5 h-3.5" />記録を追加
-                    </button>
-                    {tab === 'pending' ? (
-                      <button onClick={() => setDone(r.id, true)}
-                        className="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700">
-                        対応済みにする
-                      </button>
-                    ) : (
-                      <button onClick={() => setDone(r.id, false)}
-                        className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-md text-xs font-medium hover:bg-slate-300">
-                        未対応に戻す
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// ---------- カレンダー（訪問予定・再コール予定） ----------
-function CalendarView({ records, customers, members, departments, currentUser, isOwner, associationTypes, onOpenCustomer }) {
-  const [viewMode, setViewMode] = useState('week'); // 'month' | 'week' | 'day'（初期は週間表示）
-  const [cursor, setCursor] = useState(() => new Date());
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
-  const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
-  const [associationFilter, setAssociationFilter] = useState('');
-
-  const customerAssigneeById = useMemo(() => {
-    const map = {};
-    (customers || []).forEach(c => { map[c.id] = c.assignedTo || ''; });
-    return map;
-  }, [customers]);
-  const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
-  const membersInDept = (deptName) => members.filter(m => m.department === deptName).map(m => m.displayName);
-
-  // 顧客ごとの協会の種類
-  const customerAssociationById = useMemo(() => {
-    const map = {};
-    (customers || []).forEach(c => { map[c.id] = c.associationType || ''; });
-    return map;
-  }, [customers]);
-  const associationOptions = useMemo(
-    () => [...new Set([...(associationTypes || []).map(a => a.name), ...(customers || []).flatMap(c => parseAssociationTypes(c.associationType))])],
-    [customers, associationTypes]
-  );
-
-  const scoped = (() => {
-    let base = records;
-    if (scopeType === 'department') {
-      const names = membersInDept(scopeValue);
-      base = base.filter(r => names.includes(effectiveAssignee(r)));
-    } else if (scopeType === 'personal') {
-      base = base.filter(r => effectiveAssignee(r) === scopeValue);
-    }
-    if (associationFilter) {
-      base = base.filter(r => parseAssociationTypes(customerAssociationById[r.customerId]).includes(associationFilter));
-    }
-    return base;
-  })();
-  // テレアポの再コールはカレンダーには表示しない（再コールページで管理する）
-  const scheduled = scoped.filter(r => r.scheduledDate && r.flag !== '再コール');
-  const byDate = useMemo(() => {
-    const map = {};
-    scheduled.forEach(r => {
-      if (!map[r.scheduledDate]) map[r.scheduledDate] = [];
-      map[r.scheduledDate].push(r);
-    });
-    Object.values(map).forEach(list => list.sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || '')));
-    return map;
-  }, [scheduled]);
-
-  const toDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const todayStr = toDateStr(new Date());
-
-  // 表示範囲の移動
-  const move = (dir) => {
-    const d = new Date(cursor);
-    if (viewMode === 'month') d.setMonth(d.getMonth() + dir);
-    else if (viewMode === 'week') d.setDate(d.getDate() + dir * 7);
-    else d.setDate(d.getDate() + dir);
-    setCursor(d);
-  };
-
-  // 週の開始日（日曜）を求める
-  const weekStart = (() => {
-    const d = new Date(cursor);
-    d.setDate(d.getDate() - d.getDay());
-    d.setHours(0, 0, 0, 0);
-    return d;
-  })();
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
-
-  const HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7時〜21時
-  const HOUR_HEIGHT = 56; // 1時間あたりの高さ(px)
-
-  const headerLabel = viewMode === 'month'
-    ? `${cursor.getFullYear()}年 ${cursor.getMonth() + 1}月`
-    : viewMode === 'week'
-      ? `${weekStart.getMonth() + 1}月${weekStart.getDate()}日 〜 ${weekDays[6].getMonth() + 1}月${weekDays[6].getDate()}日`
-      : `${cursor.getFullYear()}年 ${cursor.getMonth() + 1}月${cursor.getDate()}日（${WEEKDAY_JA[cursor.getDay()]}）`;
-
-  // 時間グリッド上に予定を配置するための計算
-  const eventStyle = (r) => {
-    const [h, m] = (r.scheduledTime || '09:00').split(':').map(Number);
-    const top = ((h - 7) * 60 + (m || 0)) / 60 * HOUR_HEIGHT;
-    return { top: `${Math.max(top, 0)}px`, height: `${HOUR_HEIGHT}px` };
-  };
-
-  const findCustomer = (r) => customers.find(c => c.id === r.customerId);
-
-  // 予定の色分けモード：'type'（初回訪問／営業など種別ごと）か 'member'（担当者ごと）
-  const [colorMode, setColorMode] = useState('type');
-
-  // 種別ごとの色
-  const typeColor = (r) => {
-    if (r.flag === '再コール') return { bg: 'bg-orange-500', hover: 'hover:bg-orange-600', dot: 'bg-orange-500', label: '再コール' };
-    const t = r.type || '';
-    if (t === '初回訪問' || r.flag === '初回時間設定（代表）' || r.flag === '初回時間設定（担当）' || r.flag === '飛び込み初回時間設定') {
-      return { bg: 'bg-violet-500', hover: 'hover:bg-violet-600', dot: 'bg-violet-500', label: '初回訪問' };
-    }
-    if (t.startsWith('営業')) return { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', dot: 'bg-blue-500', label: '営業' };
-    if (t === 'テレアポ') return { bg: 'bg-pink-500', hover: 'hover:bg-pink-600', dot: 'bg-pink-500', label: 'テレアポ' };
-    if (t === '受注登録' || r.flag === '受注') return { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', dot: 'bg-amber-500', label: '受注' };
-    return { bg: 'bg-slate-500', hover: 'hover:bg-slate-600', dot: 'bg-slate-500', label: 'その他' };
-  };
-
-  // 担当者ごとの色（メンバーの並び順で固定の色を割り当てる）
-  const MEMBER_COLORS = [
-    { bg: 'bg-indigo-500', hover: 'hover:bg-indigo-600', dot: 'bg-indigo-500' },
-    { bg: 'bg-indigo-500', hover: 'hover:bg-indigo-600', dot: 'bg-indigo-500' },
-    { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', dot: 'bg-rose-500' },
-    { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', dot: 'bg-amber-500' },
-    { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', dot: 'bg-emerald-500' },
-    { bg: 'bg-fuchsia-500', hover: 'hover:bg-fuchsia-600', dot: 'bg-fuchsia-500' },
-    { bg: 'bg-cyan-500', hover: 'hover:bg-cyan-600', dot: 'bg-cyan-500' },
-    { bg: 'bg-orange-500', hover: 'hover:bg-orange-600', dot: 'bg-orange-500' },
-  ];
-  const memberColor = (name) => {
-    if (!name) return { bg: 'bg-slate-400', hover: 'hover:bg-slate-500', dot: 'bg-slate-400' };
-    const idx = members.findIndex(m => m.displayName === name);
-    return MEMBER_COLORS[(idx >= 0 ? idx : name.length) % MEMBER_COLORS.length];
-  };
-
-  const eventColor = (r) => colorMode === 'member' ? memberColor(effectiveAssignee(r)) : typeColor(r);
-
-  const renderTimeGrid = (days) => (
-    <div className="bg-white rounded-lg ring-1 ring-slate-200 overflow-hidden">
-      <div className="flex border-b border-slate-100">
-        <div className="w-14 shrink-0 border-r border-slate-100" />
-        {days.map(d => {
-          const ds = toDateStr(d);
-          const isToday = ds === todayStr;
-          return (
-            <div key={ds} className={`flex-1 text-center py-2 ${isToday ? 'bg-indigo-50' : ''}`}>
-              <p className="text-[11px] text-slate-400">{WEEKDAY_JA[d.getDay()]}</p>
-              <p className={`text-lg font-semibold ${isToday ? 'text-indigo-600' : 'text-slate-700'}`}>{d.getDate()}</p>
-            </div>
-          );
-        })}
-      </div>
-      <div className="overflow-y-auto max-h-[60vh]">
-        <div className="flex relative">
-          <div className="w-14 shrink-0 border-r border-slate-100">
-            {HOURS.map(h => (
-              <div key={h} style={{ height: HOUR_HEIGHT }} className="text-[10px] text-slate-400 text-right pr-1.5 -mt-1.5">
-                {h}:00
-              </div>
-            ))}
-          </div>
-          {days.map(d => {
-            const ds = toDateStr(d);
-            const items = byDate[ds] || [];
-            return (
-              <div key={ds} className="flex-1 relative border-r border-slate-50 last:border-r-0">
-                {HOURS.map(h => <div key={h} style={{ height: HOUR_HEIGHT }} className="border-b border-slate-50" />)}
-                {items.map(r => {
-                  const cust = findCustomer(r);
-                  const col = eventColor(r);
-                  return (
-                    <button key={r.id} style={eventStyle(r)}
-                      onClick={() => onOpenCustomer && onOpenCustomer(r.customerId)}
-                      className={`absolute left-0.5 right-0.5 ${col.bg} ${col.hover} text-white rounded-md px-1.5 py-1 overflow-hidden shadow-sm text-left transition`}>
-                      <p className="text-[10px] font-semibold leading-tight truncate">{r.scheduledTime}</p>
-                      <p className="text-[10px] leading-tight truncate">{r.customerName || '不明な顧客'}</p>
-                      <p className="text-[9px] leading-tight opacity-80 truncate">{r.type}{r.flag ? `（${r.flag}）` : ''}</p>
-                      {cust?.address && <p className="text-[9px] leading-tight opacity-70 truncate">{cust.address}</p>}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-
-  // 月表示用のセル
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const startWeekday = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const monthCells = [];
-  for (let i = 0; i < startWeekday; i++) monthCells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) monthCells.push(d);
-  const monthDateStr = (d) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-  const selectedItems = selectedDate ? (byDate[selectedDate] || []) : [];
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-2">
-          {[['month', '月'], ['week', '週'], ['day', '日']].map(([v, l]) => (
-            <button key={v} onClick={() => setViewMode(v)}
-              className={`px-4 py-2 rounded-md text-sm font-medium ${viewMode === v ? 'bg-indigo-600 text-white' : 'bg-white ring-1 ring-inset ring-slate-300 text-slate-600'}`}>
-              {l}
-            </button>
-          ))}
-          <button onClick={() => setCursor(new Date())} className="px-4 py-2 rounded-md text-sm font-medium bg-white ring-1 ring-inset ring-slate-300 text-slate-600">今日</button>
-          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
-            {[['type', '種別で色分け'], ['member', '担当者で色分け']].map(([v, l]) => (
-              <button key={v} onClick={() => setColorMode(v)}
-                className={`px-3 py-2 text-sm font-medium ${colorMode === v ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
-            {[['all', '全体'], ['department', '課'], ['personal', '個人']].map(([v, l]) => (
-              <button key={v}
-                onClick={() => {
-                  setScopeType(v);
-                  if (v === 'department') setScopeValue(currentUser?.department || (departments[0]?.name || ''));
-                  else if (v === 'personal') setScopeValue(currentUser?.displayName || '');
-                }}
-                className={`px-3 py-2 text-sm font-medium ${scopeType === v ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
-                {l}
-              </button>
-            ))}
-          </div>
-          {scopeType === 'department' && (
-            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-              <option value="">課を選択</option>
-              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-            </select>
-          )}
-          {scopeType === 'personal' && (
-            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} disabled={!isOwner}
-              className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white disabled:bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-            </select>
-          )}
-          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-            <option value="">すべての協会</option>
-            {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between bg-white rounded-lg ring-1 ring-slate-200 p-4">
-        <button onClick={() => move(-1)} className="p-2 hover:bg-slate-100 rounded-md"><ChevronLeft className="w-5 h-5" /></button>
-        <p className="font-semibold text-slate-700">{headerLabel}</p>
-        <button onClick={() => move(1)} className="p-2 hover:bg-slate-100 rounded-md"><ChevronRight className="w-5 h-5" /></button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 px-1">
-        {colorMode === 'type' ? (
-          [['初回訪問', 'bg-violet-500'], ['営業', 'bg-blue-500'], ['テレアポ', 'bg-pink-500'], ['受注', 'bg-amber-500'], ['その他', 'bg-slate-500']].map(([l, c]) => (
-            <span key={l} className="flex items-center gap-1.5 text-xs text-slate-500">
-              <span className={`w-2.5 h-2.5 rounded-full ${c}`} />{l}
-            </span>
-          ))
-        ) : (
-          members.map(m => (
-            <span key={m.id} className="flex items-center gap-1.5 text-xs text-slate-500">
-              <span className={`w-2.5 h-2.5 rounded-full ${memberColor(m.displayName).dot}`} />{m.displayName}
-            </span>
-          ))
-        )}
-      </div>
-
-      {viewMode === 'month' && (
-        <>
-          <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
-            <div className="grid grid-cols-7 text-center text-xs font-semibold text-slate-400 mb-2">
-              {WEEKDAY_JA.map(d => <div key={d}>{d}</div>)}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {monthCells.map((d, i) => {
-                if (d === null) return <div key={i} />;
-                const ds = monthDateStr(d);
-                const items = byDate[ds] || [];
-                const isToday = ds === todayStr;
-                return (
-                  <button key={i} onClick={() => setSelectedDate(ds)}
-                    className={`aspect-square rounded-md p-1 text-left transition ${
- selectedDate === ds ? 'border-indigo-500 bg-indigo-50' : isToday ? 'border-indigo-300' : 'border-transparent hover:ring-1 ring-inset ring-slate-300'
- }`}>
-                    <span className={`text-xs ${isToday ? 'font-semibold text-indigo-600' : 'text-slate-600'}`}>{d}</span>
-                    {items.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-0.5">
-                        {items.slice(0, 3).map((it, idx) => <span key={idx} className={`w-1.5 h-1.5 rounded-full ${eventColor(it).dot}`} />)}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {selectedDate && (
-            <div className="bg-white rounded-lg ring-1 ring-slate-200 p-4">
-              <p className="text-sm font-semibold text-slate-700 mb-3">{selectedDate} の予定（{selectedItems.length}件）</p>
-              {selectedItems.length === 0 ? (
-                <p className="text-sm text-slate-400">この日の予定はありません。</p>
-              ) : (
-                <ul className="space-y-2">
-                  {selectedItems.map(r => {
-                    const cust = findCustomer(r);
-                    const col = eventColor(r);
-                    return (
-                      <li key={r.id}>
-                        <button onClick={() => onOpenCustomer && onOpenCustomer(r.customerId)}
-                          className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 rounded-md px-3 py-2 text-sm text-left transition">
-                          <div className="flex items-start gap-2">
-                            <span className={`w-2.5 h-2.5 rounded-full ${col.dot} mt-1.5 shrink-0`} />
-                            <div>
-                              <span className="font-semibold text-indigo-700 hover:underline">{r.customerName || '不明な顧客'}</span>
-                              <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
-                              {cust?.address && <p className="text-xs text-slate-400 mt-0.5">{cust.address}</p>}
-                            </div>
-                          </div>
-                          <span className="text-xs text-indigo-600 font-semibold shrink-0">{r.scheduledTime || '時間未設定'}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {viewMode === 'week' && renderTimeGrid(weekDays)}
-      {viewMode === 'day' && renderTimeGrid([cursor])}
-    </div>
-  );
-}
-
 // ---------- Googleカレンダー連携状況 ----------
 function GoogleCalendarStatusCard({ token }) {
   const [status, setStatus] = useState(null); // null=読み込み中, true/false
@@ -3200,15 +2644,15 @@ function RolePermissionsView({ rolePermissions, setRolePermissions }) {
 
 // ---------- 設定・管理（オーナー専用：報告フォーマット／商品・フラグ／メンバー／データ運用） ----------
 function SettingsView({
-  reportTemplates, setReportTemplates, dailyReportTemplates, setDailyReportTemplates, appointmentTemplates, setAppointmentTemplates,
+  reportTemplates, setReportTemplates, appointmentTemplates, setAppointmentTemplates,
   products, setProducts, activityTypes, setActivityTypes, associationTypes, setAssociationTypes, industryTypes, setIndustryTypes,
   departments, setDepartments,
   rolePermissions, setRolePermissions, isOwner,
   token, currentUser, showAlert, showConfirm,
 }) {
   const [innerTab, setInnerTab] = useState('templates');
-  const [editingTpl, setEditingTpl] = useState(null); // { kind: 'report' | 'daily' | 'appointment', ...tpl }
-  const tplSetter = (kind) => (kind === 'daily' ? setDailyReportTemplates : kind === 'appointment' ? setAppointmentTemplates : setReportTemplates);
+  const [editingTpl, setEditingTpl] = useState(null); // { kind: 'report' | 'appointment', ...tpl }
+  const tplSetter = (kind) => (kind === 'appointment' ? setAppointmentTemplates : setReportTemplates);
 
   const saveTpl = (tpl) => {
     const setter = tplSetter(tpl.kind);
@@ -3259,25 +2703,6 @@ function SettingsView({
               ))}
             </ul>
             <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{法人名}} {{園名}} {{理事長}} {{園長}} {{住所}} {{TEL}} {{HPリンク}} {{メモ}} {{結果}}'}</p>
-          </div>
-
-          <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
-            <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><FileText className="w-4 h-4" />日報フォーマット</h3>
-            <button onClick={() => setEditingTpl({ kind: 'daily', id: null, name: '', body: '' })} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium mb-3">
-              <Plus className="w-4 h-4" />新しいフォーマット
-            </button>
-            <ul className="space-y-2">
-              {dailyReportTemplates.map(t => (
-                <li key={t.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-start">
-                  <p className="text-sm font-semibold text-slate-700">{t.name}</p>
-                  <div className="flex gap-1">
-                    <button onClick={() => setEditingTpl({ kind: 'daily', ...t })} className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit className="w-4 h-4" /></button>
-                    <button onClick={() => deleteTpl('daily', t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-slate-400 pt-3">利用可能な変数: {'{{日付}} {{テレアポ件数}} {{初回訪問件数}} {{営業件数}} {{受注件数}} {{台数}} {{営業P}} {{自由記述}}'}</p>
           </div>
 
           <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200 lg:col-span-2">
@@ -3687,8 +3112,6 @@ function MyPageView({ user, token, onLogout, updateUser, personal, updatePersona
     ['profile', 'プロフィール'],
     ['flags', 'フラグ管理'],
     ['report', '報告フォーマット'],
-    ['daily', '日報フォーマット'],
-    ['email', 'メールフォーマット'],
   ];
 
   return (
@@ -3788,27 +3211,6 @@ function MyPageView({ user, token, onLogout, updateUser, personal, updatePersona
           showConfirm={showConfirm}
         />
       )}
-
-      {innerTab === 'daily' && (
-        <TemplateListEditor
-          title="マイ日報フォーマット" icon={<FileText className="w-4 h-4" />}
-          items={personal.dailyReportTemplates || []}
-          onChange={(next) => updatePersonal({ dailyReportTemplates: next })}
-          variablesHint={'{{日付}} {{テレアポ件数}} {{初回訪問件数}} {{営業件数}} {{受注件数}} {{台数}} {{営業P}} {{自由記述}}'}
-          showConfirm={showConfirm}
-        />
-      )}
-
-      {innerTab === 'email' && (
-        <TemplateListEditor
-          title="マイメールフォーマット" icon={<Mail className="w-4 h-4" />}
-          items={personal.emailTemplates || []}
-          onChange={(next) => updatePersonal({ emailTemplates: next })}
-          withSubject
-          variablesHint={'{{法人名}} {{園名}} {{理事長}} {{園長}} {{住所}} {{TEL}} {{メール}} {{HPリンク}}'}
-          showConfirm={showConfirm}
-        />
-      )}
     </div>
   );
 }
@@ -3869,7 +3271,7 @@ export default function App() {
     personalSettings: {},
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, reportTemplates, dailyReportTemplates, appointmentTemplates, associationTypes, rolePermissions, departments, industryTypes, successCases, personalSettings } = data;
+  const { customers, records, products, activityTypes, goals, reportTemplates, appointmentTemplates, associationTypes, rolePermissions, departments, industryTypes, successCases, personalSettings } = data;
   const canViewSettings = isOwner || hasPermission(user?.role, 'viewSettings', rolePermissions);
   const canDeleteCustomer = isOwner || hasPermission(user?.role, 'deleteCustomer', rolePermissions);
   const canBulkEdit = isOwner || hasPermission(user?.role, 'bulkEdit', rolePermissions);
@@ -3879,7 +3281,6 @@ export default function App() {
   const setActivityTypes = makeSetter('activityTypes');
   const setGoals = makeSetter('goals');
   const setReportTemplates = makeSetter('reportTemplates');
-  const setDailyReportTemplates = makeSetter('dailyReportTemplates');
   const setAppointmentTemplates = makeSetter('appointmentTemplates');
   const setAssociationTypes = makeSetter('associationTypes');
   const setRolePermissions = makeSetter('rolePermissions');
@@ -3937,26 +3338,9 @@ export default function App() {
     if (activeTab === 'settings' && !canViewSettings) setActiveTab('home');
   }, [activeTab, canViewSettings]);
 
-  // 予定時刻を過ぎた未対応の再コール件数（メニューの赤バッジ用）
-  // オーナー以外は自分の担当分だけを数える
-  const [recallTick, setRecallTick] = useState(0);
-  useEffect(() => {
-    // 1分ごとに再計算して、時間を過ぎた瞬間にバッジが出るようにする
-    const timer = setInterval(() => setRecallTick(t => t + 1), 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const recallOverdueCount = useMemo(() => {
-    const assigneeOf = (r) => r.assignedTo || (customers.find(c => c.id === r.customerId)?.assignedTo || '');
-    const target = isOwner ? records : records.filter(r => assigneeOf(r) === (user?.displayName || ''));
-    return countOverdueRecalls(target);
-  }, [records, customers, isOwner, user, recallTick]);
-
   const menuItems = [
     { id: 'home', icon: <Home className="w-4 h-4" />, label: 'HOME' },
     { id: 'customers', icon: <Users className="w-4 h-4" />, label: '顧客リスト' },
-    { id: 'calendar', icon: <CalendarDays className="w-4 h-4" />, label: 'カレンダー' },
-    { id: 'recall', icon: <Phone className="w-4 h-4" />, label: '再コール', badge: recallOverdueCount },
     { id: 'telema', icon: <PhoneCall className="w-4 h-4" />, label: 'テレマリスト' },
     { id: 'analytics', icon: <TrendingUp className="w-4 h-4" />, label: '数値分析' },
     { id: 'contracts', icon: <ClipboardList className="w-4 h-4" />, label: '契約リスト' },
@@ -3966,7 +3350,7 @@ export default function App() {
   ];
 
   const titles = {
-    home: 'HOME', customers: '顧客リスト', calendar: 'カレンダー', recall: '再コール管理', telema: 'テレマリスト', analytics: '数値分析', contracts: '契約リスト', success_cases: '事例管理',
+    home: 'HOME', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', contracts: '契約リスト', success_cases: '事例管理',
     mypage: 'マイページ', settings: '設定・管理',
   };
 
@@ -4005,11 +3389,6 @@ export default function App() {
       <header className="md:hidden fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-slate-800 text-white z-30">
         <button onClick={() => setMenuOpen(true)} className="p-1 relative">
           <LayoutMenuIcon />
-          {recallOverdueCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center">
-              {recallOverdueCount}
-            </span>
-          )}
         </button>
         <h1 className="font-semibold text-sm">CRMシステム</h1>
         <button onClick={() => setActiveTab('mypage')} className="p-0.5"><Avatar photo={user.photo} name={user.displayName} size="w-7 h-7" /></button>
@@ -4050,7 +3429,7 @@ export default function App() {
       <main className="relative flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
         <h2 className="hidden md:block text-xl font-semibold text-slate-800 mb-6">{titles[activeTab]}</h2>
         {activeTab === 'home' && (
-          <HomeView records={records} customers={customers} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} associationTypes={associationTypes} onNavigate={setActiveTab} onOpenCustomer={openCustomerFromHome} />
+          <HomeView records={records} customers={customers} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />
         )}
         {activeTab === 'customers' && (
           <CustomersView
@@ -4068,14 +3447,6 @@ export default function App() {
             pendingViewCustomerId={pendingViewCustomerId}
             pendingViewWithForm={pendingViewWithForm}
             clearPendingViewCustomer={() => { setPendingViewCustomerId(null); setPendingViewWithForm(false); }}
-          />
-        )}
-        {activeTab === 'recall' && (
-          <RecallView
-            records={records} setRecords={setRecords} customers={customers}
-            members={members} currentUser={user} isOwner={isOwner}
-            associationTypes={associationTypes}
-            onOpenCustomer={openCustomerFromHome} showAlert={showAlert}
           />
         )}
         {activeTab === 'telema' && (
@@ -4105,7 +3476,6 @@ export default function App() {
             showAlert={showAlert}
           />
         )}
-        {activeTab === 'calendar' && <CalendarView records={records} customers={customers} members={members} departments={departments || []} currentUser={user} isOwner={isOwner} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />}
 
         {activeTab === 'mypage' && (
           <MyPageView user={user} token={token} onLogout={logout} updateUser={updateUser}
@@ -4115,7 +3485,6 @@ export default function App() {
         {activeTab === 'settings' && canViewSettings && (
           <SettingsView
             reportTemplates={reportTemplates} setReportTemplates={setReportTemplates}
-            dailyReportTemplates={dailyReportTemplates} setDailyReportTemplates={setDailyReportTemplates}
             appointmentTemplates={appointmentTemplates || []} setAppointmentTemplates={setAppointmentTemplates}
             products={products} setProducts={setProducts}
             activityTypes={activityTypes} setActivityTypes={setActivityTypes}
