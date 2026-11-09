@@ -10,14 +10,10 @@ import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
 import { Associations } from "./pages/Associations";
 import { Network } from "./pages/Network";
-import { Analytics } from "./pages/Analytics";
 import { Calendar } from "./pages/Calendar";
 import { DailyReport } from "./pages/DailyReport";
 import { Org } from "./pages/Org";
-import { SalesBoard } from "./pages/SalesBoard";
-import { Teleappt } from "./pages/Teleappt";
 import { Recalls } from "./pages/Recalls";
-import { SalesResults } from "./pages/SalesResults";
 import { Settings } from "./pages/Settings";
 import { VisitRoute } from "./pages/VisitRoute";
 
@@ -31,13 +27,9 @@ const router = createMemoryRouter([
       { path: "/companies/:id", element: <CompanyDetail /> },
       { path: "/network", element: <Network /> },
       { path: "/associations", element: <Associations /> },
-      { path: "/results", element: <SalesResults /> },
-      { path: "/analytics", element: <Analytics /> },
       { path: "/calendar", element: <Calendar /> },
       { path: "/recalls", element: <Recalls /> },
       { path: "/report", element: <DailyReport /> },
-      { path: "/board", element: <SalesBoard /> },
-      { path: "/teleappt", element: <Teleappt /> },
       { path: "/org", element: <Org /> },
       { path: "/visits", element: <VisitRoute /> },
       { path: "/import", element: <ImportPage /> },
@@ -65,7 +57,7 @@ export default function TelemaApp({
     if (openCompanyRequest) void router.navigate(`/companies/${openCompanyRequest.companyId}`);
   }, [openCompanyRequest]);
   return (
-    <HostProvider value={{ appointmentTemplates, successCases, openSuccessCase: onOpenSuccessCase, createSuccessCase: onCreateSuccessCase }}>
+    <HostProvider value={{ appointmentTemplates, successCases, openSuccessCase: onOpenSuccessCase, createSuccessCase: onCreateSuccessCase, openCompany: () => {} }}>
       <MastersProvider>
         <RouterProvider router={router} />
       </MastersProvider>

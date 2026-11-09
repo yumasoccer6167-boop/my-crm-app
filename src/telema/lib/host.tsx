@@ -34,8 +34,10 @@ type Host = {
   successCases: SuccessCase[];
   openSuccessCase: (id: number) => void;
   createSuccessCase: (prefill: SuccessCasePrefill) => void;
+  /** テレマリストの顧客カルテを開く（数値分析の画面から施設を開くときに使う） */
+  openCompany: (id: number) => void;
 };
-const Ctx = createContext<Host>({ appointmentTemplates: [], successCases: [], openSuccessCase: () => {}, createSuccessCase: () => {} });
+const Ctx = createContext<Host>({ appointmentTemplates: [], successCases: [], openSuccessCase: () => {}, createSuccessCase: () => {}, openCompany: () => {} });
 
 export function HostProvider({ value, children }: { value: Host; children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
