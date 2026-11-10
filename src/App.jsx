@@ -10,12 +10,13 @@ import {
 } from 'lucide-react';
 
 import SuccessCasesView from './SuccessCases';
-import ContractListView from './ContractList';
 
 // 育てるテレマリスト（src/telema）。開いたときだけ読み込む
 const TelemaApp = lazy(() => import('./telema/TelemaApp'));
 // 数値分析（営業結果・営業成績・数値分析・テレアポ）。テレマリストの集計画面を、左メニューの「数値分析」にまとめたもの
 const AnalyticsApp = lazy(() => import('./telema/AnalyticsApp'));
+// ユーザー分析（業種別・地域別・接点別）。旧「契約リスト」の場所
+const UserAnalysisApp = lazy(() => import('./telema/UserAnalysisApp'));
 
 // アプリ更新のお知らせ（内容と更新日時は src/releaseNotes.js）。開いたときだけ読み込む
 const ReleaseNotesModal = lazy(() => import('./ReleaseNotesModal.jsx'));
@@ -3343,14 +3344,14 @@ export default function App() {
     { id: 'customers', icon: <Users className="w-4 h-4" />, label: '顧客リスト' },
     { id: 'telema', icon: <PhoneCall className="w-4 h-4" />, label: 'テレマリスト' },
     { id: 'analytics', icon: <TrendingUp className="w-4 h-4" />, label: '数値分析' },
-    { id: 'contracts', icon: <ClipboardList className="w-4 h-4" />, label: '契約リスト' },
+    { id: 'user_analysis', icon: <PieChart className="w-4 h-4" />, label: 'ユーザー分析' },
     { id: 'success_cases', icon: <Trophy className="w-4 h-4" />, label: '事例管理' },
     { id: 'mypage', icon: <User className="w-4 h-4" />, label: 'マイページ' },
     ...(canViewSettings ? [{ id: 'settings', icon: <Settings className="w-4 h-4" />, label: '設定・管理' }] : []),
   ];
 
   const titles = {
-    home: 'HOME', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', contracts: '契約リスト', success_cases: '事例管理',
+    home: 'HOME', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', user_analysis: 'ユーザー分析', success_cases: '事例管理',
     mypage: 'マイページ', settings: '設定・管理',
   };
 
@@ -3465,8 +3466,10 @@ export default function App() {
             <AnalyticsApp onOpenCompany={(companyId) => { setTelemaRequest({ ts: Date.now(), companyId }); setActiveTab('telema'); }} />
           </Suspense>
         )}
-        {activeTab === 'contracts' && (
-          <ContractListView token={token} onOpenTelemaCompany={(companyId) => { setTelemaRequest({ ts: Date.now(), companyId }); setActiveTab('telema'); }} />
+        {activeTab === 'user_analysis' && (
+          <Suspense fallback={<p className="text-slate-400 font-semibold text-sm">読み込み中...</p>}>
+            <UserAnalysisApp />
+          </Suspense>
         )}
         {activeTab === 'success_cases' && (
           <SuccessCasesView

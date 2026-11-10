@@ -440,6 +440,15 @@ export type Facet = { value: string; n: number };
 type CountKey = "total" | "not_started" | "in_progress" | "appointment" | "won" | "lost" | "excluded" | "due_today" | "overdue" | "updated_today";
 export type PrefectureStat = { prefecture: string; total: number; users: number };
 
+/** ユーザー分析：業種別・地域別・接点別（契約情報の課題）。total＝登録施設数、users＝そのうちユーザー */
+export type UserAnalysis = {
+  totals: { facility_count: number; user_facility_count: number; organization_count: number; user_organization_count: number };
+  industries: { industry: string; count: number; user_count: number }[];
+  prefectures: PrefectureStat[];
+  cities: { prefecture: string; city: string; total: number; users: number }[];
+  needs: { items: { issue: string; company_count: number; contract_count: number }[]; contract_count: number; company_count: number };
+};
+
 export type DashboardData = {
   counts: Record<CountKey, number>;
   my_counts: Record<"total" | "not_started" | "in_progress" | "appointment" | "won" | "lost", number>;

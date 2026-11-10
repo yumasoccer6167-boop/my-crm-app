@@ -46,6 +46,7 @@ import type {
   ListSource,
   ListType,
   PrefectureStat,
+  UserAnalysis,
   Section,
   AssociationOverview,
   AssociationMembers,
@@ -92,6 +93,7 @@ type Api = {
     history: { $get: Call<{ user_id: number; items: OrgHistoryItem[] }> };
   };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
+  "user-analysis": { $get: Call<UserAnalysis> };
   "association-structure": { bulk: { $post: Call<{ updated: number }> } };
   "association-overview": { $get: Call<AssociationOverview>; ":id": { members: { $get: Call<AssociationMembers> } } };
   companies: {

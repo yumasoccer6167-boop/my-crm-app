@@ -54,7 +54,7 @@ def health():
 
 
 # 各機能のルートを登録する（import 時に bp へ追加される）
-from . import masters, dashboard, companies, calls, contracts, tags, ai_routes, relations, assignees, visits, customer_import, contract_import, siblings, schedule, nearby, association_overview, association_karte, sales_results, analytics, agenda, recalls, daily_report, org, sales_board, teleappt  # noqa: E402,F401
+from . import masters, dashboard, companies, calls, contracts, tags, ai_routes, relations, assignees, visits, customer_import, contract_import, siblings, schedule, nearby, association_overview, association_karte, user_analysis, sales_results, analytics, agenda, recalls, daily_report, org, sales_board, teleappt  # noqa: E402,F401
 
 
 @bp.route('/<path:_rest>', methods=['GET', 'POST', 'PATCH', 'PUT', 'DELETE'])
