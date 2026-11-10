@@ -1,4 +1,4 @@
-"""ユーザー分析：業種別・地域別（都道府県／市区町村）・接点別（契約情報の課題）"""
+"""ユーザー分析：ユーザー施設と契約の元データ（絞り込みと集計は画面側）"""
 
 
 def make(client, name, prefecture=None, city=None, industry=None, is_user=0, org=None):
@@ -11,58 +11,39 @@ def make(client, name, prefecture=None, city=None, industry=None, is_user=0, org
         (name, name, prefecture, city, industry, is_user, org_id))[0]['id']
 
 
-def test_ユーザー分析は業種別_地域別_接点別に数える(client):
-    before = client.api('/user-analysis')[1]
+def test_ユーザー分析はユーザー施設とその契約だけを返す(client):
     a = make(client, '分析園A', '埼玉県', '川越市', '保育園', is_user=1, org='学校法人分析会')
-    b = make(client, '分析園B', '埼玉県', '川越市', '保育園', org='学校法人分析会')
-    c = make(client, '分析園C', '埼玉県', '所沢市', '幼稚園', is_user=1)
-    d = make(client, '分析園D', '東京都', '府中市', None, is_user=1)
-    e = make(client, '分析園E', None, None, '', is_user=0)                        # 住所も業種も空
-    client.api(f'/companies/{a}/contracts', {'product_name': '分析商材', 'contract_date': '2026-11-01', 'issues': ['集客', '採用']})
-    client.api(f'/companies/{c}/contracts', {'product_name': '分析商材', 'contract_date': '2026-11-02', 'issues': ['集客']})
-    client.api(f'/companies/{d}/contracts', {'product_name': '分析商材', 'contract_date': '2026-11-03'})   # 課題を選んでいない契約
-    client.api(f'/companies/{b}/contracts', {'product_name': '分析商材', 'contract_date': '2026-11-04', 'issues': ['採用']})
+    b = make(client, '分析園B', '埼玉県', '川越市', '保育園')                                    # ユーザーではない
+    c = make(client, '分析園C', None, None, '', is_user=1)                                       # 住所も業種も空
+    client.api(f'/companies/{a}/contracts', {'product_name': '分析商材X', 'contract_date': '2026-11-01', 'issues': ['集客', '採用'], 'gross_profit': 50000})
+    client.api(f'/companies/{c}/contracts', {'product_name': '分析商材Y', 'contract_date': '2026-11-02'})          # 課題を選んでいない契約
+    client.api(f'/companies/{b}/contracts', {'product_name': '分析商材Z', 'contract_date': '2026-11-03', 'issues': ['採用']})   # ユーザーではない施設の契約
 
     status, r = client.api('/user-analysis')
     assert status == 200
-    t, t0 = r['totals'], before['totals']
-    assert t['facility_count'] - t0['facility_count'] == 5
-    assert t['user_facility_count'] - t0['user_facility_count'] == 3
-    assert t['organization_count'] - t0['organization_count'] == 1 and t['user_organization_count'] - t0['user_organization_count'] == 1
+    fac = {f['id']: f for f in r['facilities']}
+    assert a in fac and c in fac and b not in fac
+    assert (fac[a]['industry'], fac[a]['prefecture'], fac[a]['city']) == ('保育園', '埼玉県', '川越市')
+    assert fac[a]['organization_id'] is not None and fac[c]['organization_id'] is None
+    assert (fac[c]['industry'], fac[c]['prefecture'], fac[c]['city']) == ('未設定', '不明', '不明')   # 空は「未設定」「不明」にまとめる
 
-    ind = {x['industry']: x for x in r['industries']}
-    ind0 = {x['industry']: x for x in before['industries']}
-    assert ind['保育園']['count'] - ind0.get('保育園', {}).get('count', 0) == 2
-    assert ind['保育園']['user_count'] - ind0.get('保育園', {}).get('user_count', 0) == 1
-    assert ind['未設定']['count'] - ind0.get('未設定', {}).get('count', 0) == 2                      # 業種が空と未登録は「未設定」
-    assert r['industries'][-1]['industry'] == '未設定'                                               # 未設定は最後
-
-    pref = {x['prefecture']: x for x in r['prefectures']}
-    pref0 = {x['prefecture']: x for x in before['prefectures']}
-    assert pref['埼玉県']['total'] - pref0.get('埼玉県', {}).get('total', 0) == 3
-    assert pref['埼玉県']['users'] - pref0.get('埼玉県', {}).get('users', 0) == 2
-    assert pref['不明']['total'] - pref0.get('不明', {}).get('total', 0) == 1
-    city = {(x['prefecture'], x['city']): x for x in r['cities']}
-    city0 = {(x['prefecture'], x['city']): x for x in before['cities']}
-    assert city[('埼玉県', '川越市')]['total'] - city0.get(('埼玉県', '川越市'), {}).get('total', 0) == 2
-    assert city[('埼玉県', '川越市')]['users'] - city0.get(('埼玉県', '川越市'), {}).get('users', 0) == 1
-    assert city[('東京都', '府中市')]['users'] - city0.get(('東京都', '府中市'), {}).get('users', 0) == 1
-
-    needs = {x['issue']: x for x in r['needs']['items']}
-    needs0 = {x['issue']: x for x in before['needs']['items']}
-    g = lambda k, f: needs.get(k, {}).get(f, 0) - needs0.get(k, {}).get(f, 0)
-    assert (g('集客', 'company_count'), g('集客', 'contract_count')) == (2, 2)
-    assert (g('採用', 'company_count'), g('採用', 'contract_count')) == (2, 2)
-    assert (g('課題未選択', 'company_count'), g('課題未選択', 'contract_count')) == (1, 1)
-    assert r['needs']['contract_count'] - before['needs']['contract_count'] == 4                    # 複数の課題を選んだ契約も1件
-    assert r['needs']['items'][-1]['issue'] == '課題未選択'
+    con = {k['product']: k for k in r['contracts']}
+    assert con['分析商材X']['company_id'] == a and con['分析商材X']['issues'] == ['集客', '採用'] and con['分析商材X']['gross_profit'] == 50000
+    assert con['分析商材Y']['issues'] == []                                                       # 課題なしは空のリスト（画面で「課題未選択」）
+    assert '分析商材Z' not in con
 
 
-def test_ユーザー分析は無効な施設と削除した契約を数えない(client):
-    before = client.api('/user-analysis')[1]
+def test_ユーザー分析は無効な施設とユーザーでなくなった施設と削除した契約を返さない(client):
     x = make(client, '無効園', '千葉県', '市川市', '保育園', is_user=1)
-    client.api(f'/companies/{x}/contracts', {'product_name': '分析商材', 'contract_date': '2026-11-05', 'issues': ['クチコミ対策']})
+    y = make(client, '外れ園', '千葉県', '船橋市', '保育園', is_user=1)
+    z = make(client, '契約削除園', '千葉県', '柏市', '保育園', is_user=1)
+    client.api(f'/companies/{x}/contracts', {'product_name': '分析商材W', 'contract_date': '2026-11-05', 'issues': ['クチコミ対策']})
+    client.api(f'/companies/{y}/contracts', {'product_name': '分析商材W', 'contract_date': '2026-11-05', 'issues': ['クチコミ対策']})
+    cid = client.api(f'/companies/{z}/contracts', {'product_name': '分析商材W', 'contract_date': '2026-11-05'})[1]['id']
     client.sql('UPDATE telema_companies SET is_active = 0 WHERE id = %s', (x,))
-    after = client.api('/user-analysis')[1]
-    assert after['totals'] == before['totals']
-    assert after['needs'] == before['needs']
+    client.sql('UPDATE telema_companies SET is_user = 0 WHERE id = %s', (y,))                     # ユーザーのチェックを外した
+    client.sql('UPDATE telema_contracts SET is_active = 0 WHERE id = %s', (cid,))
+    r = client.api('/user-analysis')[1]
+    ids = {f['id'] for f in r['facilities']}
+    assert x not in ids and y not in ids and z in ids
+    assert not [k for k in r['contracts'] if k['product'] == '分析商材W']

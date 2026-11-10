@@ -63,7 +63,7 @@ export function Donut({ slices, unit = "件", centerLabel = "合計" }: { slices
 
 export type BarRow = { key: string; label: string; value: number; /** 薄い棒で出す「全体」（ユーザーなら、登録施設数） */ total?: number; note?: string };
 
-/** 横棒グラフ。濃い棒＝value、薄い棒＝total（あれば）。全ての行で同じ長さの目盛り（一番大きい total か value を100%）。行を押すと選択できる */
+/** 横棒グラフ。濃い棒＝value、薄い棒＝total（あれば）。全ての行で同じ長さの目盛り（一番大きい total か value を100%）。行を押すと選択でき（複数可）、選んだ行は枠で示す */
 export function HBars({
   rows,
   valueLabel,
@@ -72,14 +72,17 @@ export function HBars({
   onSelect,
   color = "#4f46e5",
   labelWidth = "7rem",
+  format = (n: number) => n.toLocaleString(),
 }: {
   rows: BarRow[];
   valueLabel: string;
   totalLabel?: string;
-  selected?: string | null;
+  selected?: Set<string>;
   onSelect?: (key: string) => void;
   color?: string;
   labelWidth?: string;
+  /** 数の出し方（粗利なら「P」つきなど） */
+  format?: (n: number) => string;
 }) {
   const max = Math.max(1, ...rows.map((r) => Math.max(r.value, r.total ?? 0)));
   return (
@@ -98,7 +101,7 @@ export function HBars({
       </div>
       <ul className="space-y-0.5">
         {rows.map((r) => {
-          const on = selected === r.key;
+          const on = !!selected?.has(r.key);
           const body = (
             <>
               <span className="shrink-0 truncate text-left text-sm text-slate-700" style={{ width: labelWidth }} title={r.label}>
@@ -109,8 +112,8 @@ export function HBars({
                 <span className="absolute inset-y-0 left-0 rounded-sm" style={{ width: `${(r.value / max) * 100}%`, background: color }} />
               </span>
               <span className="w-32 shrink-0 text-right text-sm tabular-nums text-slate-900">
-                {r.value.toLocaleString()}
-                {r.total != null && <span className="text-xs text-slate-400"> / {r.total.toLocaleString()}</span>}
+                {format(r.value)}
+                {r.total != null && <span className="text-xs text-slate-400"> / {format(r.total)}</span>}
                 {r.note && <span className="ml-1 text-xs text-slate-500">{r.note}</span>}
               </span>
             </>
