@@ -290,6 +290,35 @@ export type AssociationOverview = {
   associations: AssociationOverviewItem[];
   totals: { association_count: number; facility_count: number; organization_count: number; user_count: number };
 };
+/** 協会カルテ。数字は下位の協会の加盟施設も含む（同じ施設・同じ法人は1回だけ）。ユーザー率＝ユーザー法人 ÷ 加盟法人（%） */
+export type AssociationKarte = {
+  association: {
+    id: number;
+    name: string;
+    is_active: number;
+    parent_id: number | null;
+    is_top_level: number;
+    prefecture: string | null;
+    website_url: string | null;
+    chair_name: string | null;
+    officer_names: string | null;
+    updated_at: string;
+    /** 最上位から、この協会までの名前 */
+    path: string[];
+  };
+  metrics: {
+    facility_count: number;
+    own_facility_count: number;
+    organization_count: number;
+    user_facility_count: number;
+    user_organization_count: number;
+    user_rate: number | null;
+  };
+  industries: { industry: string; count: number; user_count: number }[];
+  chairs: Omit<AssociationPerson, "association_id">[];
+  officers: Omit<AssociationPerson, "association_id">[];
+};
+export type AssociationKarteInput = Partial<Pick<AssociationKarte["association"], "website_url" | "chair_name" | "officer_names">>;
 export type AssociationMember = {
   id: number;
   company_name: string;

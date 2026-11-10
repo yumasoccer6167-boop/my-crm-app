@@ -289,6 +289,9 @@ function AssociationList({ rows, indent, editing, all, onSaved }: { rows: { node
                       <span className="mr-1 text-[10px] text-slate-500">{openId === a.id ? "▼" : "▶"}</span>
                       {a.name}
                     </button>
+                    <Link to={`/associations/${a.id}`} className="ml-2 rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-inset ring-slate-300 hover:bg-slate-100" aria-label={`${a.name}の協会カルテ`}>
+                      カルテ
+                    </Link>
                     {!a.is_active && <span className="ml-1.5 text-xs text-slate-400">（無効）</span>}
                     {node.children.length > 0 && <span className="ml-1.5 text-[11px] text-slate-400">下位{node.children.length}協会</span>}
                   </td>

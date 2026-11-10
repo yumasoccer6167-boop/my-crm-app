@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { Crown, Pencil } from "lucide-react";
+import { Crown, FileText, Pencil } from "lucide-react";
 import type { AssociationMembers, AssociationOverviewItem } from "../types";
 import { NATIONAL_ASSOCIATION_NAME } from "../shared/regions";
 import { api, unwrap } from "../lib/api";
@@ -191,6 +191,18 @@ export function AssociationMindMap({ associations, onEdit }: { associations: Ass
                   {n.sub && <span className={`block truncate text-[10px] font-normal leading-tight ${dark ? "text-white/70" : "text-slate-500"}`}>{n.sub}</span>}
                 </span>
               </button>
+              {n.kind === "assoc" && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/associations/${n.key.split(":")[1]}`)}
+                  title={`${n.label}の協会カルテを開く`}
+                  aria-label={`${n.label}の協会カルテを開く`}
+                  style={{ left: p.x + NODE_W - (onEdit ? 52 : 24), top: p.y + 8 }}
+                  className="absolute flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-600 shadow ring-1 ring-slate-300 hover:bg-slate-100"
+                >
+                  <FileText className="h-3 w-3" aria-hidden />
+                </button>
+              )}
               {onEdit && n.kind === "assoc" && (
                 <button
                   type="button"

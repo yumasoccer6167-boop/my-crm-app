@@ -9,6 +9,7 @@ import { Companies } from "./pages/Companies";
 import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
 import { Associations } from "./pages/Associations";
+import { AssociationKarte } from "./pages/AssociationKarte";
 import { Network } from "./pages/Network";
 import { Calendar } from "./pages/Calendar";
 import { DailyReport } from "./pages/DailyReport";
@@ -27,6 +28,7 @@ const router = createMemoryRouter([
       { path: "/companies/:id", element: <CompanyDetail /> },
       { path: "/network", element: <Network /> },
       { path: "/associations", element: <Associations /> },
+      { path: "/associations/:id", element: <AssociationKarte /> },
       { path: "/calendar", element: <Calendar /> },
       { path: "/recalls", element: <Recalls /> },
       { path: "/report", element: <DailyReport /> },

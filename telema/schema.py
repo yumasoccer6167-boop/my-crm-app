@@ -618,6 +618,12 @@ CREATE TABLE telema_org_assignments (
 );
 CREATE INDEX telema_org_assignments_user ON telema_org_assignments (user_id, effective_date);
 """,
+    # 28: 協会カルテ（協会ごとの協会HPのリンク・会長名・役員名）。加盟施設数・法人数・業種別・ユーザー率は加盟施設から数える
+    r"""
+ALTER TABLE telema_associations ADD COLUMN website_url TEXT;
+ALTER TABLE telema_associations ADD COLUMN chair_name TEXT;
+ALTER TABLE telema_associations ADD COLUMN officer_names TEXT;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く
