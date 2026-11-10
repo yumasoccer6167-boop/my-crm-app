@@ -82,18 +82,20 @@ function Body({ data }: { data: Data }) {
   const anyFilter = (Object.keys(filters) as Dim[]).some((d) => filters[d].size > 0);
 
   // 都道府県を絞ったら、その外の市区町村の選択は外す
-  const setDim = (d: Dim, next: Set<string>) =>
-    setFilters((cur) => {
-      const out = { ...cur, [d]: next };
-      if (d === "prefecture" && next.size > 0) out.city = new Set([...cur.city].filter((c) => next.has(c.split("\t")[0]!)));
-      return out;
-    });
-  const toggle = (d: Dim) => (key: string) => {
-    const next = new Set(filters[d]);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    setDim(d, next);
+  const withDim = (cur: Filters, d: Dim, next: Set<string>): Filters => {
+    const out = { ...cur, [d]: next };
+    if (d === "prefecture" && next.size > 0) out.city = new Set([...cur.city].filter((c) => next.has(c.split("\t")[0]!)));
+    return out;
   };
+  const setDim = (d: Dim, next: Set<string>) => setFilters((cur) => withDim(cur, d, next));
+  // 続けて押しても、直前の選択が消えないよう、最新の条件から作る
+  const toggle = (d: Dim) => (key: string) =>
+    setFilters((cur) => {
+      const next = new Set(cur[d]);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return withDim(cur, d, next);
+    });
 
   const fmt = (n: number) => (metric === "contracts" ? `${num(n)}件` : fmtP(n));
   const val = (k: Contract) => (metric === "contracts" ? 1 : (k.gross_profit ?? 0));
@@ -192,7 +194,9 @@ function Products({ data, filters, metric, setMetric, fmt, val, onToggle }: { da
     }
     return [...m.entries()].sort((a, b) => b[1].v - a[1].v || a[0].localeCompare(b[0], "ja")).map(([p, r]) => ({ key: p, label: p, value: r.v, note: metric === "contracts" ? `施設${num(r.facs.size)}` : `${num(r.n)}件` }));
   }, [data, filters, metric, val]);
-  const slices = topSlices(rows.map((r) => ({ label: r.label, value: r.value })));
+  // 円グラフは、商材を絞り込んでいるときは選んだ商材だけで作る（棒グラフは、ほかの商材も押して足せるよう全商材を出す）
+  const picked = filters.product.size > 0;
+  const slices = topSlices(rows.filter((r) => !picked || filters.product.has(r.key)).map((r) => ({ label: r.label, value: r.value })));
   return (
     <Card
       title="商材別（どの商材が売れているか）"
@@ -213,7 +217,9 @@ function Products({ data, filters, metric, setMetric, fmt, val, onToggle }: { da
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div>
-            <h3 className="mb-2 text-xs font-medium text-slate-500">商材の内訳（{metric === "contracts" ? "契約数" : "粗利"}）</h3>
+            <h3 className="mb-2 text-xs font-medium text-slate-500">
+              {picked ? "選んだ商材の内訳" : "商材の内訳"}（{metric === "contracts" ? "契約数" : "粗利"}）
+            </h3>
             {slices.length ? <Donut slices={slices} unit={metric === "contracts" ? "件" : "円"} centerLabel={metric === "contracts" ? "契約数" : "粗利（円）"} /> : <Empty>粗利が入った契約がありません</Empty>}
           </div>
           <div>
@@ -374,7 +380,9 @@ function Industries({ data, filters, onToggle }: { data: Data; filters: Filters;
     return [...m.entries()].sort(byCountDesc);
   }, [data, filters]);
   const total = entries.reduce((n, e) => n + e[1], 0);
-  const slices = topSlices(entries.map(([label, value]) => ({ label, value })));
+  // 円グラフは、業種を絞り込んでいるときは選んだ業種だけで作る（棒グラフは、ほかの業種も押して足せるよう全業種を出す）
+  const picked = filters.industry.size > 0;
+  const slices = topSlices(entries.filter(([k]) => !picked || filters.industry.has(k)).map(([label, value]) => ({ label, value })));
   return (
     <Card title="業種別の施設数">
       {entries.length === 0 ? (
@@ -382,8 +390,8 @@ function Industries({ data, filters, onToggle }: { data: Data; filters: Filters;
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div>
-            <h3 className="mb-2 text-xs font-medium text-slate-500">業種の内訳</h3>
-            <Donut slices={slices} unit="施設" centerLabel="ユーザー施設" />
+            <h3 className="mb-2 text-xs font-medium text-slate-500">{picked ? "選んだ業種の内訳" : "業種の内訳"}</h3>
+            {slices.length ? <Donut slices={slices} unit="施設" centerLabel="ユーザー施設" /> : <Empty>選んだ業種に当てはまる施設がありません</Empty>}
           </div>
           <div>
             <h3 className="mb-2 text-xs font-medium text-slate-500">業種ごとのユーザー施設数</h3>
@@ -481,7 +489,9 @@ function Needs({ data, filters, onToggle }: { data: Data; filters: Filters; onTo
       .sort((a, b) => Number(LAST.has(a.issue)) - Number(LAST.has(b.issue)) || b.company_count - a.company_count || b.contract_count - a.contract_count || a.issue.localeCompare(b.issue, "ja"));
     return { items, contracts: contracts.length, facilities: new Set(contracts.map((k) => k.company_id)).size };
   }, [data, filters]);
-  const slices = topSlices(items.map((i) => ({ label: i.issue, value: i.company_count })));
+  // 円グラフは、接点を絞り込んでいるときは選んだ課題だけで作る（棒グラフは、ほかの課題も押して足せるよう全課題を出す）
+  const picked = filters.issue.size > 0;
+  const slices = topSlices(items.filter((i) => !picked || filters.issue.has(i.issue)).map((i) => ({ label: i.issue, value: i.company_count })));
   return (
     <Card title="接点別（契約情報の課題）">
       {items.length === 0 ? (
@@ -493,8 +503,8 @@ function Needs({ data, filters, onToggle }: { data: Data; filters: Filters; onTo
           </p>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div>
-              <h3 className="mb-2 text-xs font-medium text-slate-500">課題ごとの施設数の内訳</h3>
-              <Donut slices={slices} unit="施設" centerLabel="課題の選択数" />
+              <h3 className="mb-2 text-xs font-medium text-slate-500">{picked ? "選んだ課題ごとの施設数の内訳" : "課題ごとの施設数の内訳"}</h3>
+              {slices.length ? <Donut slices={slices} unit="施設" centerLabel="課題の選択数" /> : <Empty>選んだ課題に当てはまる契約がありません</Empty>}
             </div>
             <div>
               <h3 className="mb-2 text-xs font-medium text-slate-500">課題ごとの施設数と契約数</h3>
