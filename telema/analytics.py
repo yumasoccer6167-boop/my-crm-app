@@ -92,7 +92,7 @@ def list_targets():
     month = _month_arg()
     who = 'TRUE' if user['role'] == 'admin' else 'u.id = %s'
     rows = d.all(
-        f'''SELECT u.id AS user_id, u.display_name AS user_name, t.gross_profit, t.units
+        f'''SELECT u.id AS user_id, u.display_name AS user_name, t.gross_profit, t.units, t.deals, t.first_visits, t.scheduled
               FROM users u LEFT JOIN telema_targets t ON t.user_id = u.id AND t.month = %s
              WHERE {who} ORDER BY u.id''', [month, *([] if user['role'] == 'admin' else [user['id']])])
     return jsonify({'month': month, 'items': rows})
@@ -107,14 +107,19 @@ def put_target(user_id, month):
         raise forbidden()
     if not d.first('SELECT 1 FROM users WHERE id = %s', (user_id,)):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（user_id: ユーザーが見つかりません）')
-    b = parse({'gross_profit': Int(min=0), 'units': Int(min=0)}, body())
-    before = d.first('SELECT gross_profit, units FROM telema_targets WHERE user_id = %s AND month = %s', (user_id, month))
+    # 商談数・初回訪問件数・時間設定件数は省略できる（省略したら、今の値を変えない）
+    b = parse({'gross_profit': Int(min=0), 'units': Int(min=0), 'deals': Int(min=0, optional=True), 'first_visits': Int(min=0, optional=True), 'scheduled': Int(min=0, optional=True)}, body())
+    before = d.first('SELECT gross_profit, units, deals, first_visits, scheduled FROM telema_targets WHERE user_id = %s AND month = %s', (user_id, month))
     d.run(
-        '''INSERT INTO telema_targets (user_id, month, gross_profit, units, updated_by) VALUES (%s, %s, %s, %s, %s)
-           ON CONFLICT (user_id, month) DO UPDATE SET gross_profit = EXCLUDED.gross_profit, units = EXCLUDED.units, updated_by = EXCLUDED.updated_by, updated_at = telema_now()''',
-        (user_id, month, b['gross_profit'], b['units'], user['id']))
+        '''INSERT INTO telema_targets (user_id, month, gross_profit, units, deals, first_visits, scheduled, updated_by) VALUES (%s, %s, %s, %s, COALESCE(%s, 0), COALESCE(%s, 0), COALESCE(%s, 0), %s)
+           ON CONFLICT (user_id, month) DO UPDATE SET gross_profit = EXCLUDED.gross_profit, units = EXCLUDED.units,
+             deals = COALESCE(%s, telema_targets.deals), first_visits = COALESCE(%s, telema_targets.first_visits), scheduled = COALESCE(%s, telema_targets.scheduled),
+             updated_by = EXCLUDED.updated_by, updated_at = telema_now()''',
+        (user_id, month, b['gross_profit'], b['units'], b.get('deals'), b.get('first_visits'), b.get('scheduled'), user['id'],
+         b.get('deals'), b.get('first_visits'), b.get('scheduled')))
     audit(d, user['id'], 'update', 'target', user_id, before, {'month': month, **b})
-    return jsonify({'user_id': user_id, 'month': month, **b})
+    out = d.first('SELECT gross_profit, units, deals, first_visits, scheduled FROM telema_targets WHERE user_id = %s AND month = %s', (user_id, month))
+    return jsonify({'user_id': user_id, 'month': month, **out})
 
 
 # ---------- ペース（今週の残・必要訪問件数・今日の必要件数） ----------
@@ -133,7 +138,7 @@ def analytics_pace():
     month_start = today.replace(day=1)
     month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     week_end = min(today + timedelta(days=6 - today.weekday()), month_end)
-    target = d.first('SELECT gross_profit, units FROM telema_targets WHERE user_id = %s AND month = %s', (uid, month))
+    target = d.first('SELECT gross_profit, units, deals, first_visits, scheduled FROM telema_targets WHERE user_id = %s AND month = %s', (uid, month))
     got = d.first(
         '''SELECT COALESCE(SUM(gross_profit), 0)::bigint AS gross_profit, COALESCE(SUM(units), 0)::bigint AS units
              FROM telema_contracts WHERE is_active = 1 AND assigned_user_id = %s AND contract_date::date >= %s AND contract_date::date <= %s''',

@@ -16,6 +16,7 @@ CONTRACT_BODY = {
     'contract_date': IsoDate(),
     'delivery_date': IsoDate(nullable=True, optional=True),     # 納品日（契約日とは別。未納品は空）
     'assigned_user_id': Int(nullable=True, optional=True),
+    'units_user_id': Int(nullable=True, optional=True),       # 台数担当（台数を持つ人。マイページの「自己ユーザー」に入る）
     # 商材の案内ページなどへのリンク。画面でそのままリンクにするので http(s) だけ受け付ける
     'product_url': Str(max=1000, pattern=r'https?://\S+', pattern_msg='リンクは http:// または https:// から始まるURLで入力してください', nullable=True, optional=True),
     'appointment_user_name': Str(max=100, nullable=True, optional=True),
@@ -35,12 +36,12 @@ CONTRACT_BODY = {
 }
 
 
-def _check_assignee(d, user, assigned_user_id):
-    """営業担当は CRM の実在するメンバーなら誰でも選べる（sales も他の営業担当を選べる。契約を取った人を記録するため、施設の担当営業の変更とは別）"""
+def _check_assignee(d, user, assigned_user_id, field='assigned_user_id', label='営業担当'):
+    """営業担当・台数担当は CRM の実在するメンバーなら誰でも選べる（sales も他の営業担当を選べる。契約を取った人を記録するため、施設の担当営業の変更とは別）"""
     if assigned_user_id is None:
         return
     if not d.first('SELECT 1 FROM users WHERE id = %s', (assigned_user_id,)):
-        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（assigned_user_id: 営業担当が見つかりません）')
+        raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{field}: {label}が見つかりません）')
 
 
 @bp.post('/companies/<id>/contracts')
@@ -53,11 +54,12 @@ def create_contract(id):
         raise forbidden()
     d = db()
     _check_assignee(d, user, b.get('assigned_user_id'))
+    _check_assignee(d, user, b.get('units_user_id'), 'units_user_id', '台数担当')
     new_id = d.value(
-        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, delivery_date, assigned_user_id, product_url, appointment_user_name, issues, memo, amount, gross_profit, units,
+        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, delivery_date, assigned_user_id, units_user_id, product_url, appointment_user_name, issues, memo, amount, gross_profit, units,
                                           product_monthly, product_term, server_monthly, server_term, cashback, created_by)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
-        (id, b['product_name'], b['contract_date'], b.get('delivery_date') or None, b.get('assigned_user_id'), b.get('product_url') or None,
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        (id, b['product_name'], b['contract_date'], b.get('delivery_date') or None, b.get('assigned_user_id'), b.get('units_user_id'), b.get('product_url') or None,
          b.get('appointment_user_name') or None, b.get('issues') or [], b.get('memo') or None, b.get('amount'), b.get('gross_profit'), b.get('units'),
          b.get('product_monthly'), b.get('product_term'), b.get('server_monthly'), b.get('server_term'), b.get('cashback'), user['id']),
     )
@@ -80,6 +82,8 @@ def update_contract(id):
         raise forbidden()
     if 'assigned_user_id' in b and b['assigned_user_id'] != before['assigned_user_id']:
         _check_assignee(d, user, b['assigned_user_id'])
+    if 'units_user_id' in b and b['units_user_id'] != before['units_user_id']:
+        _check_assignee(d, user, b['units_user_id'], 'units_user_id', '台数担当')
     values = dict(b)
     for key in ('product_url', 'appointment_user_name', 'delivery_date', 'memo'):
         if key in values and not values[key]:

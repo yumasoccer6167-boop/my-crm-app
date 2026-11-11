@@ -47,6 +47,8 @@ import type {
   ListType,
   PrefectureStat,
   UserAnalysis,
+  MyAnalysis,
+  MyPageData,
   Section,
   AssociationOverview,
   AssociationMembers,
@@ -79,7 +81,15 @@ type Api = {
   "sales-results": { $get: Call<SalesResultsData> };
   "sales-scorecard": { $get: Call<SalesScorecardData> };
   analytics: { $get: Call<AnalyticsData>; pace: { $get: Call<AnalyticsPace> } };
-  targets: { $get: Call<TargetsData>; ":user_id": { ":month": { $put: Call<{ user_id: number; month: string; gross_profit: number; units: number }> } } };
+  targets: {
+    $get: Call<TargetsData>;
+    ":user_id": { ":month": { $put: Call<{ user_id: number; month: string; gross_profit: number; units: number; deals: number; first_visits: number; scheduled: number }> } };
+  };
+  mypage: {
+    $get: Call<MyPageData>;
+    commit: { $put: Call<{ day: string; commit_gp: number | null; commit_units: number | null; commit_deals: number | null; comment: string | null }> };
+    analysis: { $get: Call<MyAnalysis> };
+  };
   calendar: { $get: Call<CalendarData> };
   recalls: { $get: Call<RecallsData> };
   workdays: { ":user_id": { ":day": { $put: Call<WorkdayResult> } } };

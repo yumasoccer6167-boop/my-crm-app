@@ -145,6 +145,8 @@ function Pace({ userId, canEdit }: { userId: number; canEdit: boolean }) {
 function TargetForm({ pace, canEdit, onSaved }: { pace: AnalyticsPace; canEdit: boolean; onSaved: () => void }) {
   const [gp, setGp] = useState(pace.target ? yenToP(pace.target.gross_profit) : "");
   const [units, setUnits] = useState(pace.target ? String(pace.target.units) : "");
+  // マイページの週間・月間の達成率に使う件数の目標
+  const [counts, setCounts] = useState({ deals: pace.target ? String(pace.target.deals) : "", first_visits: pace.target ? String(pace.target.first_visits) : "", scheduled: pace.target ? String(pace.target.scheduled) : "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -161,7 +163,13 @@ function TargetForm({ pace, canEdit, onSaved }: { pace: AnalyticsPace; canEdit: 
       await unwrap(
         api.targets[":user_id"][":month"].$put({
           param: { user_id: String(pace.user_id), month: pace.month },
-          json: { gross_profit: pToYen(gp) ?? 0, units: Math.max(0, Math.round(Number(units) || 0)) },
+          json: {
+            gross_profit: pToYen(gp) ?? 0,
+            units: Math.max(0, Math.round(Number(units) || 0)),
+            deals: Math.max(0, Math.round(Number(counts.deals) || 0)),
+            first_visits: Math.max(0, Math.round(Number(counts.first_visits) || 0)),
+            scheduled: Math.max(0, Math.round(Number(counts.scheduled) || 0)),
+          },
         }),
       );
       setSaved(true);
@@ -184,6 +192,18 @@ function TargetForm({ pace, canEdit, onSaved }: { pace: AnalyticsPace; canEdit: 
         <div className="mb-1 text-xs text-slate-500">台数</div>
         <input type="number" min={0} step={1} inputMode="numeric" value={units} disabled={!canEdit} onChange={(e) => setUnits(e.target.value)} placeholder="例：30" className={`${inputCls} w-28`} />
       </label>
+      {(
+        [
+          ["deals", "商談数"],
+          ["first_visits", "初回訪問件数"],
+          ["scheduled", "時間設定件数"],
+        ] as const
+      ).map(([k, label]) => (
+        <label key={k} className="block">
+          <div className="mb-1 text-xs text-slate-500">{label}</div>
+          <input type="number" min={0} step={1} inputMode="numeric" value={counts[k]} disabled={!canEdit} onChange={(e) => setCounts({ ...counts, [k]: e.target.value })} className={`${inputCls} w-28`} />
+        </label>
+      ))}
       {canEdit && (
         <Button size="sm" variant="primary" disabled={saving} onClick={save}>
           {saving ? "保存中…" : "目標を保存"}

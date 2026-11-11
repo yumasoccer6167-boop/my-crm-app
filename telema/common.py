@@ -40,8 +40,8 @@ VISIT_STATUS_COLUMN = (
     f'(SELECT vp.name FROM telema_visit_purposes vp WHERE vp.id = {LATEST_VISIT_PURPOSE_ID}) AS visit_purpose_name'
 )
 
-CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name
-  FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id'''
+CONTRACT_SELECT = '''SELECT ct.*, u.display_name AS assigned_user_name, uu.display_name AS units_user_name
+  FROM telema_contracts ct LEFT JOIN users u ON u.id = ct.assigned_user_id LEFT JOIN users uu ON uu.id = ct.units_user_id'''
 
 
 @dataclass(frozen=True)

@@ -131,10 +131,23 @@ function TargetEditor({ month, order, onSaved }: { month: string; order: number[
   );
 }
 
+/** 件数の目標の項目（台数と、マイページの商談数・初回訪問件数・時間設定件数） */
+const COUNT_TARGETS = [
+  { key: "units", label: "台数" },
+  { key: "deals", label: "商談数" },
+  { key: "first_visits", label: "初回訪問件数" },
+  { key: "scheduled", label: "時間設定件数" },
+] as const;
+type CountKey = (typeof COUNT_TARGETS)[number]["key"];
+type TargetDraft = { gp: string } & Record<CountKey, string>;
+const countText = (n: number | null) => (n == null ? "" : String(n));
+const draftOf = (t: TargetsData["items"][number]): TargetDraft => ({ gp: yenToP(t.gross_profit), units: countText(t.units), deals: countText(t.deals), first_visits: countText(t.first_visits), scheduled: countText(t.scheduled) });
+const countOf = (s: string) => Math.max(0, Math.round(Number(s) || 0));
+
 function TargetTable({ data, order, onSaved }: { data: TargetsData; order: number[]; onSaved: () => void }) {
   const rank = new Map(order.map((id, i) => [id, i]));
   const items = [...data.items].sort((a, b) => (rank.get(a.user_id) ?? 1e9) - (rank.get(b.user_id) ?? 1e9));
-  const [draft, setDraft] = useState<Record<number, { gp: string; units: string }>>(() => Object.fromEntries(items.map((t) => [t.user_id, { gp: yenToP(t.gross_profit), units: t.units == null ? "" : String(t.units) }])));
+  const [draft, setDraft] = useState<Record<number, TargetDraft>>(() => Object.fromEntries(items.map((t) => [t.user_id, draftOf(t)])));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -144,11 +157,17 @@ function TargetTable({ data, order, onSaved }: { data: TargetsData; order: numbe
     try {
       const changed = items.filter((t) => {
         const d = draft[t.user_id]!;
-        return d.gp !== yenToP(t.gross_profit) || d.units !== (t.units == null ? "" : String(t.units));
+        const was = draftOf(t);
+        return d.gp !== was.gp || COUNT_TARGETS.some((c) => d[c.key] !== was[c.key]);
       });
       for (const t of changed) {
         const d = draft[t.user_id]!;
-        await unwrap(api.targets[":user_id"][":month"].$put({ param: { user_id: String(t.user_id), month: data.month }, json: { gross_profit: pToYen(d.gp) ?? 0, units: Math.max(0, Math.round(Number(d.units) || 0)) } }));
+        await unwrap(
+          api.targets[":user_id"][":month"].$put({
+            param: { user_id: String(t.user_id), month: data.month },
+            json: { gross_profit: pToYen(d.gp) ?? 0, units: countOf(d.units), deals: countOf(d.deals), first_visits: countOf(d.first_visits), scheduled: countOf(d.scheduled) },
+          }),
+        );
       }
       setMessage(changed.length ? `${changed.length}人分を保存しました` : "変更はありません");
       onSaved();
@@ -167,7 +186,11 @@ function TargetTable({ data, order, onSaved }: { data: TargetsData; order: numbe
             <tr>
               <th className="px-3 py-2 text-left font-medium">氏名</th>
               <th className="px-3 py-2 text-left font-medium">営業P（1万円＝1P）</th>
-              <th className="px-3 py-2 text-left font-medium">台数</th>
+              {COUNT_TARGETS.map((c) => (
+                <th key={c.key} className="whitespace-nowrap px-3 py-2 text-left font-medium">
+                  {c.label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -177,9 +200,11 @@ function TargetTable({ data, order, onSaved }: { data: TargetsData; order: numbe
                 <td className="px-3 py-1.5">
                   <input type="number" min={0} step="any" inputMode="decimal" value={draft[t.user_id]!.gp} onChange={(e) => setDraft({ ...draft, [t.user_id]: { ...draft[t.user_id]!, gp: e.target.value } })} className={`${inputCls} w-32`} aria-label={`${t.user_name}の営業P`} />
                 </td>
-                <td className="px-3 py-1.5">
-                  <input type="number" min={0} step={1} inputMode="numeric" value={draft[t.user_id]!.units} onChange={(e) => setDraft({ ...draft, [t.user_id]: { ...draft[t.user_id]!, units: e.target.value } })} className={`${inputCls} w-24`} aria-label={`${t.user_name}の台数`} />
-                </td>
+                {COUNT_TARGETS.map((c) => (
+                  <td key={c.key} className="px-3 py-1.5">
+                    <input type="number" min={0} step={1} inputMode="numeric" value={draft[t.user_id]![c.key]} onChange={(e) => setDraft({ ...draft, [t.user_id]: { ...draft[t.user_id]!, [c.key]: e.target.value } })} className={`${inputCls} w-24`} aria-label={`${t.user_name}の${c.label}`} />
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>

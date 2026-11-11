@@ -6,7 +6,7 @@ import {
   Star, Camera, Upload, Download, Copy, BarChart,
   Sparkles, FileText, ClipboardList, CalendarDays,
   CheckSquare, Square, Mic, LayoutGrid, List,
-  Heart, Briefcase, AlertTriangle, PieChart, User, Link2, XCircle, PhoneCall, Trophy, TrendingUp
+  Heart, Briefcase, AlertTriangle, PieChart, User, Link2, XCircle, PhoneCall, Trophy, TrendingUp, Target
 } from 'lucide-react';
 
 import SuccessCasesView from './SuccessCases';
@@ -17,6 +17,8 @@ const TelemaApp = lazy(() => import('./telema/TelemaApp'));
 const AnalyticsApp = lazy(() => import('./telema/AnalyticsApp'));
 // ユーザー分析（業種別・地域別・接点別）。旧「契約リスト」の場所
 const UserAnalysisApp = lazy(() => import('./telema/UserAnalysisApp'));
+// マイページ（数字の自己認識・自己分析）。プロフィールなどの個人設定は「個人設定」（旧マイページ）にある
+const MyPageApp = lazy(() => import('./telema/MyPageApp'));
 
 // アプリ更新のお知らせ（内容と更新日時は src/releaseNotes.js）。開いたときだけ読み込む
 const ReleaseNotesModal = lazy(() => import('./ReleaseNotesModal.jsx'));
@@ -3341,18 +3343,19 @@ export default function App() {
 
   const menuItems = [
     { id: 'home', icon: <Home className="w-4 h-4" />, label: 'HOME' },
+    { id: 'my_numbers', icon: <Target className="w-4 h-4" />, label: 'マイページ' },
     { id: 'customers', icon: <Users className="w-4 h-4" />, label: '顧客リスト' },
     { id: 'telema', icon: <PhoneCall className="w-4 h-4" />, label: 'テレマリスト' },
     { id: 'analytics', icon: <TrendingUp className="w-4 h-4" />, label: '数値分析' },
     { id: 'user_analysis', icon: <PieChart className="w-4 h-4" />, label: 'ユーザー分析' },
     { id: 'success_cases', icon: <Trophy className="w-4 h-4" />, label: '事例管理' },
-    { id: 'mypage', icon: <User className="w-4 h-4" />, label: 'マイページ' },
+    { id: 'mypage', icon: <User className="w-4 h-4" />, label: '個人設定' },
     ...(canViewSettings ? [{ id: 'settings', icon: <Settings className="w-4 h-4" />, label: '設定・管理' }] : []),
   ];
 
   const titles = {
-    home: 'HOME', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', user_analysis: 'ユーザー分析', success_cases: '事例管理',
-    mypage: 'マイページ', settings: '設定・管理',
+    home: 'HOME', my_numbers: 'マイページ', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', user_analysis: 'ユーザー分析', success_cases: '事例管理',
+    mypage: '個人設定', settings: '設定・管理',
   };
 
   // 未ログイン
@@ -3417,7 +3420,7 @@ export default function App() {
           <Avatar photo={user.photo} name={user.displayName} size="w-8 h-8" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white truncate">{user.displayName}</p>
-            <p className="text-[10px] text-slate-400">{ROLE_LABELS[user.role] || '一般'} ・ マイページ</p>
+            <p className="text-[10px] text-slate-400">{ROLE_LABELS[user.role] || '一般'} ・ 個人設定</p>
           </div>
         </button>
         <div className="px-5 pb-4 text-[10px] flex items-center gap-1.5">
@@ -3469,6 +3472,11 @@ export default function App() {
         {activeTab === 'user_analysis' && (
           <Suspense fallback={<p className="text-slate-400 font-semibold text-sm">読み込み中...</p>}>
             <UserAnalysisApp />
+          </Suspense>
+        )}
+        {activeTab === 'my_numbers' && (
+          <Suspense fallback={<p className="text-slate-400 font-semibold text-sm">読み込み中...</p>}>
+            <MyPageApp />
           </Suspense>
         )}
         {activeTab === 'success_cases' && (

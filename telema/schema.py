@@ -640,6 +640,26 @@ ALTER TABLE telema_contracts ADD COLUMN cashback INTEGER;
 -- 営業の訪問記録のこれまでの「月額」「期間」は、商品の月額・回数として引き継ぐ（元の列はデータとして残す）
 UPDATE telema_call_logs SET sales_product_monthly = sales_monthly_fee, sales_product_term = sales_term WHERE sales_monthly_fee IS NOT NULL OR sales_term IS NOT NULL;
 """,
+    # 30: マイページ（数字の自己認識・自己分析）。
+    #     目標に、商談数・初回訪問件数・時間設定件数（月間）を追加。契約情報に「台数担当」（営業担当とは別に、台数を持つ人。自己ユーザーの絞り込み用）。
+    #     今日のコミット（営業ごと・日ごと。定量＝粗利・台数・商談件数、定性＝コメント）
+    r"""
+ALTER TABLE telema_targets ADD COLUMN deals INTEGER NOT NULL DEFAULT 0 CHECK (deals >= 0);
+ALTER TABLE telema_targets ADD COLUMN first_visits INTEGER NOT NULL DEFAULT 0 CHECK (first_visits >= 0);
+ALTER TABLE telema_targets ADD COLUMN scheduled INTEGER NOT NULL DEFAULT 0 CHECK (scheduled >= 0);
+ALTER TABLE telema_contracts ADD COLUMN units_user_id INTEGER;
+CREATE INDEX telema_idx_contracts_units_user ON telema_contracts(units_user_id) WHERE is_active = 1 AND units_user_id IS NOT NULL;
+CREATE TABLE telema_daily_commits (
+  user_id       INTEGER NOT NULL,
+  day           TEXT NOT NULL CHECK (day ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
+  commit_gp     BIGINT CHECK (commit_gp >= 0),
+  commit_units  INTEGER CHECK (commit_units >= 0),
+  commit_deals  INTEGER CHECK (commit_deals >= 0),
+  comment       TEXT,
+  updated_at    TEXT NOT NULL DEFAULT telema_now(),
+  PRIMARY KEY (user_id, day)
+);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

@@ -173,6 +173,9 @@ export type Contract = {
   delivery_date: string | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
+  /** 台数担当（営業担当とは別に、台数を持つ人） */
+  units_user_id: number | null;
+  units_user_name: string | null;
   product_url: string | null;
   appointment_user_name: string | null;
   /** 課題（集客・採用・クチコミ対策など） */
@@ -537,8 +540,47 @@ export type SalesScoreRow = {
 };
 export type SalesScorecardData = { items: SalesScoreRow[]; date_from: string; date_to: string };
 
-/** 営業ごと・月ごとの目標（粗利・台数）。未設定の月は null */
-export type TargetsData = { month: string; items: { user_id: number; user_name: string; gross_profit: number | null; units: number | null }[] };
+/** 営業ごと・月ごとの目標（粗利・台数・商談数・初回訪問件数・時間設定件数）。未設定の月は null */
+export type TargetsData = {
+  month: string;
+  items: { user_id: number; user_name: string; gross_profit: number | null; units: number | null; deals: number | null; first_visits: number | null; scheduled: number | null }[];
+};
+
+/** マイページ：目標と実績の1項目（目標が0なら未設定） */
+export type MyPageMetric = "gross_profit" | "units" | "deals" | "first_visits" | "scheduled";
+export type MyPageProgress = Record<MyPageMetric, { target: number; actual: number }>;
+export type MyPageData = {
+  today: string;
+  role: Role;
+  /** マネージャー以上のとき、チームの名前（所属の部署）と人数 */
+  team_name: string | null;
+  team_size: number | null;
+  /** 今日のコミット。定量（粗利は円・台数・商談件数）と定性（コメント） */
+  commit: { commit_gp: number | null; commit_units: number | null; commit_deals: number | null; comment: string | null; updated_at: string } | null;
+  today_workday: boolean;
+  workdays_left: number;
+  /** 今日の必要数字（円・台・件）。月間目標が0の項目は null */
+  daily: Record<"gross_profit" | "units" | "deals", { need: number; done: number; left: number } | null>;
+  week: { from: string; to: string; personal: MyPageProgress; team?: MyPageProgress };
+  month: { month: string; personal: MyPageProgress; team?: MyPageProgress };
+};
+export type MyAnalysis = {
+  scope: "closed" | "user";
+  summary: {
+    orders: number;
+    deals: number;
+    gross_profit: number;
+    units: number;
+    months: number;
+    avg_gross_profit: number | null;
+    units_per_deal: number | null;
+    monthly_gross_profit: number | null;
+    monthly_units: number | null;
+  };
+  products: { name: string; orders: number; gross_profit: number; avg_gross_profit: number | null }[];
+  industries: { name: string; orders: number }[];
+  months: { month: string; orders: number; gross_profit: number; units: number }[];
+};
 
 /** 数値分析：目標に対する今週・今日のペース。目標が未設定なら target 以降が null */
 export type AnalyticsPace = {
@@ -546,7 +588,7 @@ export type AnalyticsPace = {
   month: string;
   today: string;
   week_end: string;
-  target: { gross_profit: number; units: number } | null;
+  target: { gross_profit: number; units: number; deals: number; first_visits: number; scheduled: number } | null;
   month_actual: { gross_profit: number; units: number };
   month_remaining: { gross_profit: number; units: number } | null;
   month_workdays_left: number;

@@ -9,7 +9,7 @@ import { useMasters } from "../../lib/masters";
 import { useApi } from "../../lib/useApi";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../ui";
 
-type Draft = { product_name: string; contract_date: string; delivery_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string; issues: string[]; memo: string; amount: string; gross_profit: string; units: string; product_monthly: string; product_term: string; server_monthly: string; server_term: string; cashback: string };
+type Draft = { product_name: string; contract_date: string; delivery_date: string; assigned_user_id: number | null; units_user_id: number | null; product_url: string; appointment_user_name: string; issues: string[]; memo: string; amount: string; gross_profit: string; units: string; product_monthly: string; product_term: string; server_monthly: string; server_term: string; cashback: string };
 
 const URL_RE = /^https?:\/\/\S+$/;
 const num = (v: string) => (v.trim() === "" ? null : Math.max(0, Math.round(Number(v))));
@@ -37,6 +37,7 @@ export function ContractsCard({
 
   // 営業担当は、一般（sales）でも他のメンバーを選べる。無効になったメンバーでも、いまその契約の営業担当なら選択肢に残す
   const assignees = users.filter((u) => u.is_active || u.id === draft?.assigned_user_id);
+  const unitsAssignees = users.filter((u) => u.is_active || u.id === draft?.units_user_id);
 
   function start(c?: Contract) {
     setError(null);
@@ -48,6 +49,7 @@ export function ContractsCard({
             contract_date: c.contract_date,
             delivery_date: c.delivery_date ?? "",
             assigned_user_id: c.assigned_user_id,
+            units_user_id: c.units_user_id,
             product_url: c.product_url ?? "",
             appointment_user_name: c.appointment_user_name ?? "",
             issues: c.issues ?? [],
@@ -66,6 +68,7 @@ export function ContractsCard({
             contract_date: todayJst(),
             delivery_date: "",
             assigned_user_id: me.role === "sales" ? me.id : (companyAssigneeId ?? me.id),
+            units_user_id: null,
             product_url: "",
             appointment_user_name: "",
             issues: [],
@@ -100,6 +103,7 @@ export function ContractsCard({
       contract_date: draft.contract_date,
       delivery_date: draft.delivery_date || null,
       assigned_user_id: draft.assigned_user_id,
+      units_user_id: draft.units_user_id,
       product_url: product_url || null,
       appointment_user_name: draft.appointment_user_name.trim() || null,
       issues: draft.issues,
@@ -180,7 +184,7 @@ export function ContractsCard({
           <div className="mb-1 text-xs text-slate-500">納品日</div>
           <input type="date" className={inputCls} value={draft.delivery_date} onChange={(e) => setDraft({ ...draft, delivery_date: e.target.value })} />
         </label>
-        <label className="col-span-2 block">
+        <label className="block">
           <div className="mb-1 text-xs text-slate-500">営業担当</div>
           <select
             className={inputCls}
@@ -189,6 +193,22 @@ export function ContractsCard({
           >
             <option value="">未設定</option>
             {assignees.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <div className="mb-1 text-xs text-slate-500">台数担当</div>
+          <select
+            className={inputCls}
+            aria-label="台数担当"
+            value={draft.units_user_id ?? ""}
+            onChange={(e) => setDraft({ ...draft, units_user_id: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">未設定</option>
+            {unitsAssignees.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
               </option>
@@ -327,6 +347,7 @@ export function ContractsCard({
               </div>
               <div className="text-xs text-slate-500">
                 営業担当：{c.assigned_user_name ?? "未設定"}
+                {c.units_user_name && <span className="ml-2">台数担当：{c.units_user_name}</span>}
                 {c.appointment_user_name && <span className="ml-2">アポ担当：{c.appointment_user_name}</span>}
               </div>
               {(c.amount != null || c.gross_profit != null || c.units != null) && (
