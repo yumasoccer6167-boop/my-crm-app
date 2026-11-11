@@ -3,12 +3,13 @@ import re
 
 from flask import jsonify, request
 
+from .calls import PAYMENT_TERMS
 from .common import ASSOCIATION, CONTRACT_SELECT, audit, can_edit_company, company_visibility
 from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found
 from .normalize import escape_like
 from .routes import bp
-from .validate import Bool, Int, IsoDate, Str, StrList, parse, parse_id
+from .validate import Bool, Enum, Int, IsoDate, Str, StrList, parse, parse_id
 
 CONTRACT_BODY = {
     'product_name': Str(min=1, max=100),
@@ -23,6 +24,12 @@ CONTRACT_BODY = {
     'amount': Int(min=0, nullable=True, optional=True),
     'gross_profit': Int(min=0, nullable=True, optional=True),
     'units': Int(min=0, nullable=True, optional=True),
+    # 支払い内容。商品・サーバーの月額（円）と回数（現金一括・自社回収・12〜84回）、CB（キャッシュバック料金・円）
+    'product_monthly': Int(min=0, nullable=True, optional=True),
+    'product_term': Enum(PAYMENT_TERMS, nullable=True, optional=True),
+    'server_monthly': Int(min=0, nullable=True, optional=True),
+    'server_term': Enum(PAYMENT_TERMS, nullable=True, optional=True),
+    'cashback': Int(min=0, nullable=True, optional=True),
     'issues': StrList(max_len=20, item_max=50, optional=True),
     'memo': Str(max=2000, nullable=True, optional=True),
 }
@@ -47,10 +54,12 @@ def create_contract(id):
     d = db()
     _check_assignee(d, user, b.get('assigned_user_id'))
     new_id = d.value(
-        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, delivery_date, assigned_user_id, product_url, appointment_user_name, issues, memo, amount, gross_profit, units, created_by)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        '''INSERT INTO telema_contracts (company_id, product_name, contract_date, delivery_date, assigned_user_id, product_url, appointment_user_name, issues, memo, amount, gross_profit, units,
+                                          product_monthly, product_term, server_monthly, server_term, cashback, created_by)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b['product_name'], b['contract_date'], b.get('delivery_date') or None, b.get('assigned_user_id'), b.get('product_url') or None,
-         b.get('appointment_user_name') or None, b.get('issues') or [], b.get('memo') or None, b.get('amount'), b.get('gross_profit'), b.get('units'), user['id']),
+         b.get('appointment_user_name') or None, b.get('issues') or [], b.get('memo') or None, b.get('amount'), b.get('gross_profit'), b.get('units'),
+         b.get('product_monthly'), b.get('product_term'), b.get('server_monthly'), b.get('server_term'), b.get('cashback'), user['id']),
     )
     row = d.first(f'{CONTRACT_SELECT} WHERE ct.id = %s', (new_id,))
     audit(d, user['id'], 'create', 'contract', new_id, None, row)

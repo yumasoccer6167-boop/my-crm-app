@@ -10,13 +10,21 @@ export const VISIT_METHODS: { value: VisitMethod; label: string }[] = [
 
 export const visitMethodLabel = (m: VisitMethod | null) => VISIT_METHODS.find((x) => x.value === m)?.label ?? "";
 
-/** 訪問の内容が「営業」のときだけ、商材・月額・期間を残せる（名前で判定する） */
+/** 訪問の内容が「営業」のときだけ、商材・支払い内容（商品・サーバーの月額と回数、CB）を残せる（名前で判定する） */
 export const SALES_PURPOSE_NAME = "営業";
-export const SALES_TERMS: { value: string; label: string }[] = [
+/** 受注の支払いの回数（商品・サーバー）。現金一括・自社回収・12〜84回 */
+export const PAYMENT_TERMS: { value: string; label: string }[] = [
   { value: "cash", label: "現金一括" },
-  ...[12, 24, 36, 48, 60, 72, 84].map((n) => ({ value: String(n), label: `${n}か月` })),
+  { value: "inhouse", label: "自社回収" },
+  ...[12, 24, 36, 48, 60, 72, 84].map((n) => ({ value: String(n), label: `${n}回` })),
 ];
-export const salesTermLabel = (t: string | null) => SALES_TERMS.find((x) => x.value === t)?.label ?? "";
+export const paymentTermLabel = (t: string | null) => PAYMENT_TERMS.find((x) => x.value === t)?.label ?? "";
+
+/** 支払い内容（商品の月額・回数、サーバーの月額・回数、CB）を、入っている項目だけ文にする */
+export function paymentParts(p: { productMonthly: number | null; productTerm: string | null; serverMonthly: number | null; serverTerm: string | null; cashback: number | null }): string[] {
+  const part = (name: string, monthly: number | null, term: string | null) => (monthly != null || term ? `${name} ${[monthly != null ? `月額 ${monthly.toLocaleString()}円` : "", term ? paymentTermLabel(term) : ""].filter(Boolean).join("・")}` : "");
+  return [part("商品", p.productMonthly, p.productTerm), part("サーバー", p.serverMonthly, p.serverTerm), p.cashback != null ? `CB ${p.cashback.toLocaleString()}円` : ""].filter(Boolean);
+}
 
 /** 架電の結果「初回訪問時間設定」。この結果と「時間設定」のときだけ、訪問する日時・事前確認日時を付けられる（名前で判定する） */
 export const FIRST_SCHEDULING_STATUS = "初回訪問時間設定";
@@ -50,18 +58,18 @@ export const REPLY_RESULTS: { value: SalesResult; label: string; on: string }[] 
   { value: "resales", label: "再営業", on: "bg-indigo-600 text-white ring-indigo-600" },
 ];
 
-type SalesFields = Pick<CallLog, "sales_product" | "sales_monthly_fee" | "sales_term" | "sales_result" | "sales_followup_at" | "sales_amount" | "sales_gross_profit" | "sales_units">;
+type SalesFields = Pick<CallLog, "sales_product" | "sales_result" | "sales_followup_at" | "sales_amount" | "sales_gross_profit" | "sales_units"> &
+  Partial<Pick<CallLog, "sales_product_monthly" | "sales_product_term" | "sales_server_monthly" | "sales_server_term" | "sales_cashback">>;
 
-/** 営業の内容（商材・月額・期間・結果）を1行の文にする。何も無ければ空 */
+/** 営業の内容（商材・結果・受注金額・支払い内容）を1行の文にする。何も無ければ空 */
 export function salesSummary(c: SalesFields, reply = false): string {
   return [
     c.sales_product,
-    c.sales_monthly_fee != null ? `月額 ${c.sales_monthly_fee.toLocaleString()}円` : "",
-    c.sales_term ? `期間 ${salesTermLabel(c.sales_term)}` : "",
     c.sales_result ? `結果 ${salesResultLabel(c.sales_result, reply)}${c.sales_followup_at ? `（${fmtDateTime(c.sales_followup_at)}）` : ""}` : "",
     c.sales_amount != null ? `受注金額 ${c.sales_amount.toLocaleString()}円` : "",
     c.sales_gross_profit != null ? `粗利 ${fmtP(c.sales_gross_profit)}` : "",
     c.sales_units != null ? `${c.sales_units}台` : "",
+    ...paymentParts({ productMonthly: c.sales_product_monthly ?? null, productTerm: c.sales_product_term ?? null, serverMonthly: c.sales_server_monthly ?? null, serverTerm: c.sales_server_term ?? null, cashback: c.sales_cashback ?? null }),
   ].filter(Boolean).join(" ／ ");
 }
 

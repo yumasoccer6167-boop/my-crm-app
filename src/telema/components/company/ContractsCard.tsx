@@ -4,11 +4,12 @@ import { api, unwrap } from "../../lib/api";
 import { CONTRACT_ISSUES } from "../../shared/constants";
 import { fmtDate, todayJst } from "../../lib/format";
 import { fmtP, pToYen, yenToP } from "../../lib/points";
+import { PAYMENT_TERMS, paymentParts } from "../../lib/record-kind";
 import { useMasters } from "../../lib/masters";
 import { useApi } from "../../lib/useApi";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../ui";
 
-type Draft = { product_name: string; contract_date: string; delivery_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string; issues: string[]; memo: string; amount: string; gross_profit: string; units: string };
+type Draft = { product_name: string; contract_date: string; delivery_date: string; assigned_user_id: number | null; product_url: string; appointment_user_name: string; issues: string[]; memo: string; amount: string; gross_profit: string; units: string; product_monthly: string; product_term: string; server_monthly: string; server_term: string; cashback: string };
 
 const URL_RE = /^https?:\/\/\S+$/;
 const num = (v: string) => (v.trim() === "" ? null : Math.max(0, Math.round(Number(v))));
@@ -54,6 +55,11 @@ export function ContractsCard({
             amount: c.amount == null ? "" : String(c.amount),
             gross_profit: yenToP(c.gross_profit),
             units: c.units == null ? "" : String(c.units),
+            product_monthly: c.product_monthly == null ? "" : String(c.product_monthly),
+            product_term: c.product_term ?? "",
+            server_monthly: c.server_monthly == null ? "" : String(c.server_monthly),
+            server_term: c.server_term ?? "",
+            cashback: c.cashback == null ? "" : String(c.cashback),
           }
         : {
             product_name: "",
@@ -67,6 +73,11 @@ export function ContractsCard({
             amount: "",
             gross_profit: "",
             units: "",
+            product_monthly: "",
+            product_term: "",
+            server_monthly: "",
+            server_term: "",
+            cashback: "",
           },
     );
   }
@@ -96,6 +107,11 @@ export function ContractsCard({
       amount: num(draft.amount),
       gross_profit: pToYen(draft.gross_profit),
       units: num(draft.units),
+      product_monthly: num(draft.product_monthly),
+      product_term: draft.product_term || null,
+      server_monthly: num(draft.server_monthly),
+      server_term: draft.server_term || null,
+      cashback: num(draft.cashback),
     };
     setSaving(true);
     setError(null);
@@ -202,6 +218,31 @@ export function ContractsCard({
             </label>
           ))}
         </div>
+        <div className="col-span-2 grid grid-cols-2 gap-2">
+          {([["product_monthly", "商品の月額（円）"], ["server_monthly", "サーバーの月額（円）"]] as const).map(([k, label]) => (
+            <label key={k} className="block">
+              <div className="mb-1 text-xs text-slate-500">{label}</div>
+              <input type="number" min={0} step={1} inputMode="numeric" className={inputCls} value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
+            </label>
+          ))}
+          {([["product_term", "商品の回数"], ["server_term", "サーバーの回数"]] as const).map(([k, label]) => (
+            <label key={k} className="block">
+              <div className="mb-1 text-xs text-slate-500">{label}</div>
+              <select className={inputCls} value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}>
+                <option value="">（未選択）</option>
+                {PAYMENT_TERMS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          <label className="col-span-2 block">
+            <div className="mb-1 text-xs text-slate-500">CB（キャッシュバック料金・円）</div>
+            <input type="number" min={0} step={1} inputMode="numeric" className={inputCls} value={draft.cashback} onChange={(e) => setDraft({ ...draft, cashback: e.target.value })} />
+          </label>
+        </div>
         <div className="col-span-2">
           <div className="mb-1 text-xs text-slate-500">課題（複数選べます）</div>
           <div className="flex flex-wrap gap-1.5">
@@ -292,6 +333,9 @@ export function ContractsCard({
                 <div className="text-xs text-slate-500">
                   {[c.amount != null ? `受注金額 ${c.amount.toLocaleString()}円` : "", c.gross_profit != null ? `粗利 ${fmtP(c.gross_profit)}` : "", c.units != null ? `${c.units}台` : ""].filter(Boolean).join(" ／ ")}
                 </div>
+              )}
+              {paymentParts({ productMonthly: c.product_monthly, productTerm: c.product_term, serverMonthly: c.server_monthly, serverTerm: c.server_term, cashback: c.cashback }).length > 0 && (
+                <div className="text-xs text-slate-500">{paymentParts({ productMonthly: c.product_monthly, productTerm: c.product_term, serverMonthly: c.server_monthly, serverTerm: c.server_term, cashback: c.cashback }).join(" ／ ")}</div>
               )}
               {(c.issues ?? []).length > 0 && (
                 <div className="mt-1 flex flex-wrap items-center gap-1">

@@ -77,12 +77,13 @@ def test_訪問の編集_無効化でも架電の件数と最終架電日時は�
     assert [r['record_type'] for r in client.api(f'/companies/{cid}/calls')[1]] == ['call']
 
 
-def test_架電の記録は種類も方法も変えられない(client):
+def test_架電のままでは訪問の方法は付けられず_訪問に変えるには方法が必要(client):
     cid = make_company(client, '架電編集園')
     call = client.api(f'/companies/{cid}/calls', {'raw_note': '架電'})[1]
-    assert client.api(f'/calls/{call["id"]}', {'visit_method': 'zoom'}, method='PATCH')[0] == 400
-    row = client.api(f'/calls/{call["id"]}', {'record_type': 'visit', 'raw_note': '直した'}, method='PATCH')[1]
-    assert row['record_type'] == 'call' and row['raw_note'] == '直した'          # record_type は無視される
+    assert client.api(f'/calls/{call["id"]}', {'visit_method': 'zoom'}, method='PATCH')[0] == 400            # 架電のまま方法は付けられない
+    assert client.api(f'/calls/{call["id"]}', {'record_type': 'visit', 'raw_note': '直した'}, method='PATCH')[0] == 400   # 訪問に変えるには方法が必要（種類の変更は test_change_record_type.py）
+    row = client.api(f'/calls/{call["id"]}', {'raw_note': '直した'}, method='PATCH')[1]
+    assert row['record_type'] == 'call' and row['raw_note'] == '直した'
 
 
 def test_訪問は集計に入らずAI整理もできない(client):
@@ -197,29 +198,30 @@ def test_訪問ステータスは架電のステータスとは別で_一覧と�
     assert {i['company_name'][-1]: i['visit_purpose_name'] for i in client.api('/dashboard')[1]['today']}['A'] == '初回訪問'
 
 
-def test_訪問の内容が営業のとき_商材_月額_期間を残せる(client):
+def test_訪問の内容が営業のとき_商材と支払い内容を残せる(client):
     cid = client.sql("INSERT INTO telema_companies (company_name, company_name_normalized) VALUES ('営業内容園', '営業内容園') RETURNING id")[0]['id']
     purposes = {r['name']: r['id'] for r in client.api('/visit-purposes')[1]}
     product = client.api('/products')[1][0] if client.api('/products')[1] else 'SP'
-    sales = {'sales_product': product, 'sales_monthly_fee': 9800, 'sales_term': '36'}
+    sales = {'sales_product': product, 'sales_product_monthly': 9800, 'sales_product_term': '36', 'sales_server_monthly': 1100, 'sales_server_term': 'inhouse', 'sales_cashback': 5000}
     post = lambda purpose, **kw: client.api(f'/companies/{cid}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': '提案', 'visit_purpose_id': purposes[purpose], **kw})
     status, v = post('営業', **sales)
-    assert status == 201 and {k: v[k] for k in sales} == sales
-    assert client.api(f'/companies/{cid}/calls')[1][0]['sales_monthly_fee'] == 9800
-    assert post('営業', sales_term='cash')[1]['sales_term'] == 'cash'                          # 現金一括
-    assert all(post('営業', sales_term=t)[0] == 201 for t in ('12', '24', '36', '48', '60', '72', '84'))
-    assert post('営業', sales_term='6')[0] == 400 and post('営業', sales_term='120')[0] == 400    # 期間は決まった選択肢だけ
-    assert post('営業', sales_monthly_fee=-1)[0] == 400
+    assert status == 201 and {k: v[k] for k in sales} == sales                                  # 結果を決めていなくても残せる
+    assert client.api(f'/companies/{cid}/calls')[1][0]['sales_product_monthly'] == 9800
+    assert post('営業', sales_product_term='cash')[1]['sales_product_term'] == 'cash'          # 現金一括
+    assert post('営業', sales_server_term='inhouse')[1]['sales_server_term'] == 'inhouse'      # 自社回収
+    assert all(post('営業', sales_product_term=t)[0] == 201 for t in ('12', '24', '36', '48', '60', '72', '84'))
+    assert post('営業', sales_product_term='6')[0] == 400 and post('営業', sales_server_term='120')[0] == 400    # 回数は決まった選択肢だけ
+    assert post('営業', sales_product_monthly=-1)[0] == 400 and post('営業', sales_cashback=-1)[0] == 400
     assert post('営業')[1]['sales_product'] is None                                            # 何も入れなくても保存できる
     # 営業以外の訪問記録・架電には付けられない
     assert post('初回訪問', **sales)[0] == 400
     assert client.api(f'/companies/{cid}/calls', {'raw_note': '架電', **sales})[0] == 400
     # 編集：内容を直せる。営業以外に直すと、営業の内容は外れる。営業以外の記録に後から付けることはできない
-    assert client.api(f'/calls/{v["id"]}', {'sales_monthly_fee': 12000, 'sales_term': '60'}, method='PATCH')[1]['sales_monthly_fee'] == 12000
+    assert client.api(f'/calls/{v["id"]}', {'sales_product_monthly': 12000, 'sales_product_term': '60'}, method='PATCH')[1]['sales_product_monthly'] == 12000
     row = client.api(f'/calls/{v["id"]}', {'visit_purpose_id': purposes['初回訪問']}, method='PATCH')[1]
-    assert row['sales_product'] is None and row['sales_monthly_fee'] is None and row['sales_term'] is None
-    assert client.api(f'/calls/{v["id"]}', {'sales_term': '12'}, method='PATCH')[0] == 400
-    assert client.api(f'/calls/{v["id"]}', {'visit_purpose_id': purposes['営業'], 'sales_term': 'cash', 'sales_monthly_fee': 0}, method='PATCH')[1]['sales_term'] == 'cash'
+    assert row['sales_product'] is None and row['sales_product_monthly'] is None and row['sales_product_term'] is None and row['sales_cashback'] is None
+    assert client.api(f'/calls/{v["id"]}', {'sales_product_term': '12'}, method='PATCH')[0] == 400
+    assert client.api(f'/calls/{v["id"]}', {'visit_purpose_id': purposes['営業'], 'sales_product_term': 'cash', 'sales_product_monthly': 0}, method='PATCH')[1]['sales_product_term'] == 'cash'
 
 
 def test_営業の結果を残せ_即決受注は契約情報に自動で登録され_返事待ちと再営業は次回日時を持つ(client):

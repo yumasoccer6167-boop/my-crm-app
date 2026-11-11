@@ -624,6 +624,22 @@ ALTER TABLE telema_associations ADD COLUMN website_url TEXT;
 ALTER TABLE telema_associations ADD COLUMN chair_name TEXT;
 ALTER TABLE telema_associations ADD COLUMN officer_names TEXT;
 """,
+    # 29: 受注の支払い内容。商品（月額・回数）、サーバー（月額・回数）、CB（キャッシュバック料金）。回数は 現金一括（cash）・自社回収（inhouse）・12〜84回。
+    #     営業の訪問記録・返事待ち対応の受注（sales_*）と、契約情報に持つ。受注から自動で作った契約へは引き継ぐ
+    r"""
+ALTER TABLE telema_call_logs ADD COLUMN sales_product_monthly INTEGER;
+ALTER TABLE telema_call_logs ADD COLUMN sales_product_term TEXT;
+ALTER TABLE telema_call_logs ADD COLUMN sales_server_monthly INTEGER;
+ALTER TABLE telema_call_logs ADD COLUMN sales_server_term TEXT;
+ALTER TABLE telema_call_logs ADD COLUMN sales_cashback INTEGER;
+ALTER TABLE telema_contracts ADD COLUMN product_monthly INTEGER;
+ALTER TABLE telema_contracts ADD COLUMN product_term TEXT;
+ALTER TABLE telema_contracts ADD COLUMN server_monthly INTEGER;
+ALTER TABLE telema_contracts ADD COLUMN server_term TEXT;
+ALTER TABLE telema_contracts ADD COLUMN cashback INTEGER;
+-- 営業の訪問記録のこれまでの「月額」「期間」は、商品の月額・回数として引き継ぐ（元の列はデータとして残す）
+UPDATE telema_call_logs SET sales_product_monthly = sales_monthly_fee, sales_product_term = sales_term WHERE sales_monthly_fee IS NOT NULL OR sales_term IS NOT NULL;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

@@ -1,13 +1,28 @@
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, toLocalInput } from "../../lib/format";
 import { pToYen, yenToP } from "../../lib/points";
-import { FIRST_RESULTS, REPLY_RESULTS, SALES_RESULTS, SALES_TERMS } from "../../lib/record-kind";
+import { FIRST_RESULTS, PAYMENT_TERMS, REPLY_RESULTS, SALES_RESULTS } from "../../lib/record-kind";
 import type { CallLog, FirstResult, SalesResult } from "../../types";
 import { useApi } from "../../lib/useApi";
 import { inputCls } from "../ui";
 
-export type SalesDetail = { product: string; fee: string; term: string; result: SalesResult | ""; followupAt: string; amount: string; grossProfit: string; units: string; firstResult: FirstResult | ""; firstAt: string };
-export const emptySales: SalesDetail = { product: "", fee: "", term: "", result: "", followupAt: "", amount: "", grossProfit: "", units: "", firstResult: "", firstAt: "" };
+export type SalesDetail = {
+  product: string;
+  result: SalesResult | "";
+  followupAt: string;
+  amount: string;
+  grossProfit: string;
+  units: string;
+  /** 受注の支払い内容：商品・サーバーの月額（円）と回数、CB（キャッシュバック料金・円） */
+  productMonthly: string;
+  productTerm: string;
+  serverMonthly: string;
+  serverTerm: string;
+  cashback: string;
+  firstResult: FirstResult | "";
+  firstAt: string;
+};
+export const emptySales: SalesDetail = { product: "", result: "", followupAt: "", amount: "", grossProfit: "", units: "", productMonthly: "", productTerm: "", serverMonthly: "", serverTerm: "", cashback: "", firstResult: "", firstAt: "" };
 
 const numStr = (n: number | null) => (n == null ? "" : String(n));
 
@@ -15,19 +30,22 @@ const numStr = (n: number | null) => (n == null ? "" : String(n));
 export function salesFromCall(c: CallLog): SalesDetail {
   return {
     product: c.sales_product ?? "",
-    fee: numStr(c.sales_monthly_fee),
-    term: c.sales_term ?? "",
     result: c.sales_result ?? "",
     followupAt: toLocalInput(c.sales_followup_at),
     amount: numStr(c.sales_amount),
     grossProfit: yenToP(c.sales_gross_profit),
     units: numStr(c.sales_units),
+    productMonthly: numStr(c.sales_product_monthly),
+    productTerm: c.sales_product_term ?? "",
+    serverMonthly: numStr(c.sales_server_monthly),
+    serverTerm: c.sales_server_term ?? "",
+    cashback: numStr(c.sales_cashback),
     firstResult: c.first_result ?? "",
     firstAt: toLocalInput(c.first_followup_at),
   };
 }
 
-/** 訪問の内容が「営業」のときの、商材（今ある商材から選ぶ）・月額（円）・期間（現金一括／12〜84か月） */
+/** 訪問の内容が「営業」のときの、商材（今ある商材から選ぶ）・支払い内容（商品・サーバーの月額と回数、CB）。支払い内容は、結果を決める前の提案の内容でも残せる */
 export function SalesDetailFields({ value, onChange, currentProduct }: { value: SalesDetail; onChange: (v: SalesDetail) => void; currentProduct?: string | null }) {
   const products = useApi(() => unwrap(api.products.$get()), []);
   // 商材マスタから外れた商材でも、この記録にすでに付いているものは選択肢に残す
@@ -35,8 +53,8 @@ export function SalesDetailFields({ value, onChange, currentProduct }: { value: 
   if (currentProduct && !options.includes(currentProduct)) options.unshift(currentProduct);
   return (
     <div className="space-y-3">
-    <div className="grid gap-3 sm:grid-cols-3">
-      <div>
+    <div className="grid gap-3">
+      <div className="sm:max-w-xs">
         <div className="mb-1 text-xs text-slate-500">商材</div>
         <select value={value.product} onChange={(e) => onChange({ ...value, product: e.target.value })} className={inputCls}>
           <option value="">（未選択）</option>
@@ -47,21 +65,7 @@ export function SalesDetailFields({ value, onChange, currentProduct }: { value: 
           ))}
         </select>
       </div>
-      <div>
-        <div className="mb-1 text-xs text-slate-500">月額（円）</div>
-        <input type="number" min={0} step={1} inputMode="numeric" value={value.fee} onChange={(e) => onChange({ ...value, fee: e.target.value })} placeholder="例：9800" className={inputCls} />
-      </div>
-      <div>
-        <div className="mb-1 text-xs text-slate-500">期間</div>
-        <select value={value.term} onChange={(e) => onChange({ ...value, term: e.target.value })} className={inputCls}>
-          <option value="">（未選択）</option>
-          {SALES_TERMS.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <PaymentFields value={value} onChange={onChange} />
     </div>
     <div>
       <div className="mb-1 text-xs text-slate-500">結果（もう一度押すと外れます）</div>
@@ -103,6 +107,50 @@ export function SalesDetailFields({ value, onChange, currentProduct }: { value: 
   );
 }
 
+/** 受注の支払い内容の入力欄：商品（月額・回数）、サーバー（月額・回数）、CB（キャッシュバック料金）。回数は現金一括・自社回収・12〜84回 */
+function PaymentFields({ value, onChange, className = "" }: { value: SalesDetail; onChange: (v: SalesDetail) => void; className?: string }) {
+  const termSelect = (key: "productTerm" | "serverTerm", label: string) => (
+    <div>
+      <div className="mb-1 text-xs text-slate-500">{label}</div>
+      <select value={value[key]} onChange={(e) => onChange({ ...value, [key]: e.target.value })} className={inputCls}>
+        <option value="">（未選択）</option>
+        {PAYMENT_TERMS.map((t) => (
+          <option key={t.value} value={t.value}>
+            {t.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+  const money = (key: "productMonthly" | "serverMonthly" | "cashback", label: string, ph: string) => (
+    <div>
+      <div className="mb-1 text-xs text-slate-500">{label}</div>
+      <input type="number" min={0} step={1} inputMode="numeric" value={value[key]} onChange={(e) => onChange({ ...value, [key]: e.target.value })} placeholder={ph} className={inputCls} />
+    </div>
+  );
+  return (
+    <div className={`grid items-end gap-3 sm:grid-cols-5 ${className}`}>
+      {money("productMonthly", "商品の月額（円）", "例：9800")}
+      {termSelect("productTerm", "商品の回数")}
+      {money("serverMonthly", "サーバーの月額（円）", "例：1100")}
+      {termSelect("serverTerm", "サーバーの回数")}
+      {money("cashback", "CB（キャッシュバック料金・円）", "例：30000")}
+    </div>
+  );
+}
+
+/** 受注の支払い内容の保存用の値。受注のときだけ。空は null */
+function paymentPayload(v: SalesDetail, won: boolean) {
+  const num = (x: string) => (x.trim() === "" ? null : Math.max(0, Math.round(Number(x))));
+  return {
+    sales_product_monthly: won ? num(v.productMonthly) : null,
+    sales_product_term: won ? v.productTerm || null : null,
+    sales_server_monthly: won ? num(v.serverMonthly) : null,
+    sales_server_term: won ? v.serverTerm || null : null,
+    sales_cashback: won ? num(v.cashback) : null,
+  };
+}
+
 /** 保存用の値に直す。空は null */
 export function salesPayload(v: SalesDetail) {
   const num = (x: string) => (x.trim() === "" ? null : Math.max(0, Math.round(Number(x))));
@@ -110,8 +158,7 @@ export function salesPayload(v: SalesDetail) {
   const followup = v.result === "waiting" || v.result === "resales";
   return {
     sales_product: v.product || null,
-    sales_monthly_fee: num(v.fee),
-    sales_term: v.term || null,
+    ...paymentPayload(v, true),
     sales_result: v.result || null,
     sales_followup_at: followup ? fromLocalInput(v.followupAt) : null,
     sales_amount: won ? num(v.amount) : null,
@@ -209,6 +256,7 @@ export function ReplyFields({ value, onChange, currentProduct }: { value: SalesD
               <input type="number" min={0} step={k === "grossProfit" ? "any" : 1} inputMode={k === "grossProfit" ? "decimal" : "numeric"} value={value[k]} onChange={(e) => onChange({ ...value, [k]: e.target.value })} placeholder={ph} className={inputCls} />
             </div>
           ))}
+          <PaymentFields value={value} onChange={onChange} className="sm:col-span-4" />
           <p className="text-xs text-slate-400 sm:col-span-4">受注で保存すると、契約情報にも自動で登録されます（商材の選択が必要です）。</p>
         </div>
       )}
@@ -226,6 +274,7 @@ export function replyPayload(v: SalesDetail) {
     sales_amount: won ? num(v.amount) : null,
     sales_gross_profit: won ? pToYen(v.grossProfit) : null,
     sales_units: won ? num(v.units) : null,
+    ...paymentPayload(v, won),
     sales_followup_at: v.result === "resales" ? fromLocalInput(v.followupAt) : null,
   };
 }

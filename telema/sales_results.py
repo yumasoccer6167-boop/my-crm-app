@@ -78,7 +78,8 @@ def sales_results():
     d = db()
     rows = d.all(
         f'''SELECT cl.id, cl.record_type, cl.company_id, c.company_name, cl.called_at, cl.user_id, u.display_name AS user_name, cl.visit_method, cl.raw_note,
-                   cl.sales_product, cl.sales_monthly_fee, cl.sales_term, cl.sales_result, cl.sales_followup_at,
+                   cl.sales_product, cl.sales_product_monthly, cl.sales_product_term, cl.sales_server_monthly, cl.sales_server_term, cl.sales_cashback,
+                   cl.sales_result, cl.sales_followup_at,
                    cl.sales_amount, cl.sales_gross_profit, cl.sales_units, cl.first_result, cl.first_followup_at,
                    (SELECT r.sales_result FROM telema_call_logs r WHERE r.reply_to_id = cl.id AND r.is_active = 1 ORDER BY r.id DESC LIMIT 1) AS replied_result,
                    (SELECT COUNT(*) FROM telema_call_logs n JOIN telema_visit_purposes nv ON nv.id = n.visit_purpose_id AND nv.name = '営業'

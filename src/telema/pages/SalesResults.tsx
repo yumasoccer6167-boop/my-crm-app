@@ -5,7 +5,7 @@ import { api, unwrap } from "../lib/api";
 import { fmtDateTime, todayJst } from "../lib/format";
 import { useMasters } from "../lib/masters";
 import { fmtP } from "../lib/points";
-import { FIRST_RESULTS, firstResultLabel, SALES_RESULTS, salesResultLabel, salesTermLabel } from "../lib/record-kind";
+import { FIRST_RESULTS, firstResultLabel, paymentParts, SALES_RESULTS, salesResultLabel } from "../lib/record-kind";
 import { useApi } from "../lib/useApi";
 import { Card, Empty, ErrorBox, Loading, selectCls } from "../components/ui";
 
@@ -192,9 +192,11 @@ function SalesCells({ r }: { r: SalesResultItem }) {
     <>
       <td className="px-2 py-2 text-slate-700">
         {r.sales_product ?? "—"}
-        {(r.sales_monthly_fee != null || r.sales_term) && (
-          <div className="text-xs text-slate-400">{[r.sales_monthly_fee != null ? `月額 ${r.sales_monthly_fee.toLocaleString()}円` : "", r.sales_term ? salesTermLabel(r.sales_term) : ""].filter(Boolean).join(" ／ ")}</div>
-        )}
+        {paymentParts({ productMonthly: r.sales_product_monthly, productTerm: r.sales_product_term, serverMonthly: r.sales_server_monthly, serverTerm: r.sales_server_term, cashback: r.sales_cashback }).map((t) => (
+          <div key={t} className="text-xs text-slate-400">
+            {t}
+          </div>
+        ))}
       </td>
       <td className="whitespace-nowrap px-2 py-2">
         {r.sales_result ? (

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Assignment, CallLog, Company, Contact, VisitMethod } from "../../types";
+import type { Assignment, CallLog, Company, Contact, RecordType, VisitMethod } from "../../types";
 import { fmtAppointmentDate } from "../../lib/appointment-format";
 import { markScheduleDone } from "../../lib/schedule";
 import { AppointmentCopy } from "./AppointmentCopy";
@@ -26,7 +26,7 @@ function KindBadge({ call }: { call: CallLog }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${KIND_BADGE[key]}`}>{label}</span>;
 }
 
-/** 過去の架電・訪問の記録を直すフォーム。施設の現在のステータスは、最新の結果を直したときだけ変わる。次回架電は、ここで変えたときだけ施設の予定に反映する */
+/** 過去の架電・訪問・返事待ち対応の記録を直すフォーム。記録の種類（架電・訪問・返事待ち対応）も変えられる。施設の現在のステータスは、最新の結果を直したときだけ変わる。次回架電は、ここで変えたときだけ施設の予定に反映する */
 function CallEditForm({
   call,
   contacts,
@@ -44,10 +44,12 @@ function CallEditForm({
   onCancel: () => void;
 }) {
   const { statuses, sections, users, visitPurposes } = useMasters();
+  // 記録の種類。変えると、変えた先の入力欄になる（変えた先で使えない項目は、保存すると外れる）
+  const [kind, setKind] = useState<RecordType>(call.record_type);
   const [purposeId, setPurposeId] = useState<number | null>(call.visit_purpose_id);
   const [sales, setSales] = useState<SalesDetail>(salesFromCall(call));
-  const isSalesVisit = call.record_type === "visit" && visitPurposes.find((p) => p.id === purposeId)?.name === SALES_PURPOSE_NAME;
-  const isFirstVisit = call.record_type === "visit" && visitPurposes.find((p) => p.id === purposeId)?.name === FIRST_PURPOSE_NAME;
+  const isSalesVisit = kind === "visit" && visitPurposes.find((p) => p.id === purposeId)?.name === SALES_PURPOSE_NAME;
+  const isFirstVisit = kind === "visit" && visitPurposes.find((p) => p.id === purposeId)?.name === FIRST_PURPOSE_NAME;
   const [userId, setUserId] = useState<number | null>(call.user_id);
   const [calledAt, setCalledAt] = useState(toLocalInput(call.called_at));
   const [statusId, setStatusId] = useState<number | null>(call.result_status_id);
@@ -62,9 +64,10 @@ function CallEditForm({
   const [error, setError] = useState<string | null>(null);
 
   // 無効になったステータスでも、この履歴が今そのステータスなら選べるように残す
-  const isVisit = call.record_type === "visit";
-  const isReply = call.record_type === "reply";
-  const isCall = !isVisit && !isReply;
+  const isVisit = kind === "visit";
+  const isReply = kind === "reply";
+  const isCall = kind === "call";
+  const kindChanged = kind !== call.record_type;
   // 結果が「時間設定」のときだけ、訪問する日時・事前確認日時を設定できる
   const chosenStatus = statuses.find((s) => s.id === statusId);
   const isAppointment = isCall && (chosenStatus?.category === "appointment" || chosenStatus?.label === FIRST_SCHEDULING_STATUS);
@@ -89,13 +92,14 @@ function CallEditForm({
             called_at: iso,
             contact_id: contactId,
             ...(userId != null && userId !== call.user_id ? { user_id: userId } : {}),
+            ...(kindChanged ? { record_type: kind } : {}),
             ...(isReply
               ? replyPayload(sales)
               : isVisit
-              ? { visit_method: visitMethod, ...(purposeId !== call.visit_purpose_id ? { visit_purpose_id: purposeId } : {}), ...(isSalesVisit ? salesPayload(sales) : {}), ...(isFirstVisit ? firstPayload(sales) : {}) }
+              ? { visit_method: visitMethod, ...(purposeId !== call.visit_purpose_id || kindChanged ? { visit_purpose_id: purposeId } : {}), ...(isSalesVisit ? salesPayload(sales) : {}), ...(isFirstVisit ? firstPayload(sales) : {}) }
               : { result_status_id: statusId, visit_at: isAppointment ? fromLocalInput(visitAt) : null, precheck_at: isAppointment ? fromLocalInput(precheckAt) : null }),
             ...(isUser ? { section_id: sectionId } : {}),
-            ...(!isVisit && nextCall !== toLocalInput(nextCallAt) ? { next_call_at: nextCall ? fromLocalInput(nextCall) : null } : {}),
+            ...(isCall && nextCall !== toLocalInput(nextCallAt) ? { next_call_at: nextCall ? fromLocalInput(nextCall) : null } : {}),
           },
         }),
       );
@@ -109,6 +113,17 @@ function CallEditForm({
 
   return (
     <div className="mt-2 space-y-3 rounded-md bg-slate-50 p-3">
+      <div>
+        <div className="mb-1 text-xs text-slate-500">記録の種類</div>
+        <div role="group" aria-label="記録の種類を変える" className="inline-flex overflow-hidden rounded-md ring-1 ring-slate-300">
+          {([["call", "架電結果"], ["visit", "訪問記録"], ["reply", "返事待ち対応"]] as const).map(([k, label]) => (
+            <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={`px-3 py-1 text-xs font-medium ${kind === k ? "bg-indigo-600 text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {kindChanged && <p className="mt-1 text-xs text-amber-700">種類を変えると、変えた先で使えない項目（架電の結果・訪問の内容・営業の内容など）は、保存したときに外れます。施設のステータス・次回架電は元に戻りません。</p>}
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <div className="mb-1 text-xs text-slate-500">{isVisit ? "訪問日時" : isReply ? "対応日時" : "架電日時"}</div>

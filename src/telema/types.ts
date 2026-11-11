@@ -112,16 +112,20 @@ export type CallLog = {
   /** 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問の記録だけ。null は未設定 */
   visit_purpose_id: number | null;
   visit_purpose_name: string | null;
-  /** 訪問の内容が「営業」のときの、商材・月額（円）・期間（cash＝現金一括、12〜84＝か月）。それ以外は null */
+  /** 訪問の内容が「営業」のときの商材。それ以外は null */
   sales_product: string | null;
-  sales_monthly_fee: number | null;
-  sales_term: string | null;
   /** 営業の結果。返事待ち／再営業は次回日時、即決受注は受注金額・粗利（円）・台数を持つ */
   sales_result: SalesResult | null;
   sales_followup_at: string | null;
   sales_amount: number | null;
   sales_gross_profit: number | null;
   sales_units: number | null;
+  /** 支払い内容。商品・サーバーの月額（円）と回数（cash＝現金一括、inhouse＝自社回収、12〜84＝回）、CB（キャッシュバック料金・円）。営業の訪問記録は結果によらず、返事待ち対応は受注のときだけ */
+  sales_product_monthly: number | null;
+  sales_product_term: string | null;
+  sales_server_monthly: number | null;
+  sales_server_term: string | null;
+  sales_cashback: number | null;
   /** 初回訪問の結果。営業時間設定のときは、営業の日時を持つ */
   first_result: FirstResult | null;
   first_followup_at: string | null;
@@ -178,6 +182,12 @@ export type Contract = {
   amount: number | null;
   gross_profit: number | null;
   units: number | null;
+  /** 支払い内容。商品・サーバーの月額（円）と回数（cash＝現金一括、inhouse＝自社回収、12〜84＝回）、CB（キャッシュバック料金・円） */
+  product_monthly: number | null;
+  product_term: string | null;
+  server_monthly: number | null;
+  server_term: string | null;
+  cashback: number | null;
   /** カルテの契約情報だけに付く。company_id が開いている施設と違うものは、同じ法人の施設（姉妹園）の契約 */
   company_name?: string;
   /** その契約の施設を編集できるか（カルテの契約情報だけに付く） */
@@ -488,8 +498,11 @@ export type SalesResultItem = {
   visit_method: VisitMethod | null;
   raw_note: string;
   sales_product: string | null;
-  sales_monthly_fee: number | null;
-  sales_term: string | null;
+  sales_product_monthly: number | null;
+  sales_product_term: string | null;
+  sales_server_monthly: number | null;
+  sales_server_term: string | null;
+  sales_cashback: number | null;
   sales_result: SalesResult | null;
   sales_followup_at: string | null;
   sales_amount: number | null;
