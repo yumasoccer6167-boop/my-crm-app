@@ -21,12 +21,9 @@ export async function connect(): Promise<pg.Client> {
 
 /** 接続先の表示用（パスワードは出さない） */
 export function describeTarget(): string {
-  try {
-    const u = new URL(databaseUrl());
-    return u.hostname || new URLSearchParams(u.search).get("host") || "local";
-  } catch {
-    return "（不明）";
-  }
+  const url = databaseUrl();
+  const host = url.match(/@([^/:?]+)/)?.[1] ?? (/[?&]host=\//.test(url) ? "ローカルのDB" : null);
+  return host ?? "（不明）";
 }
 
 /** 複数行の INSERT。値はすべてプレースホルダで渡す（1文あたりのパラメータ上限 65535 に収まるよう分割） */
