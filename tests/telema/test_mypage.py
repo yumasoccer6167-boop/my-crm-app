@@ -38,12 +38,12 @@ def test_今日のコミットは自分の分だけ保存でき_定量と定性�
     assert api('/mypage')[1]['commit']['commit_gp'] == 300000
 
 
-def test_今日の必要数字と週間_月間の目標に対する実績(client):
+def test_不足数と週間_月間の目標に対する実績(client):
     api = client.api
     owner = me(client)
     purposes = {r['name']: r['id'] for r in api('/visit-purposes')[1]}
-    # 目標（3月）：粗利220P・台数22・商談数44・初回訪問22・時間設定66
-    assert api(f'/targets/{owner}/2026-03', {'gross_profit': 2_200_000, 'units': 22, 'deals': 44, 'first_visits': 22, 'scheduled': 66}, method='PUT')[0] == 200
+    # 目標（3月）：粗利220P・台数22・商談数44・初回訪問22・時間設定66・スケジューリング44
+    assert api(f'/targets/{owner}/2026-03', {'gross_profit': 2_200_000, 'units': 22, 'deals': 44, 'first_visits': 22, 'scheduled': 66, 'scheduling': 44}, method='PUT')[0] == 200
     # 商談数などを送らない保存は、今の値を変えない
     assert api(f'/targets/{owner}/2026-03', {'gross_profit': 2_200_000, 'units': 22}, method='PUT')[1]['deals'] == 44
     co = make_company(client, 'マイページ園')
@@ -63,11 +63,19 @@ def test_今日の必要数字と週間_月間の目標に対する実績(client
     status, r = api('/mypage')
     assert status == 200 and r['today'] == '2026-03-11' and r['today_workday'] is True and r['workdays_left'] == 15
     assert r['role'] == 'admin' and r['team_name'] == '全体'
-    # 今日の必要数字：（目標 − 今日より前の実績）÷ 残り稼働日15（今日を含む）。粗利は万円単位に切り上げ
-    gp, units, deals = r['daily']['gross_profit'], r['daily']['units'], r['daily']['deals']
-    assert (gp['need'], gp['done'], gp['left']) == (100_000, 50_000, 50_000)                    # (220万 − 70万) ÷ 15 = 10万
-    assert (units['need'], units['done'], units['left']) == (1, 1, 0)                           # (22 − 7) ÷ 15 = 1
-    assert (deals['need'], deals['done'], deals['left']) == (3, 1, 2)                           # (44 − 今日より前の3件) ÷ 15 = 2.73 → 3。来週（3/16）の1件は、実績に入らない
+    # 不足数：今月のコミット（＝月間目標）に対して。今日は（目標 − 今日より前の実績）÷ 残り稼働日15（今日を含む）。粗利は万円単位に切り上げ
+    sh = r['shortage']
+    assert set(sh) == {'gross_profit', 'units', 'deals', 'scheduled', 'first_visits', 'scheduling'}
+    gp = sh['gross_profit']
+    assert gp['month'] == {'target': 2_200_000, 'actual': 750_000, 'short': 1_450_000}
+    assert gp['week'] == {'target': 500_000, 'actual': 750_000, 'short': 0}                      # 今週はもう達成。0未満は0
+    assert gp['today'] == {'need': 100_000, 'done': 50_000, 'short': 50_000}                    # (220万 − 70万) ÷ 15 = 10万
+    assert sh['units']['today'] == {'need': 1, 'done': 1, 'short': 0} and sh['units']['month']['short'] == 14        # (22 − 7) ÷ 15 = 1
+    assert sh['deals']['today'] == {'need': 3, 'done': 1, 'short': 2}                           # (44 − 3) ÷ 15 = 2.73 → 3。来週（3/16）の1件は、実績に入らない
+    assert sh['deals']['week'] == {'target': 10, 'actual': 4, 'short': 6} and sh['deals']['month']['short'] == 40
+    assert sh['first_visits']['today'] == {'need': 2, 'done': 1, 'short': 1}                    # (22 − 1) ÷ 15 = 1.4 → 2
+    assert sh['scheduled']['month'] == {'target': 66, 'actual': 1, 'short': 65} and sh['scheduled']['today'] == {'need': 5, 'done': 0, 'short': 5}
+    assert sh['scheduling']['month'] == {'target': 44, 'actual': 1, 'short': 43} and sh['scheduling']['today'] == {'need': 3, 'done': 0, 'short': 3}
     # 週間（3/9〜3/15）の目標 = 月間 × 5/22。実績は今日まで
     wk = r['week']['personal']
     assert (r['week']['from'], r['week']['to']) == ('2026-03-09', '2026-03-15')
@@ -75,21 +83,22 @@ def test_今日の必要数字と週間_月間の目標に対する実績(client
     assert wk['units'] == {'target': 5, 'actual': 8}
     assert wk['deals'] == {'target': 10, 'actual': 4}
     assert wk['first_visits'] == {'target': 5, 'actual': 2}
-    assert wk['scheduled'] == {'target': 15, 'actual': 2}                                       # 時間設定件数 = テレアポから（架電の結果）
+    assert wk['scheduled'] == {'target': 15, 'actual': 1}                                       # 時間設定件数 = 架電の結果が時間設定成立（アポ獲得）
+    assert wk['scheduling'] == {'target': 10, 'actual': 1}                                      # スケジューリング数 = 架電の結果が初回訪問時間設定
     assert wk['scheduled_first'] == 1                                                           # 初回訪問時間設定件数 = 初回訪問の結果が営業時間設定（別の項目）
     # 月間の目標と実績
     mo = r['month']['personal']
     assert r['month']['month'] == '2026-03'
     assert mo['gross_profit'] == {'target': 2_200_000, 'actual': 750_000}
-    assert mo['deals'] == {'target': 44, 'actual': 4} and mo['scheduled'] == {'target': 66, 'actual': 2} and mo['scheduled_first'] == 1
+    assert mo['deals'] == {'target': 44, 'actual': 4} and mo['scheduled'] == {'target': 66, 'actual': 1} and mo['scheduled_first'] == 1 and mo['scheduling'] == {'target': 44, 'actual': 1}
 
 
-def test_目標が0の項目は今日の必要数字を出さない(client):
+def test_目標が0の項目は不足数を出さない(client):
     client.sql("UPDATE users SET role = 'general' WHERE username = 'owner'")
     try:
         client.sql('DELETE FROM telema_targets WHERE user_id = %s', (me(client),))
         r = client.api('/mypage')[1]
-        assert r['daily'] == {'gross_profit': None, 'units': None, 'deals': None}
+        assert r['shortage'] == dict.fromkeys(('gross_profit', 'units', 'deals', 'scheduled', 'first_visits', 'scheduling'))
         assert r['week']['personal']['gross_profit'] == {'target': 0, 'actual': 750_000}
         assert 'team' not in r['week'] and r['team_name'] is None                             # 一般は個人だけ
     finally:
@@ -128,3 +137,31 @@ def test_マネージャー以上はチーム_所属の部署と配下の全員_
         assert r['month']['team']['gross_profit'] == r['month']['personal']['gross_profit']
     finally:
         client.sql("UPDATE users SET role = 'owner' WHERE username = 'owner'")
+
+
+def test_翌週の予定は自分で入れ_翌週の目標に対する達成率として出る(client):
+    api = client.api
+    owner = me(client)
+    assert api(f'/targets/{owner}/2026-03', {'gross_profit': 2_200_000, 'units': 22, 'deals': 44, 'first_visits': 22, 'scheduled': 66, 'scheduling': 44}, method='PUT')[0] == 200
+    r = api('/mypage')[1]['next_week']
+    # 今日は 3/11（水）→ 翌週は 3/16〜3/22（稼働日5日）。目標 = 月間 × 5/22。予定は未入力
+    assert (r['from'], r['to']) == ('2026-03-16', '2026-03-22')
+    assert r['personal']['gross_profit'] == {'target': 500_000, 'actual': 0} and r['personal']['deals'] == {'target': 10, 'actual': 0}
+    assert r['plan'] == dict.fromkeys(('gross_profit', 'units', 'deals', 'first_visits', 'scheduled_first', 'scheduled', 'scheduling'))
+    plan = {'gross_profit': 300_000, 'units': 3, 'deals': 6, 'first_visits': 4, 'scheduled_first': 2, 'scheduled': 5, 'scheduling': 7}
+    assert api('/mypage/next-week', plan, method='PUT')[0] == 200
+    r = api('/mypage')[1]['next_week']
+    assert r['personal']['gross_profit'] == {'target': 500_000, 'actual': 300_000} and r['personal']['scheduled'] == {'target': 15, 'actual': 5}
+    assert r['personal']['scheduling'] == {'target': 10, 'actual': 7}
+    assert (r['personal']['first_visits']['actual'], r['personal']['scheduled_first']) == (4, 2) and r['plan'] == plan
+    # 送らなかった項目は今のまま。空にするときは null
+    assert api('/mypage/next-week', {'units': 4, 'deals': None}, method='PUT')[0] == 200
+    got = api('/mypage')[1]['next_week']['plan']
+    assert (got['units'], got['deals'], got['gross_profit']) == (4, None, 300_000)
+    assert api('/mypage/next-week', {'units': -1}, method='PUT')[0] == 400
+    # チームは全員の予定の合計（別の週の予定は入らない）
+    other = client.add_user('翌週の予定の別の営業', 'sales')
+    client.sql("INSERT INTO telema_week_plans (user_id, week_start, gross_profit, units) VALUES (%s, '2026-03-16', 100000, 1)", (other,))
+    client.sql("INSERT INTO telema_week_plans (user_id, week_start, gross_profit) VALUES (%s, '2026-03-09', 999999)", (other,))       # 別の週は入らない
+    team = api('/mypage')[1]['next_week']['team']
+    assert (team['gross_profit']['actual'], team['units']['actual']) == (400_000, 5)

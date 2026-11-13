@@ -559,18 +559,20 @@ export type SalesScorecardData = { items: SalesScoreRow[]; date_from: string; da
 /** 営業ごと・月ごとの目標（粗利・台数・商談数・初回訪問件数・時間設定件数）。未設定の月は null */
 export type TargetsData = {
   month: string;
-  items: { user_id: number; user_name: string; gross_profit: number | null; units: number | null; deals: number | null; first_visits: number | null; scheduled: number | null }[];
+  items: { user_id: number; user_name: string; gross_profit: number | null; units: number | null; deals: number | null; first_visits: number | null; scheduled: number | null; scheduling: number | null }[];
 };
 
 /** マイページ：目標と実績の1項目（目標が0なら未設定） */
 /** マイルール。フラグ（テレアポ・商談・稼働・営業マン像）・ルールの内容・期待できる成果 */
 export type MyRule = { id: number; flag: string; rule: string; outcome: string | null; created_at: string; updated_at: string };
 export type MyRules = { flags: string[]; items: MyRule[] };
-export type MyPageMetric = "gross_profit" | "units" | "deals" | "first_visits" | "scheduled";
+export type MyPageMetric = "gross_profit" | "units" | "deals" | "first_visits" | "scheduled" | "scheduling";
 export type MyPageProgress = Record<MyPageMetric, { target: number; actual: number }> & {
   /** 初回訪問時間設定件数（初回訪問の結果が営業時間設定の訪問記録）。時間設定件数（テレアポから）とは別の項目で、目標は持たない */
   scheduled_first: number;
 };
+export type MyPagePlanKey = "gross_profit" | "units" | "deals" | "first_visits" | "scheduled_first" | "scheduled" | "scheduling";
+export type MyPagePlan = Record<MyPagePlanKey, number | null>;
 export type MyPageData = {
   today: string;
   role: Role;
@@ -581,9 +583,11 @@ export type MyPageData = {
   commit: { commit_gp: number | null; commit_units: number | null; commit_deals: number | null; comment: string | null; updated_at: string } | null;
   today_workday: boolean;
   workdays_left: number;
-  /** 今日の必要数字（円・台・件）。月間目標が0の項目は null */
-  daily: Record<"gross_profit" | "units" | "deals", { need: number; done: number; left: number } | null>;
+  /** 不足数：今月のコミット（＝月間目標）に対する、今月・今週・今日の不足（粗利は円）。月間目標が0の項目は null */
+  shortage: Record<MyPageMetric, { month: { target: number; actual: number; short: number }; week: { target: number; actual: number; short: number }; today: { need: number; done: number; short: number } } | null>;
   week: { from: string; to: string; personal: MyPageProgress; team?: MyPageProgress };
+  /** 翌週の予定。実績の代わりに、自分で入れた予定（actual）を出す。plan は自分の予定（円・件。入れていない項目は null） */
+  next_week: { from: string; to: string; personal: MyPageProgress; team?: MyPageProgress; plan: MyPagePlan };
   month: { month: string; personal: MyPageProgress; team?: MyPageProgress };
 };
 export type MyAnalysis = {
@@ -610,7 +614,7 @@ export type AnalyticsPace = {
   month: string;
   today: string;
   week_end: string;
-  target: { gross_profit: number; units: number; deals: number; first_visits: number; scheduled: number } | null;
+  target: { gross_profit: number; units: number; deals: number; first_visits: number; scheduled: number; scheduling: number } | null;
   month_actual: { gross_profit: number; units: number };
   month_remaining: { gross_profit: number; units: number } | null;
   month_workdays_left: number;

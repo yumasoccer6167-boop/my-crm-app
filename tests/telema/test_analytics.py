@@ -79,7 +79,7 @@ def test_ペースは月の残を残り稼働日で割り_直近の実績から�
     month = today.strftime('%Y-%m')
     client.api(f'/targets/{mine}/{month}', {'gross_profit': 0, 'units': 0}, method='PUT')
     first = client.api('/analytics/pace')[1]
-    assert first['target'] == {'gross_profit': 0, 'units': 0, 'deals': 0, 'first_visits': 0, 'scheduled': 0} and first['week_need'] == {'gross_profit': 0, 'units': 0}
+    assert first['target'] == {'gross_profit': 0, 'units': 0, 'deals': 0, 'first_visits': 0, 'scheduled': 0, 'scheduling': 0} and first['week_need'] == {'gross_profit': 0, 'units': 0}
     # 目標を置くと、月の残と今週の必要粗利が出る。直近90日に訪問と受注の実績が無ければ、必要訪問件数は出さない
     client.api(f'/targets/{mine}/{month}', {'gross_profit': 3_000_000, 'units': 30}, method='PUT')
     r = client.api('/analytics/pace')[1]

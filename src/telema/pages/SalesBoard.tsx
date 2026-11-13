@@ -131,17 +131,18 @@ function TargetEditor({ month, order, onSaved }: { month: string; order: number[
   );
 }
 
-/** 件数の目標の項目（台数と、マイページの商談数・初回訪問件数・時間設定件数） */
+/** 件数の目標の項目（台数と、マイページの商談数・初回訪問件数・時間設定件数・スケジューリング数） */
 const COUNT_TARGETS = [
   { key: "units", label: "台数" },
   { key: "deals", label: "商談数" },
   { key: "first_visits", label: "初回訪問件数" },
   { key: "scheduled", label: "時間設定件数" },
+  { key: "scheduling", label: "スケジューリング数" },
 ] as const;
 type CountKey = (typeof COUNT_TARGETS)[number]["key"];
 type TargetDraft = { gp: string } & Record<CountKey, string>;
 const countText = (n: number | null) => (n == null ? "" : String(n));
-const draftOf = (t: TargetsData["items"][number]): TargetDraft => ({ gp: yenToP(t.gross_profit), units: countText(t.units), deals: countText(t.deals), first_visits: countText(t.first_visits), scheduled: countText(t.scheduled) });
+const draftOf = (t: TargetsData["items"][number]): TargetDraft => ({ gp: yenToP(t.gross_profit), units: countText(t.units), deals: countText(t.deals), first_visits: countText(t.first_visits), scheduled: countText(t.scheduled), scheduling: countText(t.scheduling) });
 const countOf = (s: string) => Math.max(0, Math.round(Number(s) || 0));
 
 function TargetTable({ data, order, onSaved }: { data: TargetsData; order: number[]; onSaved: () => void }) {
@@ -165,7 +166,7 @@ function TargetTable({ data, order, onSaved }: { data: TargetsData; order: numbe
         await unwrap(
           api.targets[":user_id"][":month"].$put({
             param: { user_id: String(t.user_id), month: data.month },
-            json: { gross_profit: pToYen(d.gp) ?? 0, units: countOf(d.units), deals: countOf(d.deals), first_visits: countOf(d.first_visits), scheduled: countOf(d.scheduled) },
+            json: { gross_profit: pToYen(d.gp) ?? 0, units: countOf(d.units), deals: countOf(d.deals), first_visits: countOf(d.first_visits), scheduled: countOf(d.scheduled), scheduling: countOf(d.scheduling) },
           }),
         );
       }

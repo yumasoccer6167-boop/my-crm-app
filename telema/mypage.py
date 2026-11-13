@@ -1,13 +1,17 @@
 """マイページ。自分の数字を自分で確かめるためのページ（1ページ：数字の自己認識、2ページ：自己分析）。
 1ページ（GET /mypage、PUT /mypage/commit）
  - 今日のコミット：その日にやると決めた数字（定量＝粗利・台数・商談件数）と、ひとことコメント（定性）。営業ごと・日ごと。自分の分だけ入力できる
- - 今日の必要数字：月間目標 − 今日より前の今月の実績 を、今日以降の残り稼働日（今日を含む）で割って切り上げたもの（粗利は万円単位に切り上げ）。商談件数は営業の訪問記録の数。
-   あわせて今日の実績と、必要数に対する残りを返す。月間目標が0なら、その項目は出さない
- - 週間（月〜日）・月間の、目標・実績：粗利・台数・商談数・初回訪問件数・時間設定件数。達成率と残数は画面側で出す（実績 ÷ 目標、目標 − 実績で0未満は0）
+ - 不足数（shortage）：今月のコミット（＝月間目標）に対する、今月・今週・今日の不足。項目は 粗利・台数・商談件数・時間設定件数・初回訪問件数・スケジューリング数。
+   今月＝月間目標 − 今月の実績、今週＝週間目標 − 今週の実績、今日＝（月間目標 − 今日より前の今月の実績）÷ 今日以降の残り稼働日（今日を含む）を切り上げたもの（粗利は万円単位）− 今日の実績。
+   0未満は0。月間目標が0（未設定）の項目は null
+ - 週間（月〜日）・月間の、目標・実績：粗利・台数・商談数・初回訪問件数・時間設定件数・スケジューリング数。達成率と残数は画面側で出す（実績 ÷ 目標、目標 − 実績で0未満は0）
    週間の目標 ＝ 月間目標 × その週の稼働日数 ÷ その月の稼働日数（週が月をまたぐときは、月ごとに分けて足す）。稼働日は画面を開いた人のカレンダー（なければ平日）
    マネージャー・管理者は、個人（自分）とチーム（自分の所属の部署とその配下の全員。所属がなければ、管理者は全員・マネージャーは自分だけ）の両方
  - 実績の数え方は営業成績ダッシュボードと同じ：粗利・台数＝契約情報（契約日・営業担当）、商談数＝訪問の内容が「営業」の訪問記録、初回訪問件数＝「初回訪問」の訪問記録、
-   時間設定件数＝架電の結果が「初回訪問時間設定」か、ステータス区分が「時間設定成立」
+   時間設定件数＝架電の結果がステータス区分「アポ獲得」（時間設定成立）、スケジューリング数＝架電の結果が「初回訪問時間設定」（どちらもテレアポの集計と同じ）
+翌週の予定（GET /mypage の next_week、PUT /mypage/next-week）
+ - 来週（月〜日）の目標（月間目標 × 来週の稼働日数 ÷ その月の稼働日数）と、自分で入れた予定（粗利・台数・商談数・初回訪問件数・初回訪問時間設定件数・時間設定件数・スケジューリング数）。
+   予定は営業ごと・週ごとに自分の分だけ入力でき、実績の表と同じ形で、実績の代わりに予定を出す（チームは、チームの全員の予定の合計）
 2ページ（GET /mypage/analysis?scope=closed|user）
  - closed＝自己クローズ（契約情報の営業担当が自分）、user＝自己ユーザー（営業担当か台数担当のどちらかが自分）の契約について、商材別・業種別の件数、平均粗利、
    1件あたり粗利、1契約あたり台数（同じ施設・同じ契約日の契約情報は、まとめて1契約と数える）、単月平均粗利・台数（最初の契約の月から今月まで）を返す"""
@@ -24,7 +28,7 @@ from .org import assignments_on, department_tree
 from .routes import bp
 from .validate import Int, Str, parse
 
-KEYS = ('gross_profit', 'units', 'deals', 'first_visits', 'scheduled')
+KEYS = ('gross_profit', 'units', 'deals', 'first_visits', 'scheduled', 'scheduling')
 NO_INDUSTRY = '未設定'
 MAN = 10000     # 粗利は1万円＝1P
 
@@ -79,11 +83,13 @@ def _actuals(d, ids, day_from, day_to):
             WHERE cl.is_active = 1 AND cl.record_type = 'visit' AND cl.user_id = ANY(%s) AND cl.called_at::timestamptz >= %s AND cl.called_at::timestamptz < %s''',
         (SALES, FIRST, FIRST, ids, start, end))
     out['deals'], out['first_visits'], out['scheduled_first'] = v['deals'], v['first_visits'], v['scheduled_first']
-    out['scheduled'] = d.value(
-        '''SELECT COUNT(*)::int FROM telema_call_logs cl JOIN telema_companies c ON c.id = cl.company_id AND c.is_active = 1
+    t = d.first(
+        '''SELECT COUNT(*) FILTER (WHERE s.category = 'appointment')::int AS scheduled, COUNT(*) FILTER (WHERE s.label = %s)::int AS scheduling
+             FROM telema_call_logs cl JOIN telema_companies c ON c.id = cl.company_id AND c.is_active = 1
              JOIN telema_call_statuses s ON s.id = cl.result_status_id
-            WHERE cl.is_active = 1 AND cl.record_type = 'call' AND cl.user_id = ANY(%s) AND (s.label = %s OR s.category = 'appointment')
-              AND cl.called_at::timestamptz >= %s AND cl.called_at::timestamptz < %s''', (ids, SCHEDULING_STATUS, start, end))
+            WHERE cl.is_active = 1 AND cl.record_type = 'call' AND cl.user_id = ANY(%s)
+              AND cl.called_at::timestamptz >= %s AND cl.called_at::timestamptz < %s''', (SCHEDULING_STATUS, ids, start, end))
+    out['scheduled'], out['scheduling'] = t['scheduled'], t['scheduling']
     return out
 
 
@@ -91,7 +97,8 @@ def _month_targets(d, ids, month):
     """ids の人たちの、その月の目標の合計"""
     row = d.first(
         '''SELECT COALESCE(SUM(gross_profit), 0)::bigint AS gross_profit, COALESCE(SUM(units), 0)::bigint AS units, COALESCE(SUM(deals), 0)::bigint AS deals,
-                  COALESCE(SUM(first_visits), 0)::bigint AS first_visits, COALESCE(SUM(scheduled), 0)::bigint AS scheduled
+                  COALESCE(SUM(first_visits), 0)::bigint AS first_visits, COALESCE(SUM(scheduled), 0)::bigint AS scheduled,
+                  COALESCE(SUM(scheduling), 0)::bigint AS scheduling
              FROM telema_targets WHERE user_id = ANY(%s) AND month = %s''', (ids, month))
     return {k: int(row[k]) for k in KEYS}
 
@@ -118,6 +125,41 @@ def _pair(target, actual):
     return {**{k: {'target': target[k], 'actual': actual[k]} for k in KEYS}, 'scheduled_first': actual['scheduled_first']}
 
 
+# 不足数に出す項目（この順）
+SHORT_KEYS = ('gross_profit', 'units', 'deals', 'scheduled', 'first_visits', 'scheduling')
+
+
+# ---------- 翌週の予定 ----------
+PLAN_KEYS = ('gross_profit', 'units', 'deals', 'first_visits', 'scheduled_first', 'scheduled', 'scheduling')
+PLAN_BODY = {
+    'gross_profit': Int(min=0, nullable=True, optional=True),       # 円
+    'units': Int(min=0, nullable=True, optional=True),
+    'deals': Int(min=0, nullable=True, optional=True),
+    'first_visits': Int(min=0, nullable=True, optional=True),
+    'scheduled_first': Int(min=0, nullable=True, optional=True),    # 初回訪問時間設定件数
+    'scheduled': Int(min=0, nullable=True, optional=True),          # 時間設定件数（結果が「アポ獲得」区分の架電）
+    'scheduling': Int(min=0, nullable=True, optional=True),         # スケジューリング数（結果が「初回訪問時間設定」の架電）
+}
+
+
+def _next_week(today):
+    start = today - timedelta(days=today.weekday()) + timedelta(days=7)
+    return start, start + timedelta(days=6)
+
+
+def _plans(d, ids, week_start):
+    """ids の人たちの、その週の予定の合計（未入力は0）"""
+    cols = ', '.join(f'COALESCE(SUM({k}), 0)::bigint AS {k}' for k in PLAN_KEYS)
+    row = d.first(f'SELECT {cols} FROM telema_week_plans WHERE user_id = ANY(%s) AND week_start = %s', (ids, week_start.isoformat()))
+    return {k: int(row[k]) for k in PLAN_KEYS}
+
+
+def _own_plan(d, user_id, week_start):
+    """自分の予定。未入力の項目は None（入れていない）"""
+    row = d.first(f'SELECT {", ".join(PLAN_KEYS)} FROM telema_week_plans WHERE user_id = %s AND week_start = %s', (user_id, week_start.isoformat()))
+    return {k: (row[k] if row else None) for k in PLAN_KEYS}
+
+
 # ---------- 1ページ ----------
 @bp.get('/mypage')
 def mypage():
@@ -127,40 +169,73 @@ def mypage():
     first, last = month_days(month)
     week_from = today - timedelta(days=today.weekday())
     week_to = week_from + timedelta(days=6)
-    over = workday_overrides(d, user['id'], min(first, week_from), max(last, week_to))
+    next_from, next_to = _next_week(today)
+    over = workday_overrides(d, user['id'], min(first, week_from), max(last, week_to, month_days(next_to.strftime('%Y-%m'))[1]))
     me = [user['id']]
     team = _team(d, user, today)
 
-    # 今日の必要数字
     target = _month_targets(d, me, month)
     before = _actuals(d, me, first, today - timedelta(days=1))
     done = _actuals(d, me, today, today)
     left_days = workdays(today, last, over)
-    daily = {}
-    for k in ('gross_profit', 'units', 'deals'):
-        if not target[k]:
-            daily[k] = None
-            continue
-        remaining = max(0, target[k] - before[k])
-        per = remaining / left_days if left_days else remaining
-        need = ceil(per / MAN) * MAN if k == 'gross_profit' else ceil(per)
-        daily[k] = {'need': need, 'done': done[k], 'left': max(0, need - done[k])}
 
     def block(ids, day_from, day_to, targets):
         return _pair(targets, _actuals(d, ids, day_from, day_to))
 
     week = {'from': week_from.isoformat(), 'to': week_to.isoformat(), 'personal': block(me, week_from, week_to, _week_targets(d, me, week_from, week_to, over))}
     mon = {'month': month, 'personal': block(me, first, today, target)}
+
+    # 不足数：今月のコミット（＝月間目標）に対して、今月・今週・今日の不足
+    #  今月＝月間目標 − 今月の実績、今週＝週間目標 − 今週の実績、今日＝（月間目標 − 今日より前の今月の実績）÷ 残り稼働日 − 今日の実績。0未満は0。月間目標が未設定の項目は null
+    shortage = {}
+    for k in SHORT_KEYS:
+        if not target[k]:
+            shortage[k] = None
+            continue
+        mp, wp = mon['personal'][k], week['personal'][k]
+        remaining = max(0, target[k] - before[k])
+        per = remaining / left_days if left_days else remaining
+        need = ceil(per / MAN) * MAN if k == 'gross_profit' else ceil(per)
+        shortage[k] = {
+            'month': {'target': mp['target'], 'actual': mp['actual'], 'short': max(0, mp['target'] - mp['actual'])},
+            'week': {'target': wp['target'], 'actual': wp['actual'], 'short': max(0, wp['target'] - wp['actual'])},
+            'today': {'need': need, 'done': done[k], 'short': max(0, need - done[k])},
+        }
     if team:
         week['team'] = block(team[1], week_from, week_to, _week_targets(d, team[1], week_from, week_to, over))
         mon['team'] = block(team[1], first, today, _month_targets(d, team[1], month))
+
+    # 翌週の予定：実績の代わりに、入れた予定を出す
+    def plan_block(ids):
+        return _pair(_week_targets(d, ids, next_from, next_to, over), _plans(d, ids, next_from))
+
+    own_plan = _own_plan(d, user['id'], next_from)
+    nxt = {'from': next_from.isoformat(), 'to': next_to.isoformat(), 'personal': plan_block(me), 'plan': own_plan}
+    if team:
+        nxt['team'] = plan_block(team[1])
 
     commit = d.first('SELECT commit_gp, commit_units, commit_deals, comment, updated_at FROM telema_daily_commits WHERE user_id = %s AND day = %s', (user['id'], today.isoformat()))
     return jsonify({
         'today': today.isoformat(), 'role': user['role'], 'team_name': team[0] if team else None, 'team_size': len(team[1]) if team else None,
         'commit': commit, 'today_workday': workdays(today, today, over) == 1, 'workdays_left': left_days,
-        'daily': daily, 'week': week, 'month': mon,
+        'shortage': shortage, 'week': week, 'month': mon, 'next_week': nxt,
     })
+
+
+@bp.put('/mypage/next-week')
+def put_next_week():
+    """来週の予定を保存する（自分の分だけ。送らなかった項目は今のまま。空にするときは null）"""
+    user, d = current_user(), db()
+    b = parse(PLAN_BODY, body())
+    week_start = _next_week(_today())[0]
+    before = _own_plan(d, user['id'], week_start)
+    merged = {**before, **b}
+    d.run(
+        f"""INSERT INTO telema_week_plans (user_id, week_start, {', '.join(PLAN_KEYS)}) VALUES (%s, %s, {', '.join(['%s'] * len(PLAN_KEYS))})
+            ON CONFLICT (user_id, week_start) DO UPDATE SET {', '.join(f'{k} = EXCLUDED.{k}' for k in PLAN_KEYS)}, updated_at = telema_now()""",
+        (user['id'], week_start.isoformat(), *(merged[k] for k in PLAN_KEYS)))
+    audit(d, user['id'], 'update', 'week_plan', user['id'], {'week_start': week_start.isoformat(), **before}, {'week_start': week_start.isoformat(), **merged})
+    return jsonify({'week_start': week_start.isoformat(), 'plan': merged})
 
 
 COMMIT_BODY = {

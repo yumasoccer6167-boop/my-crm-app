@@ -694,6 +694,26 @@ CREATE TABLE telema_my_rules (
 );
 CREATE INDEX telema_idx_my_rules_user ON telema_my_rules(user_id) WHERE is_active = 1;
 """,
+    # 33: 翌週の予定（マイページ）。営業ごと・週ごと（week_start＝その週の月曜日）に、粗利・台数・商談数・初回訪問件数・初回訪問時間設定件数・時間設定件数・スケジューリング数の予定を自分で入れる
+    r"""
+CREATE TABLE telema_week_plans (
+  user_id          INTEGER NOT NULL,
+  week_start       TEXT NOT NULL CHECK (week_start ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
+  gross_profit     BIGINT CHECK (gross_profit >= 0),
+  units            INTEGER CHECK (units >= 0),
+  deals            INTEGER CHECK (deals >= 0),
+  first_visits     INTEGER CHECK (first_visits >= 0),
+  scheduled_first  INTEGER CHECK (scheduled_first >= 0),
+  scheduled        INTEGER CHECK (scheduled >= 0),
+  scheduling       INTEGER CHECK (scheduling >= 0),
+  updated_at       TEXT NOT NULL DEFAULT telema_now(),
+  PRIMARY KEY (user_id, week_start)
+);
+""",
+    # 34: 月間目標に「スケジューリング数」を追加（結果が「初回訪問時間設定」の架電の数。テレアポの集計と同じ）。マイページの不足数・達成率・翌週の予定で使う
+    r"""
+ALTER TABLE telema_targets ADD COLUMN scheduling INTEGER NOT NULL DEFAULT 0 CHECK (scheduling >= 0);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

@@ -48,6 +48,7 @@ import type {
   PrefectureStat,
   UserAnalysis,
   MyAnalysis,
+  MyPagePlan,
   MyRule,
   MyRules,
   MyPageData,
@@ -85,12 +86,13 @@ type Api = {
   analytics: { $get: Call<AnalyticsData>; pace: { $get: Call<AnalyticsPace> } };
   targets: {
     $get: Call<TargetsData>;
-    ":user_id": { ":month": { $put: Call<{ user_id: number; month: string; gross_profit: number; units: number; deals: number; first_visits: number; scheduled: number }> } };
+    ":user_id": { ":month": { $put: Call<{ user_id: number; month: string; gross_profit: number; units: number; deals: number; first_visits: number; scheduled: number; scheduling: number }> } };
   };
   mypage: {
     $get: Call<MyPageData>;
     commit: { $put: Call<{ day: string; commit_gp: number | null; commit_units: number | null; commit_deals: number | null; comment: string | null }> };
     analysis: { $get: Call<MyAnalysis> };
+    "next-week": { $put: Call<{ week_start: string; plan: MyPagePlan }> };
   };
   "my-rules": {
     $get: Call<MyRules>;

@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useState } from "react";
-import type { MyAnalysis, MyPageData, MyPageMetric, MyPageProgress } from "../types";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import type { MyAnalysis, MyPageData, MyPageMetric, MyPagePlan, MyPagePlanKey, MyPageProgress } from "../types";
 import { api, unwrap } from "../lib/api";
 import { fmtP, pToYen, yenToP } from "../lib/points";
 import { useApi } from "../lib/useApi";
@@ -18,6 +18,7 @@ const METRICS: { key: MyPageMetric; label: string; fmt: (n: number) => string }[
   { key: "deals", label: "商談数", fmt: (n) => `${num(n)}件` },
   { key: "first_visits", label: "初回訪問件数", fmt: (n) => `${num(n)}件` },
   { key: "scheduled", label: "時間設定件数", fmt: (n) => `${num(n)}件` },
+  { key: "scheduling", label: "スケジューリング数", fmt: (n) => `${num(n)}件` },
 ];
 
 /** マイページ：1ページ「数字の自己認識」と、2ページ「自己分析」 */
@@ -60,9 +61,10 @@ function Numbers() {
         {mmdd(data.today)} の数字（営業成績ダッシュボードと同じ数え方です）。目標は、数値分析・営業成績の「月間目標」で設定します。
       </p>
       <Commit data={data} onSaved={reload} />
-      <TodayNeeds data={data} />
+      <Shortage data={data} />
       <ProgressCard title={`週間目標に対する達成率（${mmdd(data.week.from)}〜${mmdd(data.week.to)}）`} note="週間の目標は、月間目標 × その週の稼働日数 ÷ その月の稼働日数です。" personal={data.week.personal} team={data.week.team} teamName={data.team_name} teamSize={data.team_size} />
       <ProgressCard title={`月間目標に対する達成率（${Number(data.month.month.slice(5))}月）`} note="実績は今日までの数です。" personal={data.month.personal} team={data.month.team} teamName={data.team_name} teamSize={data.team_size} />
+      <NextWeekPlan data={data} onSaved={reload} />
     </div>
   );
 }
@@ -133,58 +135,172 @@ function Commit({ data, onSaved }: { data: MyPageData; onSaved: () => void }) {
   );
 }
 
-/** ② 今日の必要数字：粗利・台数・商談件数 */
-function TodayNeeds({ data }: { data: MyPageData }) {
-  const items: { key: "gross_profit" | "units" | "deals"; label: string; fmt: (n: number) => string; commit: number | null | undefined }[] = [
-    { key: "gross_profit", label: "粗利", fmt: (n) => fmtP(n), commit: data.commit?.commit_gp },
-    { key: "units", label: "台数", fmt: (n) => `${num(n)}台`, commit: data.commit?.commit_units },
-    { key: "deals", label: "商談件数", fmt: (n) => `${num(n)}件`, commit: data.commit?.commit_deals },
-  ];
-  const fmtCommit = (k: (typeof items)[number]) => (k.commit == null ? null : k.fmt(k.commit));
+/** ② 不足数：今月のコミット（＝月間目標）に対する、今月・今週・今日の不足 */
+const SHORT_ROWS: MyPageMetric[] = ["gross_profit", "units", "deals", "scheduled", "first_visits", "scheduling"];
+
+function Shortage({ data }: { data: MyPageData }) {
+  const metric = (k: MyPageMetric) => METRICS.find((m) => m.key === k)!;
+  const shortCell = (short: number, fmt: (n: number) => string, sub: string) => (
+    <td className="px-3 py-2 text-right">
+      <div className={`text-base font-semibold tabular-nums ${short > 0 ? "text-rose-700" : "text-emerald-700"}`}>{short > 0 ? fmt(short) : "達成"}</div>
+      <div className="whitespace-nowrap text-[11px] text-slate-400">{sub}</div>
+    </td>
+  );
   return (
-    <Card title="② 今日の必要数字">
+    <Card title="② 不足数（今月のコミットに対して）">
       <p className="mb-3 text-xs text-slate-500">
-        （月間目標 − 今日より前の今月の実績）÷ 今日以降の残り稼働日（{data.workdays_left}日{data.today_workday ? "、今日を含む" : "。今日は稼働日ではありません"}）で出しています。
+        今月のコミット＝月間目標です。今月は「月間目標 − 今月の実績」、今週は「週間目標 − 今週の実績」、今日は「（月間目標 − 今日より前の実績）÷ 今日以降の残り稼働日（{data.workdays_left}日
+        {data.today_workday ? "、今日を含む" : "。今日は稼働日ではありません"}）− 今日の実績」で出しています。
       </p>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {items.map((it) => {
-          const v = data.daily[it.key];
-          return (
-            <div key={it.key} className="rounded-lg bg-slate-50 px-3 py-2.5 ring-1 ring-inset ring-slate-200">
-              <div className="text-xs text-slate-500">{it.label}</div>
-              {v ? (
-                <>
-                  <div className="mt-0.5 text-xl font-semibold tabular-nums text-slate-900">{it.fmt(v.need)}</div>
-                  <div className="mt-0.5 text-xs text-slate-500">
-                    今日の実績 {it.fmt(v.done)} ／ 残り <span className={v.left > 0 ? "font-medium text-rose-700" : "font-medium text-emerald-700"}>{it.fmt(v.left)}</span>
-                  </div>
-                </>
-              ) : (
-                <div className="mt-1 text-sm text-slate-400">月間目標が未設定です</div>
-              )}
-              {fmtCommit(it) && <div className="mt-1 text-xs text-indigo-700">コミット {fmtCommit(it)}</div>}
-            </div>
-          );
-        })}
+      <div className="overflow-x-auto rounded-md ring-1 ring-slate-200">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-xs text-slate-600">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">項目</th>
+              <th className="whitespace-nowrap px-3 py-2 text-right font-medium">今月のコミット</th>
+              <th className="whitespace-nowrap px-3 py-2 text-right font-medium">今月の不足</th>
+              <th className="whitespace-nowrap px-3 py-2 text-right font-medium">今週の不足</th>
+              <th className="whitespace-nowrap px-3 py-2 text-right font-medium">今日の不足</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SHORT_ROWS.map((k) => {
+              const m = metric(k);
+              const v = data.shortage[k];
+              return (
+                <tr key={k} className="border-t border-slate-100">
+                  <td className="whitespace-nowrap px-3 py-2">{m.label}</td>
+                  {v ? (
+                    <>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{m.fmt(v.month.target)}</td>
+                      {shortCell(v.month.short, m.fmt, `実績 ${m.fmt(v.month.actual)}`)}
+                      {shortCell(v.week.short, m.fmt, `目標 ${m.fmt(v.week.target)} ／ 実績 ${m.fmt(v.week.actual)}`)}
+                      {shortCell(v.today.short, m.fmt, `必要 ${m.fmt(v.today.need)} ／ 実績 ${m.fmt(v.today.done)}`)}
+                    </>
+                  ) : (
+                    <td colSpan={4} className="px-3 py-2 text-slate-400">
+                      月間目標が未設定です
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </Card>
   );
 }
 
 /** ③④ 目標に対する達成率と残数。マネージャー以上は、チームと個人をそれぞれ表示 */
-function ProgressCard({ title, note, personal, team, teamName, teamSize }: { title: string; note: string; personal: MyPageProgress; team?: MyPageProgress; teamName: string | null; teamSize: number | null }) {
+function ProgressCard({
+  title,
+  note,
+  personal,
+  team,
+  teamName,
+  teamSize,
+  actualLabel,
+  editor,
+  footer,
+}: {
+  title: string;
+  note: string;
+  personal: MyPageProgress;
+  team?: MyPageProgress;
+  teamName: string | null;
+  teamSize: number | null;
+  actualLabel?: string;
+  editor?: (key: MyPagePlanKey) => ReactNode;
+  footer?: ReactNode;
+}) {
   return (
     <Card title={title}>
       <p className="mb-3 text-xs text-slate-500">{note}</p>
       <div className={team ? "grid gap-6 xl:grid-cols-2" : ""}>
-        {team && <ProgressTable heading={`チーム（${teamName}・${teamSize}人）`} progress={team} />}
-        <ProgressTable heading={team ? "個人（自分）" : undefined} progress={personal} />
+        {team && <ProgressTable heading={`チーム（${teamName}・${teamSize}人）`} progress={team} actualLabel={actualLabel} />}
+        <ProgressTable heading={team ? "個人（自分）" : undefined} progress={personal} actualLabel={actualLabel} editor={editor} />
       </div>
+      {footer}
     </Card>
   );
 }
 
-function ProgressTable({ heading, progress }: { heading?: string; progress: MyPageProgress }) {
+const PLAN_KEYS: MyPagePlanKey[] = ["gross_profit", "units", "deals", "first_visits", "scheduled_first", "scheduled", "scheduling"];
+
+/** 翌週の予定：実績の表と同じ形で、実績の代わりに予定を入れる（自分の分）。チームは全員の予定の合計。達成率・残数は、翌週の週間目標に対する予定の割合 */
+function NextWeekPlan({ data, onSaved }: { data: MyPageData; onSaved: () => void }) {
+  const nw = data.next_week;
+  const init = (p: MyPagePlan): Record<MyPagePlanKey, string> =>
+    Object.fromEntries(PLAN_KEYS.map((k) => [k, k === "gross_profit" ? yenToP(p[k]) : p[k] == null ? "" : String(p[k])])) as Record<MyPagePlanKey, string>;
+  const [draft, setDraft] = useState(() => init(nw.plan));
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  useEffect(() => {
+    if (!message?.ok) return;
+    const t = setTimeout(() => setMessage(null), 2500);
+    return () => clearTimeout(t);
+  }, [message]);
+
+  const count = (v: string) => (v.trim() === "" ? null : Math.max(0, Math.round(Number(v) || 0)));
+  const value = (k: MyPagePlanKey) => (k === "gross_profit" ? pToYen(draft[k]) : count(draft[k]));
+  // 入力中の予定を、その場で達成率・残数に反映する
+  const live: MyPageProgress = {
+    ...nw.personal,
+    ...Object.fromEntries((["gross_profit", "units", "deals", "first_visits", "scheduled", "scheduling"] as const).map((k) => [k, { target: nw.personal[k].target, actual: value(k) ?? 0 }])),
+    scheduled_first: value("scheduled_first") ?? 0,
+  };
+  const editor = (k: MyPagePlanKey) => (
+    <input
+      type="number"
+      min={0}
+      step={k === "gross_profit" ? "any" : 1}
+      inputMode={k === "gross_profit" ? "decimal" : "numeric"}
+      aria-label="予定"
+      value={draft[k]}
+      onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}
+      placeholder="0"
+      className={`${inputCls} w-24 text-right`}
+    />
+  );
+
+  async function save() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      await unwrap(api.mypage["next-week"].$put({ json: Object.fromEntries(PLAN_KEYS.map((k) => [k, value(k)])) as MyPagePlan }));
+      setMessage({ text: "保存しました", ok: true });
+      onSaved();
+    } catch (e) {
+      setMessage({ text: e instanceof Error ? e.message : String(e), ok: false });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ProgressCard
+      title={`翌週の予定（${mmdd(nw.from)}〜${mmdd(nw.to)}）`}
+      note="実績の代わりに、翌週の予定の数字を入れます（個人の表に入力）。目標は翌週の週間目標で、達成率・残数は予定の数字から出ます。チームは、チーム全員の予定の合計です。"
+      personal={live}
+      team={nw.team}
+      teamName={data.team_name}
+      teamSize={data.team_size}
+      actualLabel="予定"
+      editor={editor}
+      footer={
+        <div className="mt-3 flex items-center gap-3">
+          <Button variant="primary" onClick={save} disabled={saving}>
+            {saving ? "保存中…" : "予定を保存"}
+          </Button>
+          {message && <span className={`text-sm ${message.ok ? "text-emerald-700" : "text-rose-700"}`}>{message.text}</span>}
+        </div>
+      }
+    />
+  );
+}
+
+function ProgressTable({ heading, progress, actualLabel = "実績", editor }: { heading?: string; progress: MyPageProgress; actualLabel?: string; editor?: (key: MyPagePlanKey) => ReactNode }) {
   // 初回訪問時間設定件数は時間設定件数（テレアポから）とは別の項目。時間設定昇華率 = 初回訪問時間設定件数 ÷ 初回訪問件数
   const firstScheduled = progress.scheduled_first;
   const firstVisits = progress.first_visits.actual;
@@ -198,7 +314,7 @@ function ProgressTable({ heading, progress }: { heading?: string; progress: MyPa
             <tr>
               <th className="px-3 py-2 text-left font-medium">項目</th>
               <th className="px-3 py-2 text-right font-medium">目標</th>
-              <th className="px-3 py-2 text-right font-medium">実績</th>
+              <th className="whitespace-nowrap px-3 py-2 text-right font-medium">{actualLabel}</th>
               <th className="px-3 py-2 text-left font-medium">達成率</th>
               <th className="px-3 py-2 text-right font-medium">残数</th>
             </tr>
@@ -214,7 +330,7 @@ function ProgressTable({ heading, progress }: { heading?: string; progress: MyPa
                     {m.label}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{target > 0 ? m.fmt(target) : <span className="text-slate-400">未設定</span>}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{m.fmt(actual)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{editor?.(m.key) ?? m.fmt(actual)}</td>
                   <td className="min-w-32 px-3 py-2">
                     {rate == null ? (
                       <span className="text-slate-400">—</span>
@@ -234,7 +350,7 @@ function ProgressTable({ heading, progress }: { heading?: string; progress: MyPa
                     <tr className="border-t border-slate-100">
                       <td className="whitespace-nowrap px-3 py-2" title="初回訪問の結果が「営業時間設定」の訪問記録">初回訪問時間設定件数</td>
                       <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{num(firstScheduled)}件</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{editor?.("scheduled_first") ?? `${num(firstScheduled)}件`}</td>
                       <td className="px-3 py-2 text-slate-400">—</td>
                       <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
                     </tr>

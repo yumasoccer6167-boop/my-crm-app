@@ -146,7 +146,7 @@ function TargetForm({ pace, canEdit, onSaved }: { pace: AnalyticsPace; canEdit: 
   const [gp, setGp] = useState(pace.target ? yenToP(pace.target.gross_profit) : "");
   const [units, setUnits] = useState(pace.target ? String(pace.target.units) : "");
   // マイページの週間・月間の達成率に使う件数の目標
-  const [counts, setCounts] = useState({ deals: pace.target ? String(pace.target.deals) : "", first_visits: pace.target ? String(pace.target.first_visits) : "", scheduled: pace.target ? String(pace.target.scheduled) : "" });
+  const [counts, setCounts] = useState({ deals: pace.target ? String(pace.target.deals) : "", first_visits: pace.target ? String(pace.target.first_visits) : "", scheduled: pace.target ? String(pace.target.scheduled) : "", scheduling: pace.target ? String(pace.target.scheduling) : "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -169,6 +169,7 @@ function TargetForm({ pace, canEdit, onSaved }: { pace: AnalyticsPace; canEdit: 
             deals: Math.max(0, Math.round(Number(counts.deals) || 0)),
             first_visits: Math.max(0, Math.round(Number(counts.first_visits) || 0)),
             scheduled: Math.max(0, Math.round(Number(counts.scheduled) || 0)),
+            scheduling: Math.max(0, Math.round(Number(counts.scheduling) || 0)),
           },
         }),
       );
@@ -197,6 +198,7 @@ function TargetForm({ pace, canEdit, onSaved }: { pace: AnalyticsPace; canEdit: 
           ["deals", "商談数"],
           ["first_visits", "初回訪問件数"],
           ["scheduled", "時間設定件数"],
+          ["scheduling", "スケジューリング数"],
         ] as const
       ).map(([k, label]) => (
         <label key={k} className="block">
