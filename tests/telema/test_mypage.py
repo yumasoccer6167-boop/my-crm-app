@@ -139,29 +139,42 @@ def test_マネージャー以上はチーム_所属の部署と配下の全員_
         client.sql("UPDATE users SET role = 'owner' WHERE username = 'owner'")
 
 
-def test_翌週の予定は自分で入れ_翌週の目標に対する達成率として出る(client):
+def test_翌週の予定はカレンダーから自動で数え_粗利と台数だけ自分で入れる(client):
     api = client.api
     owner = me(client)
+    purposes = {r['name']: r['id'] for r in api('/visit-purposes')[1]}
     assert api(f'/targets/{owner}/2026-03', {'gross_profit': 2_200_000, 'units': 22, 'deals': 44, 'first_visits': 22, 'scheduled': 66, 'scheduling': 44}, method='PUT')[0] == 200
     r = api('/mypage')[1]['next_week']
-    # 今日は 3/11（水）→ 翌週は 3/16〜3/22（稼働日5日）。目標 = 月間 × 5/22。予定は未入力
+    # 今日は 3/11（水）→ 翌週は 3/16〜3/22（稼働日5日）。目標 = 月間 × 5/22。カレンダーに予定が無ければ、予定は0
     assert (r['from'], r['to']) == ('2026-03-16', '2026-03-22')
     assert r['personal']['gross_profit'] == {'target': 500_000, 'actual': 0} and r['personal']['deals'] == {'target': 10, 'actual': 0}
-    assert r['plan'] == dict.fromkeys(('gross_profit', 'units', 'deals', 'first_visits', 'scheduled_first', 'scheduled', 'scheduling'))
-    plan = {'gross_profit': 300_000, 'units': 3, 'deals': 6, 'first_visits': 4, 'scheduled_first': 2, 'scheduled': 5, 'scheduling': 7}
-    assert api('/mypage/next-week', plan, method='PUT')[0] == 200
-    r = api('/mypage')[1]['next_week']
-    assert r['personal']['gross_profit'] == {'target': 500_000, 'actual': 300_000} and r['personal']['scheduled'] == {'target': 15, 'actual': 5}
-    assert r['personal']['scheduling'] == {'target': 10, 'actual': 7}
-    assert (r['personal']['first_visits']['actual'], r['personal']['scheduled_first']) == (4, 2) and r['plan'] == plan
-    # 送らなかった項目は今のまま。空にするときは null
-    assert api('/mypage/next-week', {'units': 4, 'deals': None}, method='PUT')[0] == 200
-    got = api('/mypage')[1]['next_week']['plan']
-    assert (got['units'], got['deals'], got['gross_profit']) == (4, None, 300_000)
+    assert r['plan'] == {'gross_profit': None, 'units': None}
+    base = api('/mypage')[1]['next_week']['team']
+    co = make_company(client, '翌週の予定園')
+    call = lambda status, **kw: api(f'/companies/{co}/calls', {'raw_note': 'x', 'result_status_id': client.status_id(status), **kw})[0]
+    # カレンダーの予定：初回訪問予定2（うち1件は今週・翌々週で対象外）、営業予定（時間設定の架電）1、初回訪問の結果が営業時間設定1
+    assert call('初回訪問時間設定', visit_at='2026-03-17T01:00:00Z') == 201                      # 初回訪問予定（翌週）
+    assert call('初回訪問時間設定', visit_at='2026-03-12T01:00:00Z') == 201                      # 今週の分は入らない
+    assert call('初回訪問時間設定', visit_at='2026-03-23T01:00:00Z') == 201                      # 翌々週の分は入らない
+    assert call('時間設定成立', visit_at='2026-03-18T01:00:00Z') == 201                          # 営業予定（時間設定）
+    assert api(f'/companies/{co}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': 'x', 'visit_purpose_id': purposes['初回訪問'],
+                                          'first_result': 'scheduled', 'first_followup_at': '2026-03-19T01:00:00Z'})[0] == 201      # 営業予定（営業時間設定）
+    r = api('/mypage')[1]['next_week']['personal']
+    assert r['first_visits']['actual'] == 1 and r['scheduling']['actual'] == 1                  # 初回訪問予定
+    assert r['deals']['actual'] == 2                                                            # 営業予定（時間設定 + 営業時間設定）
+    assert r['scheduled']['actual'] == 1 and r['scheduled_first'] == 1
+    assert r['first_visits']['target'] == 5 and r['scheduled']['target'] == 15
+    # 粗利・台数は自分で入れる。送らなかった項目は今のまま。空にするときは null
+    assert api('/mypage/next-week', {'gross_profit': 300_000, 'units': 3}, method='PUT')[0] == 200
+    nw = api('/mypage')[1]['next_week']
+    assert nw['personal']['gross_profit'] == {'target': 500_000, 'actual': 300_000} and nw['personal']['units'] == {'target': 5, 'actual': 3} and nw['plan'] == {'gross_profit': 300_000, 'units': 3}
+    assert api('/mypage/next-week', {'units': None}, method='PUT')[0] == 200
+    assert api('/mypage')[1]['next_week']['plan'] == {'gross_profit': 300_000, 'units': None}
     assert api('/mypage/next-week', {'units': -1}, method='PUT')[0] == 400
-    # チームは全員の予定の合計（別の週の予定は入らない）
+    # チームは全員分（粗利・台数は全員の入力の合計。別の週の分は入らない）
     other = client.add_user('翌週の予定の別の営業', 'sales')
     client.sql("INSERT INTO telema_week_plans (user_id, week_start, gross_profit, units) VALUES (%s, '2026-03-16', 100000, 1)", (other,))
-    client.sql("INSERT INTO telema_week_plans (user_id, week_start, gross_profit) VALUES (%s, '2026-03-09', 999999)", (other,))       # 別の週は入らない
+    client.sql("INSERT INTO telema_week_plans (user_id, week_start, gross_profit) VALUES (%s, '2026-03-09', 999999)", (other,))
     team = api('/mypage')[1]['next_week']['team']
-    assert (team['gross_profit']['actual'], team['units']['actual']) == (400_000, 5)
+    assert (team['gross_profit']['actual'], team['units']['actual']) == (400_000, 1)
+    assert team['deals']['actual'] == base['deals']['actual'] + 2 and team['first_visits']['actual'] == base['first_visits']['actual'] + 1

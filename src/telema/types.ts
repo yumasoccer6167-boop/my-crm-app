@@ -571,8 +571,11 @@ export type MyPageProgress = Record<MyPageMetric, { target: number; actual: numb
   /** 初回訪問時間設定件数（初回訪問の結果が営業時間設定の訪問記録）。時間設定件数（テレアポから）とは別の項目で、目標は持たない */
   scheduled_first: number;
 };
-export type MyPagePlanKey = "gross_profit" | "units" | "deals" | "first_visits" | "scheduled_first" | "scheduled" | "scheduling";
+/** 自分で入れる翌週の予定（カレンダーから出せない粗利・台数）。そのほかの件数は、カレンダーから自動で数える */
+export type MyPagePlanKey = "gross_profit" | "units";
 export type MyPagePlan = Record<MyPagePlanKey, number | null>;
+/** 表の行（予定の列を入力欄にできる行を知らせるため） */
+export type MyPageRowKey = MyPageMetric | "scheduled_first";
 export type MyPageData = {
   today: string;
   role: Role;
@@ -586,7 +589,7 @@ export type MyPageData = {
   /** 不足数：今月のコミット（＝月間目標）に対する、今月・今週・今日の不足（粗利は円）。月間目標が0の項目は null */
   shortage: Record<MyPageMetric, { month: { target: number; actual: number; short: number }; week: { target: number; actual: number; short: number }; today: { need: number; done: number; short: number } } | null>;
   week: { from: string; to: string; personal: MyPageProgress; team?: MyPageProgress };
-  /** 翌週の予定。実績の代わりに、自分で入れた予定（actual）を出す。plan は自分の予定（円・件。入れていない項目は null） */
+  /** 翌週の予定。実績の代わりに予定（actual）を出す。件数はカレンダーの翌週の予定から自動で数え、粗利・台数は自分で入れた予定。plan は自分で入れた予定（円・台。入れていない項目は null） */
   next_week: { from: string; to: string; personal: MyPageProgress; team?: MyPageProgress; plan: MyPagePlan };
   month: { month: string; personal: MyPageProgress; team?: MyPageProgress };
 };

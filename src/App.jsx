@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { RELEASE_NOTES, unseenReleaseNotes, publishedReleaseNotes } from './releaseNotes.js';
 import {
-  Home, Users, PenTool, Plus, Search, Edit, X, Phone, MapPin, Save,
+  Users, PenTool, Plus, Search, Edit, X, Phone, MapPin, Save,
   Trash2, Package, Settings, CheckCircle, Filter, Mail, Globe,
   Star, Camera, Upload, Download, Copy, BarChart,
   Sparkles, FileText, ClipboardList, CalendarDays,
@@ -504,81 +504,6 @@ function CopyButton({ text, label = 'コピー', className = '' }) {
   );
 }
 
-function ProgressCard({ label, actual, goal, unit = '件', onClick }) {
-  const pct = goal > 0 ? Math.min(100, Math.round((actual / goal) * 100)) : 0;
-  const over = goal > 0 && actual >= goal;
-  const Tag = onClick ? 'button' : 'div';
-  return (
-    <Tag onClick={onClick} className={`bg-white rounded-lg p-4 ring-1 ring-slate-200 text-left w-full ${onClick ? 'hover:shadow-md hover:border-indigo-200 transition cursor-pointer' : ''}`}>
-      <div className="flex justify-between items-baseline mb-2">
-        <span className="text-xs font-semibold text-slate-500">{label}</span>
-        <span className={`text-xs font-semibold ${over ? 'text-indigo-600' : 'text-slate-400'}`}>{pct}%</span>
-      </div>
-      <div className="flex items-baseline gap-1 mb-3">
-        <span className="text-2xl font-extrabold text-slate-800">{actual}</span>
-        <span className="text-sm text-slate-400">/ {goal}{unit}</span>
-      </div>
-      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${over ? 'bg-indigo-500' : 'bg-indigo-400'}`} style={{ width: `${pct}%` }} />
-      </div>
-    </Tag>
-  );
-}
-
-function RateCard({ label, rate, onClick }) {
-  const Tag = onClick ? 'button' : 'div';
-  return (
-    <Tag onClick={onClick} className={`bg-white rounded-lg p-4 ring-1 ring-slate-200 text-left w-full ${onClick ? 'hover:shadow-md hover:border-indigo-200 transition cursor-pointer' : ''}`}>
-      <div className="mb-2">
-        <span className="text-xs font-semibold text-slate-500">{label}</span>
-      </div>
-      <div className="flex items-baseline gap-1 mb-3">
-        <span className="text-2xl font-extrabold text-slate-800">{rate}</span>
-        <span className="text-sm text-slate-400">%</span>
-      </div>
-      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${Math.min(100, rate)}%` }} />
-      </div>
-    </Tag>
-  );
-}
-
-// ---------- 円グラフ（ドーナツ）カード ----------
-function DonutCard({ label, actual, goal, unit = '件', rate = null, onClick }) {
-  // rate が指定されていれば率カード、そうでなければ達成率を計算する
-  const isRateCard = rate !== null;
-  const pct = isRateCard ? rate : (goal > 0 ? Math.round((actual / goal) * 100) : 0);
-  const shown = Math.min(100, Math.max(0, pct));
-  const R = 42;
-  const C = 2 * Math.PI * R;
-  const dash = (shown / 100) * C;
-  const over = !isRateCard && goal > 0 && actual >= goal;
-  const color = isRateCard ? '#fbbf24' : over ? '#14b8a6' : '#818cf8';
-  const Tag = onClick ? 'button' : 'div';
-
-  return (
-    <Tag onClick={onClick} className={`bg-white rounded-lg p-4 ring-1 ring-slate-200 w-full flex flex-col items-center ${onClick ? 'hover:shadow-md hover:border-indigo-200 transition cursor-pointer' : ''}`}>
-      <span className="text-xs font-semibold text-slate-500 mb-2 text-center">{label}</span>
-      <div className="relative">
-        <svg width="110" height="110" viewBox="0 0 110 110">
-          <circle cx="55" cy="55" r={R} fill="none" stroke="#f1f5f9" strokeWidth="12" />
-          <circle
-            cx="55" cy="55" r={R} fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"
-            strokeDasharray={`${dash} ${C - dash}`}
-            transform="rotate(-90 55 55)"
-            style={{ transition: 'stroke-dasharray 0.4s' }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xl font-extrabold text-slate-800">{pct}%</span>
-          {!isRateCard && <span className="text-[10px] text-slate-400">{actual}/{goal}{unit}</span>}
-        </div>
-      </div>
-      {isRateCard && <span className="text-[11px] text-slate-400 mt-1">達成状況</span>}
-    </Tag>
-  );
-}
-
 // ---------- ログイン画面 ----------
 function LoginView({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -613,331 +538,6 @@ function LoginView({ onLogin }) {
           {loading ? 'ログイン中...' : 'ログイン'}
         </button>
       </form>
-    </div>
-  );
-}
-
-// ---------- HOME ----------
-function HomeView({ records, customers, goals, setGoals, currentUser, isOwner, members, departments, associationTypes, onOpenCustomer }) {
-  const [period, setPeriod] = useState(thisMonth);
-  const [scopeType, setScopeType] = useState('personal'); // 'all' | 'department' | 'personal'
-  const [scopeValue, setScopeValue] = useState(currentUser?.displayName || '');
-  const [associationFilter, setAssociationFilter] = useState('');
-  // 来月の目標も先に設定できるよう、期間の選択肢に来月を必ず含める
-  const nextMonth = useMemo(() => {
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() + 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  }, []);
-  const months = useMemo(() => {
-    const set = new Set([thisMonth, nextMonth]);
-    records.forEach(r => set.add(r.date?.substring(0, 7)));
-    return Array.from(set).filter(Boolean).sort();
-  }, [records, nextMonth]);
-
-  // 課に所属するメンバー名の一覧を取得
-  const membersInDept = (deptName) => members.filter(m => m.department === deptName).map(m => m.displayName);
-
-  // 記録に担当者が無い場合（CSV取込や担当者機能の追加前に作られた記録）は、
-  // その顧客に設定されている担当者を担当者とみなして集計に含める
-  const customerAssigneeById = useMemo(() => {
-    const map = {};
-    customers.forEach(c => { map[c.id] = c.assignedTo || ''; });
-    return map;
-  }, [customers]);
-  const effectiveAssignee = (r) => r.assignedTo || customerAssigneeById[r.customerId] || '';
-
-  // 顧客ごとの協会の種類（記録から辿れるようにする）
-  const customerAssociationById = useMemo(() => {
-    const map = {};
-    customers.forEach(c => { map[c.id] = c.associationType || ''; });
-    return map;
-  }, [customers]);
-  const associationOptions = useMemo(
-    () => [...new Set([...(associationTypes || []).map(a => a.name), ...customers.flatMap(c => parseAssociationTypes(c.associationType))])],
-    [customers, associationTypes]
-  );
-
-  const scopedRecords = (() => {
-    let base = records;
-    if (scopeType === 'department') {
-      const names = membersInDept(scopeValue);
-      base = base.filter(r => names.includes(effectiveAssignee(r)));
-    } else if (scopeType === 'personal') {
-      base = base.filter(r => effectiveAssignee(r) === scopeValue);
-    }
-    if (associationFilter) {
-      base = base.filter(r => parseAssociationTypes(customerAssociationById[r.customerId]).includes(associationFilter));
-    }
-    return base;
-  })();
-  const filtered = period === 'all' ? scopedRecords : scopedRecords.filter(r => r.date?.startsWith(period));
-
-  const scopeLabel = (scopeType === 'all' ? '全体' : scopeType === 'department' ? `課: ${scopeValue || '未選択'}` : `個人: ${scopeValue || '未選択'}`)
-    + (associationFilter ? ` ／ 協会: ${associationFilter}` : '');
-
-  // 指標の計算（内訳表示のため、対象となった記録も保持しておく）
-  const teleTimeSettingRecs = filtered.filter(r => r.type === 'テレアポ' && isInitialTimeSettingFlag(r.flag));
-  const firstVisitRecs = filtered.filter(r => r.type === '初回訪問');
-  const salesRecs = filtered.filter(r => isSalesType(r.type) && r.flag !== '返事待ちNG'); // 営業件数（営業（代表）・営業（担当）・営業／返事待ちNGは除く）
-  const salesTimeSettingRecs = filtered.filter(r => r.type === '初回訪問' && r.flag === '営業時間設定');
-  const orderRecords = filtered.filter(r => ['受注', 'ユーザー', '過去受注記録あり'].includes(r.flag));
-
-  const teleTimeSetting = teleTimeSettingRecs.length; // 初回時間設定件数
-  const firstVisitCount = firstVisitRecs.length; // 初回訪問件数
-  const salesCount = salesRecs.length; // 営業件数
-  const salesTimeSetting = salesTimeSettingRecs.length; // 営業時間設定件数
-  const salesTimeSettingRate = firstVisitCount > 0 ? Math.round((salesTimeSetting / firstVisitCount) * 100) : 0; // 営業時間設定昇華率
-  const orderCount = orderRecords.length; // 受注件数
-  const profitSum = orderRecords.reduce((s, r) => s + (Number(r.profit) || 0), 0); // 営業粗利（P）
-  const quantitySum = orderRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0); // 台数
-  const closeRate = salesTimeSetting > 0 ? Math.round((orderCount / salesTimeSetting) * 100) : 0; // 営業落率
-
-  // カードをクリックした時に表示する内訳
-  const [drilldown, setDrilldown] = useState(null); // { title, records }
-  const [summaryView, setSummaryView] = useState('card'); // 'card' | 'chart'
-  const openDrilldown = (title, recs) => setDrilldown({ title, records: recs });
-
-  const goal = goals[period] || { timeSetting: 0, firstVisit: 0, sales: 0, salesTimeSetting: 0, order: 0, profit: 0, quantity: 0 };
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(goal);
-
-  const saveGoal = () => {
-    setGoals({ ...goals, [period]: { ...draft } });
-    setEditing(false);
-  };
-
-  // 実績サマリーを表にしてPDF化（ブラウザの印刷機能でPDF保存）
-  const exportPdf = () => {
-    const rows = [
-      ['初回時間設定件数', `${teleTimeSetting}件`, `${goal.timeSetting || 0}件`, goal.timeSetting > 0 ? `${Math.round(teleTimeSetting / goal.timeSetting * 100)}%` : '-'],
-      ['初回訪問件数', `${firstVisitCount}件`, `${goal.firstVisit || 0}件`, goal.firstVisit > 0 ? `${Math.round(firstVisitCount / goal.firstVisit * 100)}%` : '-'],
-      ['営業件数', `${salesCount}件`, `${goal.sales || 0}件`, goal.sales > 0 ? `${Math.round(salesCount / goal.sales * 100)}%` : '-'],
-      ['営業時間設定件数', `${salesTimeSetting}件`, `${goal.salesTimeSetting || 0}件`, goal.salesTimeSetting > 0 ? `${Math.round(salesTimeSetting / goal.salesTimeSetting * 100)}%` : '-'],
-      ['営業時間設定昇華率', `${salesTimeSettingRate}%`, '-', '-'],
-      ['受注件数', `${orderCount}件`, `${goal.order || 0}件`, goal.order > 0 ? `${Math.round(orderCount / goal.order * 100)}%` : '-'],
-      ['営業粗利', `${profitSum}P`, `${goal.profit || 0}P`, goal.profit > 0 ? `${Math.round(profitSum / goal.profit * 100)}%` : '-'],
-      ['台数', `${quantitySum}台`, `${goal.quantity || 0}台`, goal.quantity > 0 ? `${Math.round(quantitySum / goal.quantity * 100)}%` : '-'],
-      ['営業落率', `${closeRate}%`, '-', '-'],
-    ];
-    const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>実績レポート</title>
-<style>
-  body { font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; padding: 32px; color: #1e293b; }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  p.meta { font-size: 12px; color: #64748b; margin: 0 0 20px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; }
-  th { background: #f1f5f9; font-weight: bold; }
-  td.num { text-align: right; }
-  @media print { body { padding: 0; } }
-</style></head><body>
-<h1>実績レポート</h1>
-<p class="meta">対象: ${scopeLabel} ／ 期間: ${period === 'all' ? '全期間' : period} ／ 出力日: ${new Date().toISOString().substring(0, 10)}</p>
-<table>
-  <thead><tr><th>項目</th><th>実績</th><th>目標</th><th>達成率</th></tr></thead>
-  <tbody>
-    ${rows.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td><td class="num">${r[3]}</td></tr>`).join('')}
-  </tbody>
-</table>
-<script>window.onload = function(){ window.print(); };<\/script>
-</body></html>`;
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
-  };
-
-  // カレンダー：直近の予定（3件）
-  const todayStr = new Date().toISOString().substring(0, 10);
-  const upcoming = scopedRecords
-    // 直近の予定は初回訪問・営業の予定のみ表示（テレアポ／再コールは対象外）
-    .filter(r => r.scheduledDate && r.scheduledDate >= todayStr && (r.type === '初回訪問' || isSalesType(r.type)))
-    .slice()
-    .sort((a, b) => (a.scheduledDate + (a.scheduledTime || '')).localeCompare(b.scheduledDate + (b.scheduledTime || '')))
-    .slice(0, 3);
-
-  // テレアポ集計：今日と今月の概要
-  const teleToday = scopedRecords.filter(r => r.type === 'テレアポ' && r.date === todayStr).length;
-  const teleMonth = scopedRecords.filter(r => r.type === 'テレアポ' && r.date?.startsWith(thisMonth)).length;
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-800">実績サマリー</h2>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
-            {[['all', '全体'], ['department', '課'], ['personal', '個人']].map(([v, l]) => (
-              <button key={v}
-                onClick={() => {
-                  setScopeType(v);
-                  if (v === 'department') setScopeValue(currentUser?.department || (departments[0]?.name || ''));
-                  else if (v === 'personal') setScopeValue(currentUser?.displayName || '');
-                }}
-                className={`px-3 py-2 text-sm font-medium ${scopeType === v ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
-                {l}
-              </button>
-            ))}
-          </div>
-          {scopeType === 'department' && (
-            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-              <option value="">課を選択</option>
-              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-            </select>
-          )}
-          {scopeType === 'personal' && (
-            <select value={scopeValue} onChange={e => setScopeValue(e.target.value)} disabled={!isOwner}
-              className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white disabled:bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-              {members.map(m => <option key={m.id} value={m.displayName}>{m.displayName}</option>)}
-            </select>
-          )}
-          <select value={associationFilter} onChange={e => setAssociationFilter(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-            <option value="">すべての協会</option>
-            {associationOptions.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={period} onChange={e => setPeriod(e.target.value)} className="px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-            <option value="all">全期間</option>
-            {months.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          {period !== 'all' && (
-            <button onClick={() => { setDraft(goal); setEditing(true); }} className="px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100">目標設定</button>
-          )}
-          <div className="flex ring-1 ring-slate-200 rounded-lg overflow-hidden">
-            <button onClick={() => setSummaryView('card')} title="カード表示"
-              className={`p-2 ${summaryView === 'card' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button onClick={() => setSummaryView('chart')} title="円グラフ表示"
-              className={`p-2 ${summaryView === 'chart' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
-              <PieChart className="w-4 h-4" />
-            </button>
-          </div>
-          <button onClick={exportPdf} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600">
-            <Download className="w-4 h-4" />PDF出力
-          </button>
-        </div>
-      </div>
-
-      {summaryView === 'card' ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <ProgressCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} onClick={() => openDrilldown('初回時間設定件数', teleTimeSettingRecs)} />
-          <ProgressCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} onClick={() => openDrilldown('初回訪問件数', firstVisitRecs)} />
-          <ProgressCard label="営業件数" actual={salesCount} goal={goal.sales} onClick={() => openDrilldown('営業件数', salesRecs)} />
-          <ProgressCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} onClick={() => openDrilldown('営業時間設定件数', salesTimeSettingRecs)} />
-          <RateCard label="営業時間設定昇華率" rate={salesTimeSettingRate} onClick={() => openDrilldown('営業時間設定昇華率の内訳（営業時間設定）', salesTimeSettingRecs)} />
-          <ProgressCard label="受注件数" actual={orderCount} goal={goal.order} onClick={() => openDrilldown('受注件数', orderRecords)} />
-          <ProgressCard label="営業粗利" actual={profitSum} goal={goal.profit} unit="P" onClick={() => openDrilldown('営業粗利の内訳', orderRecords)} />
-          <ProgressCard label="台数" actual={quantitySum} goal={goal.quantity} unit="台" onClick={() => openDrilldown('台数の内訳', orderRecords)} />
-          <RateCard label="営業落率" rate={closeRate} onClick={() => openDrilldown('営業落率の内訳（受注）', orderRecords)} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <DonutCard label="初回時間設定件数" actual={teleTimeSetting} goal={goal.timeSetting} onClick={() => openDrilldown('初回時間設定件数', teleTimeSettingRecs)} />
-          <DonutCard label="初回訪問件数" actual={firstVisitCount} goal={goal.firstVisit} onClick={() => openDrilldown('初回訪問件数', firstVisitRecs)} />
-          <DonutCard label="営業件数" actual={salesCount} goal={goal.sales} onClick={() => openDrilldown('営業件数', salesRecs)} />
-          <DonutCard label="営業時間設定件数" actual={salesTimeSetting} goal={goal.salesTimeSetting} onClick={() => openDrilldown('営業時間設定件数', salesTimeSettingRecs)} />
-          <DonutCard label="営業時間設定昇華率" rate={salesTimeSettingRate} onClick={() => openDrilldown('営業時間設定昇華率の内訳（営業時間設定）', salesTimeSettingRecs)} />
-          <DonutCard label="受注件数" actual={orderCount} goal={goal.order} onClick={() => openDrilldown('受注件数', orderRecords)} />
-          <DonutCard label="営業粗利" actual={profitSum} goal={goal.profit} unit="P" onClick={() => openDrilldown('営業粗利の内訳', orderRecords)} />
-          <DonutCard label="台数" actual={quantitySum} goal={goal.quantity} unit="台" onClick={() => openDrilldown('台数の内訳', orderRecords)} />
-          <DonutCard label="営業落率" rate={closeRate} onClick={() => openDrilldown('営業落率の内訳（受注）', orderRecords)} />
-        </div>
-      )}
-
-      {editing && (
-        <Modal title={`${period} の目標設定`} onClose={() => setEditing(false)}>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="初回時間設定 目標" type="number" value={draft.timeSetting} onChange={e => setDraft({ ...draft, timeSetting: Number(e.target.value) })} />
-            <FormField label="初回訪問 目標" type="number" value={draft.firstVisit} onChange={e => setDraft({ ...draft, firstVisit: Number(e.target.value) })} />
-            <FormField label="営業 目標" type="number" value={draft.sales} onChange={e => setDraft({ ...draft, sales: Number(e.target.value) })} />
-            <FormField label="営業時間設定 目標" type="number" value={draft.salesTimeSetting} onChange={e => setDraft({ ...draft, salesTimeSetting: Number(e.target.value) })} />
-            <FormField label="受注 目標" type="number" value={draft.order} onChange={e => setDraft({ ...draft, order: Number(e.target.value) })} />
-            <FormField label="営業粗利 目標（P）" type="number" value={draft.profit} onChange={e => setDraft({ ...draft, profit: Number(e.target.value) })} />
-            <FormField label="台数 目標" type="number" value={draft.quantity} onChange={e => setDraft({ ...draft, quantity: Number(e.target.value) })} />
-          </div>
-          <button onClick={saveGoal} className="mt-5 w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">保存する</button>
-        </Modal>
-      )}
-
-      {drilldown && (
-        <Modal title={`${drilldown.title}（${drilldown.records.length}件）`} onClose={() => setDrilldown(null)} wide>
-          {drilldown.records.length === 0 ? (
-            <p className="text-sm text-slate-400">該当する記録がありません。</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {drilldown.records.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(r => {
-                const cust = customers.find(c => c.id === r.customerId);
-                return (
-                  <button key={r.id}
-                    onClick={() => { setDrilldown(null); onOpenCustomer(r.customerId); }}
-                    className="text-left bg-white rounded-md ring-1 ring-inset ring-slate-300 p-3 hover:shadow-md hover:border-indigo-200 transition">
-                    <p className="text-xs text-slate-400">{cust?.gakuenName || ''}{cust?.associationType ? ` ・ ${cust.associationType}` : ''}</p>
-                    <p className="font-semibold text-slate-800 text-sm">{r.customerName || cust?.enName || '不明な顧客'}</p>
-                    <p className="text-xs text-slate-500 mt-1">{r.type}{r.flag ? `（${r.flag}）` : ''} ・ {r.date}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">担当: {effectiveAssignee(r) || '未設定'}</p>
-                    {r.productName && (
-                      <p className="text-[11px] text-amber-700 mt-1">{r.productName} / 粗利{r.profit || 0}P / 台数{r.quantity || 0}</p>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </Modal>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-slate-600 flex items-center gap-1.5"><CalendarDays className="w-4 h-4" />直近の予定</h3>
-          </div>
-          {upcoming.length === 0 ? (
-            <p className="text-sm text-slate-400">直近の予定はありません。</p>
-          ) : (
-            <ul className="space-y-2">
-              {upcoming.map(r => (
-                <li key={r.id}>
-                  <button onClick={() => onOpenCustomer(r.customerId)} className="w-full text-left text-sm hover:bg-slate-50 rounded-md px-1.5 py-1 -mx-1.5 transition">
-                    <p className="font-semibold text-indigo-700 hover:underline">{r.customerName || '不明な顧客'}</p>
-                    <p className="text-xs text-indigo-600">{r.scheduledDate} {r.scheduledTime}</p>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-slate-600 flex items-center gap-1.5"><BarChart className="w-4 h-4" />テレアポ状況</h3>
-          </div>
-          <div className="flex justify-around text-center">
-            <div><p className="text-2xl font-extrabold text-slate-800">{teleToday}</p><p className="text-[10px] text-slate-400">今日</p></div>
-            <div><p className="text-2xl font-extrabold text-slate-800">{teleMonth}</p><p className="text-[10px] text-slate-400">今月</p></div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200">
-        <h3 className="text-sm font-semibold text-slate-600 mb-3">最近の記録</h3>
-        {filtered.length === 0 ? (
-          <p className="text-sm text-slate-400">まだ記録がありません。「顧客リスト」から顧客を選んで記録を追加してください。</p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {filtered.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.id - a.id)).slice(0, 8).map(r => (
-              <li key={r.id} className="py-2.5">
-                <button onClick={() => onOpenCustomer(r.customerId)} className="w-full flex justify-between items-center text-sm hover:bg-slate-50 rounded-md px-1.5 -mx-1.5 py-0.5 transition text-left">
-                  <div>
-                    <span className="font-semibold text-indigo-700 hover:underline">{r.customerName || '不明な顧客'}</span>
-                    <span className="ml-2 text-slate-400">{r.type}{r.flag ? `（${r.flag}）` : ''}</span>
-                  </div>
-                  <span className="text-xs text-slate-400">{r.date}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </div>
   );
 }
@@ -1654,12 +1254,12 @@ function CustomersView({ customers, setCustomers, records, setRecords, activityT
 
   const [editing, setEditing] = useState(null); // customer being edited, or {} for new
   const [viewing, setViewing] = useState(null); // customer being viewed
-  // 他のページ（HOME・カレンダー・再コール等）から特定の顧客を開いた場合、
+  // 他のページ（カレンダー・再コール等）から特定の顧客を開いた場合、
   // カードを閉じた後もその顧客だけがリストに残るようにする
   const [focusedCustomerId, setFocusedCustomerId] = useState(null);
   const [viewingWithForm, setViewingWithForm] = useState(false);
 
-  // HOME画面の「直近の予定」「最近の記録」や再コールページから遷移してきた場合、該当の顧客を自動で開く
+  // 再コールページ等から遷移してきた場合、該当の顧客を自動で開く
   useEffect(() => {
     if (!pendingViewCustomerId) return;
     const target = customers.find(c => c.id === pendingViewCustomerId);
@@ -2894,7 +2494,7 @@ function ProductsAndFlagsView({ products, setProducts, activityTypes, setActivit
 
       <div className="bg-white rounded-lg p-5 ring-1 ring-slate-200 lg:col-span-2">
         <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Users className="w-4 h-4" />課の管理</h3>
-        <p className="text-xs text-slate-400 mb-3">ここで登録した課が、メンバー管理の「課」プルダウンとHOME画面の集計切り替えに反映されます。</p>
+        <p className="text-xs text-slate-400 mb-3">ここで登録した課が、メンバー管理の「課」プルダウンに反映されます。</p>
         <div className="flex gap-2 mb-4">
           <input value={newDepartment} onChange={e => setNewDepartment(e.target.value)} placeholder="例：WEB営業　東京　１課" autoComplete="off"
             className="flex-1 px-3 py-2 ring-1 ring-inset ring-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
@@ -3237,7 +2837,7 @@ function NavItem({ icon, label, isActive, onClick, badge }) {
 // ---------- App ----------
 export default function App() {
   const { token, user, authLoading, login, logout, updateUser } = useAuth();
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('my_numbers');
   const [members, setMembers] = useState([]);
   const [alertMsg, setAlertMsg] = useState('');
   const [confirmState, setConfirmState] = useState(null);
@@ -3251,12 +2851,6 @@ export default function App() {
   // 事例管理とテレマリスト（カルテ）の行き来：開きたい事例／カルテを相手の画面に渡す
   const [successCaseRequest, setSuccessCaseRequest] = useState(null);
   const [telemaRequest, setTelemaRequest] = useState(null);
-  // 他ページから顧客カードを開く（withForm=true なら記録フォームを開いた状態で表示）
-  const openCustomerFromHome = (customerId, withForm = false) => {
-    setPendingViewCustomerId(customerId);
-    setPendingViewWithForm(withForm);
-    setActiveTab('customers');
-  };
 
   const showAlert = (msg) => setAlertMsg(msg);
   const showConfirm = (msg, onConfirm) => setConfirmState({ msg, onConfirm });
@@ -3274,7 +2868,7 @@ export default function App() {
     personalSettings: {},
   }, token, logout);
 
-  const { customers, records, products, activityTypes, goals, reportTemplates, appointmentTemplates, associationTypes, rolePermissions, departments, industryTypes, successCases, personalSettings } = data;
+  const { customers, records, products, activityTypes, reportTemplates, appointmentTemplates, associationTypes, rolePermissions, departments, industryTypes, successCases, personalSettings } = data;
   const canViewSettings = isOwner || hasPermission(user?.role, 'viewSettings', rolePermissions);
   const canDeleteCustomer = isOwner || hasPermission(user?.role, 'deleteCustomer', rolePermissions);
   const canBulkEdit = isOwner || hasPermission(user?.role, 'bulkEdit', rolePermissions);
@@ -3282,7 +2876,6 @@ export default function App() {
   const setRecords = makeSetter('records');
   const setProducts = makeSetter('products');
   const setActivityTypes = makeSetter('activityTypes');
-  const setGoals = makeSetter('goals');
   const setReportTemplates = makeSetter('reportTemplates');
   const setAppointmentTemplates = makeSetter('appointmentTemplates');
   const setAssociationTypes = makeSetter('associationTypes');
@@ -3336,13 +2929,12 @@ export default function App() {
     }));
   }, [dataLoaded]);
 
-  // 権限のないタブ（設定・管理）に一般メンバーが残ってしまっていたらHOMEへ戻す
+  // 権限のないタブ（設定・管理）に一般メンバーが残ってしまっていたらマイページへ戻す
   useEffect(() => {
-    if (activeTab === 'settings' && !canViewSettings) setActiveTab('home');
+    if (activeTab === 'settings' && !canViewSettings) setActiveTab('my_numbers');
   }, [activeTab, canViewSettings]);
 
   const menuItems = [
-    { id: 'home', icon: <Home className="w-4 h-4" />, label: 'HOME' },
     { id: 'my_numbers', icon: <Target className="w-4 h-4" />, label: 'マイページ' },
     { id: 'customers', icon: <Users className="w-4 h-4" />, label: '顧客リスト' },
     { id: 'telema', icon: <PhoneCall className="w-4 h-4" />, label: 'テレマリスト' },
@@ -3354,7 +2946,7 @@ export default function App() {
   ];
 
   const titles = {
-    home: 'HOME', my_numbers: 'マイページ', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', user_analysis: 'ユーザー分析', success_cases: '事例管理',
+    my_numbers: 'マイページ', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', user_analysis: 'ユーザー分析', success_cases: '事例管理',
     mypage: '個人設定', settings: '設定・管理',
   };
 
@@ -3432,9 +3024,6 @@ export default function App() {
 
       <main className="relative flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-8">
         <h2 className="hidden md:block text-xl font-semibold text-slate-800 mb-6">{titles[activeTab]}</h2>
-        {activeTab === 'home' && (
-          <HomeView records={records} customers={customers} goals={goals} setGoals={setGoals} currentUser={user} isOwner={isOwner} members={members} departments={departments || []} associationTypes={associationTypes} onOpenCustomer={openCustomerFromHome} />
-        )}
         {activeTab === 'customers' && (
           <CustomersView
             customers={customers} setCustomers={setCustomers}

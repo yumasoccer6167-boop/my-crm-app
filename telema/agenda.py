@@ -51,9 +51,11 @@ def check_recall_slot(d, owner_id, at):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（次回架電: {_hhmm(hit["t"])}からの訪問の時間帯のため、再コールは設定できません）')
 
 
-def agenda_items(d, uid, start, end):
-    """start〜end（UTCのISO文字列、endは含まない）の予定。uid が None なら全員分。日時順"""
+def agenda_items(d, uid, start, end, ids=None):
+    """start〜end（UTCのISO文字列、endは含まない）の予定。uid が None なら全員分。ids（ユーザーIDの一覧）を渡すと、その人たち全員分（uid は見ない）。日時順"""
     who, wp = ('TRUE', []) if uid is None else ('(cl.user_id = %s OR c.assigned_user_id = %s)', [uid, uid])
+    if ids is not None:
+        who, wp = '(cl.user_id = ANY(%s) OR c.assigned_user_id = ANY(%s))', [list(ids), list(ids)]
     base = '''FROM telema_call_logs cl JOIN telema_companies c ON c.id = cl.company_id AND c.is_active = 1
               LEFT JOIN users u ON u.id = COALESCE(cl.user_id, c.assigned_user_id)'''
     cols = 'cl.id, cl.company_id, c.company_name, u.display_name AS user_name, cl.raw_note AS note'

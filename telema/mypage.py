@@ -10,23 +10,27 @@
  - 実績の数え方は営業成績ダッシュボードと同じ：粗利・台数＝契約情報（契約日・営業担当）、商談数＝訪問の内容が「営業」の訪問記録、初回訪問件数＝「初回訪問」の訪問記録、
    時間設定件数＝架電の結果がステータス区分「アポ獲得」（時間設定成立）、スケジューリング数＝架電の結果が「初回訪問時間設定」（どちらもテレアポの集計と同じ）
 翌週の予定（GET /mypage の next_week、PUT /mypage/next-week）
- - 来週（月〜日）の目標（月間目標 × 来週の稼働日数 ÷ その月の稼働日数）と、自分で入れた予定（粗利・台数・商談数・初回訪問件数・初回訪問時間設定件数・時間設定件数・スケジューリング数）。
-   予定は営業ごと・週ごとに自分の分だけ入力でき、実績の表と同じ形で、実績の代わりに予定を出す（チームは、チームの全員の予定の合計）
+ - 来週（月〜日）の目標（月間目標 × 来週の稼働日数 ÷ その月の稼働日数）と、予定。実績の表と同じ形で、実績の代わりに予定を出す。
+   予定の件数は、カレンダー（agenda.py）の翌週の予定から自動で数える（営業ごと：記録の担当者か施設の担当が自分の予定。チームは、チーム全員の予定）：
+     初回訪問件数・スケジューリング数 ＝ 初回訪問予定（架電の結果が「初回訪問時間設定」の記録に付けた訪問日時）
+     商談数 ＝ 営業予定（「時間設定」の架電の訪問日時 ＋ 初回訪問の結果「営業時間設定」の営業の日時）
+     時間設定件数 ＝ 営業予定のうち、「時間設定」の架電から　　初回訪問時間設定件数 ＝ 営業予定のうち、初回訪問の「営業時間設定」から
+   粗利・台数はカレンダーに情報が無いため、自分で入力する（営業ごと・週ごと。チームは全員の合計）
 2ページ（GET /mypage/analysis?scope=closed|user）
  - closed＝自己クローズ（契約情報の営業担当が自分）、user＝自己ユーザー（営業担当か台数担当のどちらかが自分）の契約について、商材別・業種別の件数、平均粗利、
    1件あたり粗利、1契約あたり台数（同じ施設・同じ契約日の契約情報は、まとめて1契約と数える）、単月平均粗利・台数（最初の契約の月から今月まで）を返す"""
-from datetime import timedelta
+from datetime import datetime, timedelta
 from math import ceil
 
 from flask import jsonify, request
 
-from .agenda import month_days
+from .agenda import agenda_items, month_days
 from .analytics import FIRST, SALES, SCHEDULING_STATUS, _day_bounds, _today, workday_overrides, workdays
-from .common import audit
+from .common import JST, audit
 from .context import ApiError, body, current_user, db
 from .org import assignments_on, department_tree
 from .routes import bp
-from .validate import Int, Str, parse
+from .validate import Int, Str, iso_utc, parse
 
 KEYS = ('gross_profit', 'units', 'deals', 'first_visits', 'scheduled', 'scheduling')
 NO_INDUSTRY = '未設定'
@@ -130,15 +134,10 @@ SHORT_KEYS = ('gross_profit', 'units', 'deals', 'scheduled', 'first_visits', 'sc
 
 
 # ---------- 翌週の予定 ----------
-PLAN_KEYS = ('gross_profit', 'units', 'deals', 'first_visits', 'scheduled_first', 'scheduled', 'scheduling')
+PLAN_KEYS = ('gross_profit', 'units')       # 自分で入れる予定（カレンダーから出せない項目）
 PLAN_BODY = {
     'gross_profit': Int(min=0, nullable=True, optional=True),       # 円
     'units': Int(min=0, nullable=True, optional=True),
-    'deals': Int(min=0, nullable=True, optional=True),
-    'first_visits': Int(min=0, nullable=True, optional=True),
-    'scheduled_first': Int(min=0, nullable=True, optional=True),    # 初回訪問時間設定件数
-    'scheduled': Int(min=0, nullable=True, optional=True),          # 時間設定件数（結果が「アポ獲得」区分の架電）
-    'scheduling': Int(min=0, nullable=True, optional=True),         # スケジューリング数（結果が「初回訪問時間設定」の架電）
 }
 
 
@@ -147,11 +146,23 @@ def _next_week(today):
     return start, start + timedelta(days=6)
 
 
-def _plans(d, ids, week_start):
-    """ids の人たちの、その週の予定の合計（未入力は0）"""
+def _plans(d, ids, week_start, week_end):
+    """ids の人たちの、その週の予定。粗利・台数は入れた予定の合計（未入力は0）、そのほかの件数はカレンダーの予定から数える"""
     cols = ', '.join(f'COALESCE(SUM({k}), 0)::bigint AS {k}' for k in PLAN_KEYS)
     row = d.first(f'SELECT {cols} FROM telema_week_plans WHERE user_id = ANY(%s) AND week_start = %s', (ids, week_start.isoformat()))
-    return {k: int(row[k]) for k in PLAN_KEYS}
+    out = {k: int(row[k]) for k in PLAN_KEYS}
+    start = iso_utc(datetime(week_start.year, week_start.month, week_start.day, tzinfo=JST))
+    end = iso_utc(datetime(week_end.year, week_end.month, week_end.day, tzinfo=JST) + timedelta(days=1))
+    items = agenda_items(d, None, start, end, ids=ids)
+    first_visit = sum(1 for i in items if i['kind'] == 'first_visit')
+    visit = [i for i in items if i['kind'] == 'visit']
+    out.update({
+        'first_visits': first_visit, 'scheduling': first_visit,
+        'deals': len(visit),
+        'scheduled': sum(1 for i in visit if i['detail'] == '時間設定'),
+        'scheduled_first': sum(1 for i in visit if i['detail'] == '営業時間設定'),
+    })
+    return out
 
 
 def _own_plan(d, user_id, week_start):
@@ -207,7 +218,7 @@ def mypage():
 
     # 翌週の予定：実績の代わりに、入れた予定を出す
     def plan_block(ids):
-        return _pair(_week_targets(d, ids, next_from, next_to, over), _plans(d, ids, next_from))
+        return _pair(_week_targets(d, ids, next_from, next_to, over), _plans(d, ids, next_from, next_to))
 
     own_plan = _own_plan(d, user['id'], next_from)
     nxt = {'from': next_from.isoformat(), 'to': next_to.isoformat(), 'personal': plan_block(me), 'plan': own_plan}
@@ -224,7 +235,7 @@ def mypage():
 
 @bp.put('/mypage/next-week')
 def put_next_week():
-    """来週の予定を保存する（自分の分だけ。送らなかった項目は今のまま。空にするときは null）"""
+    """来週の予定のうち、カレンダーから出せない粗利・台数を保存する（自分の分だけ。送らなかった項目は今のまま。空にするときは null）。そのほかの件数はカレンダーから自動で数える"""
     user, d = current_user(), db()
     b = parse(PLAN_BODY, body())
     week_start = _next_week(_today())[0]

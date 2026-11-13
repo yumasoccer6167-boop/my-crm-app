@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import type { MyAnalysis, MyPageData, MyPageMetric, MyPagePlan, MyPagePlanKey, MyPageProgress } from "../types";
+import type { MyAnalysis, MyPageData, MyPageMetric, MyPagePlan, MyPagePlanKey, MyPageProgress, MyPageRowKey } from "../types";
 import { api, unwrap } from "../lib/api";
 import { fmtP, pToYen, yenToP } from "../lib/points";
 import { useApi } from "../lib/useApi";
@@ -211,7 +211,7 @@ function ProgressCard({
   teamName: string | null;
   teamSize: number | null;
   actualLabel?: string;
-  editor?: (key: MyPagePlanKey) => ReactNode;
+  editor?: (key: MyPageRowKey) => ReactNode;
   footer?: ReactNode;
 }) {
   return (
@@ -226,7 +226,7 @@ function ProgressCard({
   );
 }
 
-const PLAN_KEYS: MyPagePlanKey[] = ["gross_profit", "units", "deals", "first_visits", "scheduled_first", "scheduled", "scheduling"];
+const PLAN_KEYS: MyPagePlanKey[] = ["gross_profit", "units"];
 
 /** 翌週の予定：実績の表と同じ形で、実績の代わりに予定を入れる（自分の分）。チームは全員の予定の合計。達成率・残数は、翌週の週間目標に対する予定の割合 */
 function NextWeekPlan({ data, onSaved }: { data: MyPageData; onSaved: () => void }) {
@@ -247,10 +247,11 @@ function NextWeekPlan({ data, onSaved }: { data: MyPageData; onSaved: () => void
   // 入力中の予定を、その場で達成率・残数に反映する
   const live: MyPageProgress = {
     ...nw.personal,
-    ...Object.fromEntries((["gross_profit", "units", "deals", "first_visits", "scheduled", "scheduling"] as const).map((k) => [k, { target: nw.personal[k].target, actual: value(k) ?? 0 }])),
-    scheduled_first: value("scheduled_first") ?? 0,
+    ...Object.fromEntries(PLAN_KEYS.map((k) => [k, { target: nw.personal[k].target, actual: value(k) ?? 0 }])),
   };
-  const editor = (k: MyPagePlanKey) => (
+  // 粗利・台数だけ入力欄。そのほかの件数は、カレンダーから自動で数えた予定をそのまま出す
+  const editor = (k: MyPageRowKey) =>
+    k !== "gross_profit" && k !== "units" ? null : (
     <input
       type="number"
       min={0}
@@ -262,7 +263,7 @@ function NextWeekPlan({ data, onSaved }: { data: MyPageData; onSaved: () => void
       placeholder="0"
       className={`${inputCls} w-24 text-right`}
     />
-  );
+    );
 
   async function save() {
     setSaving(true);
@@ -281,7 +282,7 @@ function NextWeekPlan({ data, onSaved }: { data: MyPageData; onSaved: () => void
   return (
     <ProgressCard
       title={`翌週の予定（${mmdd(nw.from)}〜${mmdd(nw.to)}）`}
-      note="実績の代わりに、翌週の予定の数字を入れます（個人の表に入力）。目標は翌週の週間目標で、達成率・残数は予定の数字から出ます。チームは、チーム全員の予定の合計です。"
+      note="実績の代わりに、翌週の予定を出します。件数はカレンダーの翌週の予定から自動で数えます（初回訪問件数・スケジューリング数＝初回訪問予定、商談数＝営業予定、時間設定件数＝営業予定のうち時間設定の架電から、初回訪問時間設定件数＝営業予定のうち初回訪問の営業時間設定から）。粗利・台数はカレンダーに情報がないため、個人の表に入力します。目標は翌週の週間目標です。チームは、チーム全員の合計です。"
       personal={live}
       team={nw.team}
       teamName={data.team_name}
@@ -300,7 +301,7 @@ function NextWeekPlan({ data, onSaved }: { data: MyPageData; onSaved: () => void
   );
 }
 
-function ProgressTable({ heading, progress, actualLabel = "実績", editor }: { heading?: string; progress: MyPageProgress; actualLabel?: string; editor?: (key: MyPagePlanKey) => ReactNode }) {
+function ProgressTable({ heading, progress, actualLabel = "実績", editor }: { heading?: string; progress: MyPageProgress; actualLabel?: string; editor?: (key: MyPageRowKey) => ReactNode }) {
   // 初回訪問時間設定件数は時間設定件数（テレアポから）とは別の項目。時間設定昇華率 = 初回訪問時間設定件数 ÷ 初回訪問件数
   const firstScheduled = progress.scheduled_first;
   const firstVisits = progress.first_visits.actual;
