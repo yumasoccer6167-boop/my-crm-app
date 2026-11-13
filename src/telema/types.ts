@@ -563,10 +563,13 @@ export type TargetsData = {
 };
 
 /** マイページ：目標と実績の1項目（目標が0なら未設定） */
+/** マイルール。フラグ（テレアポ・商談・稼働・営業マン像）・ルールの内容・期待できる成果 */
+export type MyRule = { id: number; flag: string; rule: string; outcome: string | null; created_at: string; updated_at: string };
+export type MyRules = { flags: string[]; items: MyRule[] };
 export type MyPageMetric = "gross_profit" | "units" | "deals" | "first_visits" | "scheduled";
 export type MyPageProgress = Record<MyPageMetric, { target: number; actual: number }> & {
-  /** 時間設定件数の内訳：初回訪問から（初回訪問の結果が営業時間設定）／テレアポから（架電の結果） */
-  scheduled_split: { first: number; tele: number };
+  /** 初回訪問時間設定件数（初回訪問の結果が営業時間設定の訪問記録）。時間設定件数（テレアポから）とは別の項目で、目標は持たない */
+  scheduled_first: number;
 };
 export type MyPageData = {
   today: string;

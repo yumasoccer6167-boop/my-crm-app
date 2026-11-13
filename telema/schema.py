@@ -680,6 +680,20 @@ CREATE TABLE telema_call_items (
 );
 ALTER TABLE telema_contracts ADD COLUMN source_item_pos INTEGER;
 """,
+    # 32: マイルール（マイページの3ページ目）。自分で決めたルールを、フラグ（テレアポ・商談・稼働・営業マン像）・ルールの内容・期待できる成果で残す。自分の分だけ。削除は無効化
+    r"""
+CREATE TABLE telema_my_rules (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL,
+  flag        TEXT NOT NULL,
+  rule        TEXT NOT NULL,
+  outcome     TEXT,
+  is_active   INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL DEFAULT telema_now(),
+  updated_at  TEXT NOT NULL DEFAULT telema_now()
+);
+CREATE INDEX telema_idx_my_rules_user ON telema_my_rules(user_id) WHERE is_active = 1;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

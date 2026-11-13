@@ -48,6 +48,8 @@ import type {
   PrefectureStat,
   UserAnalysis,
   MyAnalysis,
+  MyRule,
+  MyRules,
   MyPageData,
   Section,
   AssociationOverview,
@@ -89,6 +91,11 @@ type Api = {
     $get: Call<MyPageData>;
     commit: { $put: Call<{ day: string; commit_gp: number | null; commit_units: number | null; commit_deals: number | null; comment: string | null }> };
     analysis: { $get: Call<MyAnalysis> };
+  };
+  "my-rules": {
+    $get: Call<MyRules>;
+    $post: Call<MyRule>;
+    ":id": { $patch: Call<MyRule>; deactivate: { $post: Call<{ ok: true }> } };
   };
   calendar: { $get: Call<CalendarData> };
   recalls: { $get: Call<RecallsData> };

@@ -4,6 +4,7 @@ import { api, unwrap } from "../lib/api";
 import { fmtP, pToYen, yenToP } from "../lib/points";
 import { useApi } from "../lib/useApi";
 import { Donut, HBars, topSlices } from "../components/charts";
+import { MyRules } from "./MyRules";
 import { Button, Card, Empty, ErrorBox, inputCls, Loading } from "../components/ui";
 
 const num = (n: number) => n.toLocaleString();
@@ -21,7 +22,7 @@ const METRICS: { key: MyPageMetric; label: string; fmt: (n: number) => string }[
 
 /** マイページ：1ページ「数字の自己認識」と、2ページ「自己分析」 */
 export function MyPage() {
-  const [page, setPage] = useState<"numbers" | "analysis">("numbers");
+  const [page, setPage] = useState<"numbers" | "analysis" | "rules">("numbers");
   return (
     <div className="space-y-4">
       <div role="tablist" aria-label="マイページの表示" className="inline-flex rounded-lg bg-slate-100 p-0.5 text-sm">
@@ -29,6 +30,7 @@ export function MyPage() {
           [
             ["numbers", "数字の自己認識"],
             ["analysis", "自己分析"],
+            ["rules", "マイルール"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -42,7 +44,7 @@ export function MyPage() {
           </button>
         ))}
       </div>
-      {page === "numbers" ? <Numbers /> : <Analysis />}
+      {page === "numbers" ? <Numbers /> : page === "analysis" ? <Analysis /> : <MyRules />}
     </div>
   );
 }
@@ -183,11 +185,10 @@ function ProgressCard({ title, note, personal, team, teamName, teamSize }: { tit
 }
 
 function ProgressTable({ heading, progress }: { heading?: string; progress: MyPageProgress }) {
-  // 時間設定件数をクリックすると、初回訪問から／テレアポからの内訳を開く
-  const [open, setOpen] = useState(false);
-  const split = progress.scheduled_split;
+  // 初回訪問時間設定件数は時間設定件数（テレアポから）とは別の項目。時間設定昇華率 = 初回訪問時間設定件数 ÷ 初回訪問件数
+  const firstScheduled = progress.scheduled_first;
   const firstVisits = progress.first_visits.actual;
-  const conversion = firstVisits > 0 ? (split.first / firstVisits) * 100 : null;
+  const conversion = firstVisits > 0 ? (firstScheduled / firstVisits) * 100 : null;
   return (
     <div>
       {heading && <h3 className="mb-2 text-sm font-medium text-slate-700">{heading}</h3>}
@@ -209,15 +210,8 @@ function ProgressTable({ heading, progress }: { heading?: string; progress: MyPa
               return (
                 <Fragment key={m.key}>
                 <tr className="border-t border-slate-100">
-                  <td className="whitespace-nowrap px-3 py-2">
-                    {m.key === "scheduled" ? (
-                      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} title="クリックで内訳（初回訪問から／テレアポから）" className="inline-flex items-center gap-1 font-medium text-indigo-700 hover:underline">
-                        <span aria-hidden className="text-xs">{open ? "▾" : "▸"}</span>
-                        {m.label}
-                      </button>
-                    ) : (
-                      m.label
-                    )}
+                  <td className="whitespace-nowrap px-3 py-2" title={m.key === "scheduled" ? "テレアポからの時間設定（架電の結果が時間設定）" : undefined}>
+                    {m.label}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{target > 0 ? m.fmt(target) : <span className="text-slate-400">未設定</span>}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{m.fmt(actual)}</td>
@@ -235,27 +229,23 @@ function ProgressTable({ heading, progress }: { heading?: string; progress: MyPa
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{target > 0 ? m.fmt(Math.max(0, target - actual)) : <span className="text-slate-400">—</span>}</td>
                 </tr>
-                {m.key === "scheduled" && open && (
+                {m.key === "first_visits" && (
                   <>
-                    {([["初回訪問から", split.first], ["テレアポから", split.tele]] as const).map(([label, n]) => (
-                      <tr key={label} className="bg-slate-50/60 text-slate-600">
-                        <td className="whitespace-nowrap py-1.5 pl-8 pr-3 text-xs">└ {label}</td>
-                        <td />
-                        <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums">{num(n)}件</td>
-                        <td className="px-3 py-1.5 text-xs tabular-nums text-slate-500">{actual > 0 ? `${((n / actual) * 100).toFixed(1)}%` : "—"}</td>
-                        <td />
-                      </tr>
-                    ))}
+                    <tr className="border-t border-slate-100">
+                      <td className="whitespace-nowrap px-3 py-2" title="初回訪問の結果が「営業時間設定」の訪問記録">初回訪問時間設定件数</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{num(firstScheduled)}件</td>
+                      <td className="px-3 py-2 text-slate-400">—</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
+                    </tr>
+                    <tr className="border-t border-slate-100">
+                      <td className="whitespace-nowrap px-3 py-2" title="初回訪問時間設定件数 ÷ 初回訪問件数">時間設定昇華率</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{conversion == null ? <span className="text-slate-400">—</span> : `${conversion.toFixed(1)}%`}</td>
+                      <td className="px-3 py-2 text-xs text-slate-500">初回訪問時間設定 {num(firstScheduled)}件 ÷ 初回訪問 {num(firstVisits)}件</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
+                    </tr>
                   </>
-                )}
-                {m.key === "scheduled" && (
-                  <tr className="border-t border-slate-100">
-                    <td className="whitespace-nowrap px-3 py-2" title="初回訪問からの時間設定数 ÷ 初回訪問件数">時間設定昇華率</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{conversion == null ? <span className="text-slate-400">—</span> : `${conversion.toFixed(1)}%`}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500">初回訪問からの時間設定 {num(split.first)}件 ÷ 初回訪問 {num(firstVisits)}件</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
-                  </tr>
                 )}
                 </Fragment>
               );

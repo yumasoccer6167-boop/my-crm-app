@@ -75,13 +75,13 @@ def test_今日の必要数字と週間_月間の目標に対する実績(client
     assert wk['units'] == {'target': 5, 'actual': 8}
     assert wk['deals'] == {'target': 10, 'actual': 4}
     assert wk['first_visits'] == {'target': 5, 'actual': 2}
-    assert wk['scheduled'] == {'target': 15, 'actual': 3}                                       # 時間設定 = 初回訪問から1 + テレアポから2
-    assert wk['scheduled_split'] == {'first': 1, 'tele': 2}
+    assert wk['scheduled'] == {'target': 15, 'actual': 2}                                       # 時間設定件数 = テレアポから（架電の結果）
+    assert wk['scheduled_first'] == 1                                                           # 初回訪問時間設定件数 = 初回訪問の結果が営業時間設定（別の項目）
     # 月間の目標と実績
     mo = r['month']['personal']
     assert r['month']['month'] == '2026-03'
     assert mo['gross_profit'] == {'target': 2_200_000, 'actual': 750_000}
-    assert mo['deals'] == {'target': 44, 'actual': 4} and mo['scheduled'] == {'target': 66, 'actual': 3} and mo['scheduled_split'] == {'first': 1, 'tele': 2}
+    assert mo['deals'] == {'target': 44, 'actual': 4} and mo['scheduled'] == {'target': 66, 'actual': 2} and mo['scheduled_first'] == 1
 
 
 def test_目標が0の項目は今日の必要数字を出さない(client):
