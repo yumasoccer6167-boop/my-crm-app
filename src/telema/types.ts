@@ -105,6 +105,19 @@ export type FirstResult = "scheduled" | "no_prospect";
 export type VisitMethod = "visit" | "zoom";
 
 /** 架電または訪問の記録（タイムラインの1件）。訪問は結果・次回架電・AI整理を持たない */
+/** 営業の訪問記録・返事待ち対応の、商材の行。商材ごとに 支払い内容（商品・サーバーの月額と回数、CB）、受注なら受注金額・粗利（円）・台数 を持つ */
+export type SalesItem = {
+  product: string | null;
+  product_monthly: number | null;
+  product_term: string | null;
+  server_monthly: number | null;
+  server_term: string | null;
+  cashback: number | null;
+  amount: number | null;
+  gross_profit: number | null;
+  units: number | null;
+};
+
 export type CallLog = {
   id: number;
   record_type: RecordType;
@@ -112,8 +125,10 @@ export type CallLog = {
   /** 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問の記録だけ。null は未設定 */
   visit_purpose_id: number | null;
   visit_purpose_name: string | null;
-  /** 訪問の内容が「営業」のときの商材。それ以外は null */
+  /** 訪問の内容が「営業」のときの商材（複数のときは先頭）。それ以外は null */
   sales_product: string | null;
+  /** 商材の行（複数登録できる）。これまでの記録は空（その場合は sales_* が1件分） */
+  sales_items: SalesItem[];
   /** 営業の結果。返事待ち／再営業は次回日時、即決受注は受注金額・粗利（円）・台数を持つ */
   sales_result: SalesResult | null;
   sales_followup_at: string | null;
@@ -501,6 +516,7 @@ export type SalesResultItem = {
   visit_method: VisitMethod | null;
   raw_note: string;
   sales_product: string | null;
+  sales_items: SalesItem[];
   sales_product_monthly: number | null;
   sales_product_term: string | null;
   sales_server_monthly: number | null;
@@ -548,7 +564,10 @@ export type TargetsData = {
 
 /** マイページ：目標と実績の1項目（目標が0なら未設定） */
 export type MyPageMetric = "gross_profit" | "units" | "deals" | "first_visits" | "scheduled";
-export type MyPageProgress = Record<MyPageMetric, { target: number; actual: number }>;
+export type MyPageProgress = Record<MyPageMetric, { target: number; actual: number }> & {
+  /** 時間設定件数の内訳：初回訪問から（初回訪問の結果が営業時間設定）／テレアポから（架電の結果） */
+  scheduled_split: { first: number; tele: number };
+};
 export type MyPageData = {
   today: string;
   role: Role;

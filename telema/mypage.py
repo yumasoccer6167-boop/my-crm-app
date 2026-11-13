@@ -61,8 +61,9 @@ def _team(d, user, today):
 
 # ---------- 実績・目標 ----------
 def _actuals(d, ids, day_from, day_to):
-    """ids の人たちの、day_from〜day_to（両端を含む日付）の実績。{gross_profit, units, deals, first_visits, scheduled}"""
-    out = dict.fromkeys(KEYS, 0)
+    """ids の人たちの、day_from〜day_to（両端を含む日付）の実績。{gross_profit, units, deals, first_visits, scheduled, scheduled_first, scheduled_tele}。
+    時間設定件数（scheduled）は、初回訪問からの時間設定（scheduled_first：初回訪問の結果が「営業時間設定」）とテレアポからの時間設定（scheduled_tele：架電の結果）の合計"""
+    out = {**dict.fromkeys(KEYS, 0), 'scheduled_first': 0, 'scheduled_tele': 0}
     if day_to < day_from or not ids:
         return out
     start, end = _day_bounds(day_from, day_to)
@@ -72,16 +73,18 @@ def _actuals(d, ids, day_from, day_to):
             WHERE ct.is_active = 1 AND ct.assigned_user_id = ANY(%s) AND ct.contract_date::date >= %s AND ct.contract_date::date <= %s''', (ids, day_from, day_to))
     out['gross_profit'], out['units'] = ct['gp'], ct['units']
     v = d.first(
-        '''SELECT COUNT(*) FILTER (WHERE vp.name = %s)::int AS deals, COUNT(*) FILTER (WHERE vp.name = %s)::int AS first_visits
+        '''SELECT COUNT(*) FILTER (WHERE vp.name = %s)::int AS deals, COUNT(*) FILTER (WHERE vp.name = %s)::int AS first_visits,
+                  COUNT(*) FILTER (WHERE vp.name = %s AND cl.first_result = 'scheduled')::int AS scheduled_first
              FROM telema_call_logs cl JOIN telema_visit_purposes vp ON vp.id = cl.visit_purpose_id JOIN telema_companies c ON c.id = cl.company_id AND c.is_active = 1
             WHERE cl.is_active = 1 AND cl.record_type = 'visit' AND cl.user_id = ANY(%s) AND cl.called_at::timestamptz >= %s AND cl.called_at::timestamptz < %s''',
-        (SALES, FIRST, ids, start, end))
-    out['deals'], out['first_visits'] = v['deals'], v['first_visits']
-    out['scheduled'] = d.value(
+        (SALES, FIRST, FIRST, ids, start, end))
+    out['deals'], out['first_visits'], out['scheduled_first'] = v['deals'], v['first_visits'], v['scheduled_first']
+    out['scheduled_tele'] = d.value(
         '''SELECT COUNT(*)::int FROM telema_call_logs cl JOIN telema_companies c ON c.id = cl.company_id AND c.is_active = 1
              JOIN telema_call_statuses s ON s.id = cl.result_status_id
             WHERE cl.is_active = 1 AND cl.record_type = 'call' AND cl.user_id = ANY(%s) AND (s.label = %s OR s.category = 'appointment')
               AND cl.called_at::timestamptz >= %s AND cl.called_at::timestamptz < %s''', (ids, SCHEDULING_STATUS, start, end))
+    out['scheduled'] = out['scheduled_first'] + out['scheduled_tele']
     return out
 
 
@@ -112,7 +115,8 @@ def _week_targets(d, ids, week_from, week_to, over):
 
 
 def _pair(target, actual):
-    return {k: {'target': target[k], 'actual': actual[k]} for k in KEYS}
+    # scheduled_split：時間設定件数の内訳（初回訪問から／テレアポから）。時間設定昇華率＝初回訪問からの時間設定 ÷ 初回訪問件数（画面で出す）
+    return {**{k: {'target': target[k], 'actual': actual[k]} for k in KEYS}, 'scheduled_split': {'first': actual['scheduled_first'], 'tele': actual['scheduled_tele']}}
 
 
 # ---------- 1ページ ----------

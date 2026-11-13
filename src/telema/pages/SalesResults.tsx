@@ -5,7 +5,7 @@ import { api, unwrap } from "../lib/api";
 import { fmtDateTime, todayJst } from "../lib/format";
 import { useMasters } from "../lib/masters";
 import { fmtP } from "../lib/points";
-import { FIRST_RESULTS, firstResultLabel, paymentParts, SALES_RESULTS, salesResultLabel } from "../lib/record-kind";
+import { FIRST_RESULTS, firstResultLabel, itemPay, paymentParts, SALES_RESULTS, salesResultLabel } from "../lib/record-kind";
 import { useApi } from "../lib/useApi";
 import { Card, Empty, ErrorBox, Loading, selectCls } from "../components/ui";
 
@@ -191,12 +191,27 @@ function SalesCells({ r }: { r: SalesResultItem }) {
   return (
     <>
       <td className="px-2 py-2 text-slate-700">
-        {r.sales_product ?? "—"}
-        {paymentParts({ productMonthly: r.sales_product_monthly, productTerm: r.sales_product_term, serverMonthly: r.sales_server_monthly, serverTerm: r.sales_server_term, cashback: r.sales_cashback }).map((t) => (
-          <div key={t} className="text-xs text-slate-400">
-            {t}
-          </div>
-        ))}
+        {r.sales_items.length > 1 ? (
+          r.sales_items.map((it, i) => (
+            <div key={i} className={i > 0 ? "mt-1" : ""}>
+              {it.product ?? "—"}
+              {paymentParts(itemPay(it)).map((t) => (
+                <div key={t} className="text-xs text-slate-400">
+                  {t}
+                </div>
+              ))}
+            </div>
+          ))
+        ) : (
+          <>
+            {r.sales_product ?? "—"}
+            {paymentParts({ productMonthly: r.sales_product_monthly, productTerm: r.sales_product_term, serverMonthly: r.sales_server_monthly, serverTerm: r.sales_server_term, cashback: r.sales_cashback }).map((t) => (
+              <div key={t} className="text-xs text-slate-400">
+                {t}
+              </div>
+            ))}
+          </>
+        )}
       </td>
       <td className="whitespace-nowrap px-2 py-2">
         {r.sales_result ? (

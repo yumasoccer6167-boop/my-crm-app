@@ -660,6 +660,26 @@ CREATE TABLE telema_daily_commits (
   PRIMARY KEY (user_id, day)
 );
 """,
+    # 31: 営業の訪問記録・返事待ち対応に、商材を複数登録できるようにする。商材ごとに行（商材・支払い内容・受注金額・粗利・台数）を持つ。
+    #     記録側の sales_*（商材・支払い内容）は先頭の商材、受注金額・粗利・台数は全商材の合計として残す（集計・一覧は今までどおり）。
+    #     受注から自動で作る契約は商材ごとに1件（source_item_pos は、何番目の商材から作った契約か）
+    r"""
+CREATE TABLE telema_call_items (
+  call_id          INTEGER NOT NULL REFERENCES telema_call_logs(id),
+  pos              INTEGER NOT NULL CHECK (pos >= 0),
+  product          TEXT,
+  product_monthly  INTEGER CHECK (product_monthly >= 0),
+  product_term     TEXT,
+  server_monthly   INTEGER CHECK (server_monthly >= 0),
+  server_term      TEXT,
+  cashback         INTEGER CHECK (cashback >= 0),
+  amount           BIGINT CHECK (amount >= 0),
+  gross_profit     BIGINT CHECK (gross_profit >= 0),
+  units            INTEGER CHECK (units >= 0),
+  PRIMARY KEY (call_id, pos)
+);
+ALTER TABLE telema_contracts ADD COLUMN source_item_pos INTEGER;
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

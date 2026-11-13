@@ -198,9 +198,9 @@ function CallEditForm({
         </div>
       )}
 
-      {isSalesVisit && <SalesDetailFields value={sales} onChange={setSales} currentProduct={call.sales_product} />}
+      {isSalesVisit && <SalesDetailFields value={sales} onChange={setSales} />}
       {isFirstVisit && <FirstVisitFields value={sales} onChange={setSales} />}
-      {isReply && <ReplyFields value={sales} onChange={setSales} currentProduct={call.sales_product} />}
+      {isReply && <ReplyFields value={sales} onChange={setSales} />}
 
       {isVisit && (
         <div>

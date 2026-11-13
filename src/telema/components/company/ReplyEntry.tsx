@@ -3,6 +3,7 @@ import type { Contact } from "../../types";
 import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput } from "../../lib/format";
 import { useApi } from "../../lib/useApi";
+import { productNames } from "../../lib/record-kind";
 import { Button, ErrorBox, inputCls } from "../ui";
 import { emptySales, ReplyFields, replyPayload, type SalesDetail } from "./SalesDetailFields";
 
@@ -69,7 +70,7 @@ export function ReplyEntry({ companyId, contacts, onSaved }: { companyId: number
           <select value={target ?? ""} onChange={(e) => setReplyTo(Number(e.target.value))} className={inputCls}>
             {waiting.map((w) => (
               <option key={w.id} value={w.id}>
-                {fmtDateTime(w.called_at)} の営業{w.sales_product ? `（${w.sales_product}）` : ""}
+                {fmtDateTime(w.called_at)} の営業{productNames(w) ? `（${productNames(w)}）` : ""}
                 {w.sales_followup_at ? ` ／ 返事の予定 ${fmtDateTime(w.sales_followup_at)}` : ""}
               </option>
             ))}

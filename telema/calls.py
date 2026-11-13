@@ -9,7 +9,7 @@ from .common import JST, audit, can_edit_company
 from .companies import load_visible_company
 from .context import ApiError, body, current_user, db, forbidden, not_found
 from .routes import bp
-from .validate import Enum, Int, IsoDatetime, Str, now_iso, parse, parse_id
+from .validate import Enum, Field, Int, Invalid, IsoDatetime, Str, now_iso, parse, parse_id
 
 # 訪問の内容が「営業」のときだけ残せる項目（名前で判定する）
 SALES_PURPOSE_NAME = '営業'
@@ -32,6 +32,48 @@ _FIRST_FIELDS = {'first_result': '結果', 'first_followup_at': '営業の日時
 REPLY_RESULTS = ('won', 'ng', 'resales')
 _WON_FIELDS = {'sales_amount': '受注金額', 'sales_gross_profit': '粗利', 'sales_units': '台数'}
 
+# 商材は複数登録できる（sales_items）。商材ごとに 商材・支払い内容、受注なら受注金額・粗利・台数 を持つ。
+# 記録側の sales_*（商材・支払い内容）は先頭の商材、受注金額・粗利・台数は全商材の合計にそろえる（集計・一覧は今までどおりそれを使う）
+MAX_ITEMS = 10
+_ITEM_PAY = ('product_monthly', 'product_term', 'server_monthly', 'server_term', 'cashback')
+_ITEM_SUM = ('amount', 'gross_profit', 'units')
+_ITEM_COLS = ('product', *_ITEM_PAY, *_ITEM_SUM)
+ITEM_BODY = {
+    'product': Str(max=200, nullable=True, optional=True),
+    'product_monthly': Int(min=0, nullable=True, optional=True),
+    'product_term': Enum(PAYMENT_TERMS, nullable=True, optional=True),
+    'server_monthly': Int(min=0, nullable=True, optional=True),
+    'server_term': Enum(PAYMENT_TERMS, nullable=True, optional=True),
+    'cashback': Int(min=0, nullable=True, optional=True),
+    'amount': Int(min=0, nullable=True, optional=True),
+    'gross_profit': Int(min=0, nullable=True, optional=True),
+    'units': Int(min=0, nullable=True, optional=True),
+}
+# 一覧・タイムラインに付ける、商材の行（sales_items）
+ITEMS_SELECT = ("(SELECT COALESCE(json_agg(json_build_object('product', i.product, 'product_monthly', i.product_monthly, 'product_term', i.product_term, "
+                "'server_monthly', i.server_monthly, 'server_term', i.server_term, 'cashback', i.cashback, 'amount', i.amount, "
+                "'gross_profit', i.gross_profit, 'units', i.units) ORDER BY i.pos), '[]'::json) FROM telema_call_items i WHERE i.call_id = cl.id) AS sales_items")
+
+
+class _Items(Field):
+    """商材の行の配列。何も入っていない行は除く（null は「商材なし」）"""
+
+    def check(self, v):
+        if not isinstance(v, list):
+            raise Invalid('配列で入力してください')
+        if len(v) > MAX_ITEMS:
+            raise Invalid(f'{MAX_ITEMS}件以内で指定してください')
+        out = []
+        for x in v:
+            if not isinstance(x, dict):
+                raise Invalid('商材の形式が正しくありません')
+            parsed = parse(ITEM_BODY, x)
+            item = {k: parsed.get(k) for k in _ITEM_COLS}
+            item['product'] = item['product'] or None
+            if any(val is not None for val in item.values()):
+                out.append(item)
+        return out
+
 
 CALL_BODY = {
     'raw_note': Str(max=5000, trim=False, default=''),
@@ -48,6 +90,8 @@ CALL_BODY = {
     'visit_purpose_id': Int(nullable=True, optional=True),
     # 訪問の内容が「営業」のときの商材。それ以外の記録には付けられない
     'sales_product': Str(max=200, nullable=True, optional=True),
+    # 商材の行（複数）。送ると、sales_product・支払い内容・受注金額・粗利・台数はこの行から決まる
+    'sales_items': _Items(nullable=True, optional=True),
     # 営業の結果（即決受注・返事待ち・NG・再営業）。返事待ち／再営業の次回日時。即決受注の受注金額（円）・粗利（円）・台数
     'sales_result': Enum(SALES_RESULTS, nullable=True, optional=True),
     'sales_followup_at': IsoDatetime(nullable=True, optional=True),
@@ -80,6 +124,7 @@ _CALL_ONLY = {'result_status_id': '結果', 'next_call_at': '次回架電', 'nex
 
 CALL_SELECT = '''SELECT cl.*, ct.name AS contact_name, u.display_name AS user_name, s.label AS result_label, s.category AS result_category,
     sec.name AS section_name, vp.name AS visit_purpose_name,
+    ''' + ITEMS_SELECT + ''',
     (SELECT r.sales_result FROM telema_call_logs r WHERE r.reply_to_id = cl.id AND r.is_active = 1 ORDER BY r.id DESC LIMIT 1) AS replied_result
   FROM telema_call_logs cl
   LEFT JOIN telema_contacts ct ON ct.id = cl.contact_id
@@ -135,31 +180,96 @@ def _check_first_result(get):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（営業の日時は、結果が「営業時間設定」のときだけ設定できます）')
 
 
+def _take_items(b, reply=False):
+    """b の sales_items を取り出し、記録側の sales_*（先頭の商材・支払い内容、受注金額・粗利・台数の合計）を b に書く。送られていなければ None"""
+    if 'sales_items' not in b:
+        return None
+    items = b.pop('sales_items') or []
+    first = items[0] if items else {}
+    b['sales_product'] = first.get('product')
+    for k in _ITEM_PAY:
+        b[f'sales_{k}'] = first.get(k)
+    for k in _ITEM_SUM:
+        vals = [i[k] for i in items if i[k] is not None]
+        b[f'sales_{k}'] = sum(vals) if vals else None
+    return items
+
+
+def _check_items_won(items, result):
+    """即決受注・受注にするときは、すべての商材を選んでおく"""
+    if items and result == 'won' and any(not i['product'] for i in items):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（即決受注にするときは、すべての商材を選んでください）')
+
+
+def _effective_items(d, call):
+    """この記録の商材の行。行が無い記録（これまでの記録）は、記録側の sales_* から1行作る"""
+    rows = d.all('SELECT product, product_monthly, product_term, server_monthly, server_term, cashback, amount, gross_profit, units '
+                 'FROM telema_call_items WHERE call_id = %s ORDER BY pos', (call['id'],))
+    if rows:
+        return [dict(r) for r in rows]
+    legacy = {'product': call['sales_product'], **{k: call[f'sales_{k}'] for k in (*_ITEM_PAY, *_ITEM_SUM)}}
+    return [legacy] if any(v is not None for v in legacy.values()) else []
+
+
+def _store_items(d, call_id, items):
+    d.run('DELETE FROM telema_call_items WHERE call_id = %s', (call_id,))
+    for pos, it in enumerate(items):
+        d.run('INSERT INTO telema_call_items (call_id, pos, product, product_monthly, product_term, server_monthly, server_term, cashback, amount, gross_profit, units) '
+              'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)', (call_id, pos, *(it[k] for k in _ITEM_COLS)))
+
+
+def _sync_items_from_call(d, call_id):
+    """商材の行を送らずに記録側の sales_*（商材・支払い内容・金額・結果）だけ直したときの、行へのそろえ直し。
+    営業の内容がすべて外れたら行も消す。結果が受注でなくなったら受注金額・粗利・台数（返事待ち対応は支払い内容も）を外す。先頭の行は記録側の値にそろえる"""
+    call = d.first('SELECT * FROM telema_call_logs WHERE id = %s', (call_id,))
+    if not any(call[k] is not None for k in _SALES_COLS):
+        d.run('DELETE FROM telema_call_items WHERE call_id = %s', (call_id,))
+        return
+    n = d.value('SELECT COUNT(*) FROM telema_call_items WHERE call_id = %s', (call_id,))
+    if not n:
+        return
+    d.run('UPDATE telema_call_items SET product = %s, product_monthly = %s, product_term = %s, server_monthly = %s, server_term = %s, cashback = %s '
+          'WHERE call_id = %s AND pos = 0', (call['sales_product'], *(call[f'sales_{k}'] for k in _ITEM_PAY), call_id))
+    if n == 1:
+        d.run('UPDATE telema_call_items SET amount = %s, gross_profit = %s, units = %s WHERE call_id = %s', (call['sales_amount'], call['sales_gross_profit'], call['sales_units'], call_id))
+    if call['sales_result'] != 'won':
+        d.run('UPDATE telema_call_items SET amount = NULL, gross_profit = NULL, units = NULL WHERE call_id = %s', (call_id,))
+        if call['record_type'] == 'reply':
+            d.run('UPDATE telema_call_items SET product_monthly = NULL, product_term = NULL, server_monthly = NULL, server_term = NULL, cashback = NULL WHERE call_id = %s', (call_id,))
+
+
 # 受注の支払い内容の、記録（call_logs）側の列。契約情報へは同じ順で引き継ぐ（product_monthly, product_term, server_monthly, server_term, cashback）
 _PAYMENT_COLS = ('sales_product_monthly', 'sales_product_term', 'sales_server_monthly', 'sales_server_term', 'sales_cashback')
 
 
 def _sync_won_contract(d, user, call_id):
-    """結果が「即決受注」の営業の訪問記録から、契約情報を1件作る（受注金額・粗利・台数も引き継ぐ）。作った契約は元の記録と結びつけ、
-    記録の商材・日付・金額などを直したら契約にも反映する。契約を画面から外した（無効にした）あとは作り直さない。結果を即決受注から変えても、契約は消さない"""
+    """結果が「即決受注」の営業の訪問記録から、契約情報を商材ごとに1件作る（受注金額・粗利・台数も引き継ぐ）。作った契約は元の記録と結びつけ、
+    記録の商材・日付・金額などを直したら契約にも反映する。商材の行を減らしたときは、なくなった行の契約を画面から外す。
+    契約を画面から外した（無効にした）あとは作り直さない。結果を即決受注から変えても、契約は消さない"""
     call = d.first('SELECT * FROM telema_call_logs WHERE id = %s AND is_active = 1', (call_id,))
     if not call or call['record_type'] not in ('visit', 'reply') or call['sales_result'] != 'won':
         return
     day = datetime.fromisoformat(call['called_at'].replace('Z', '+00:00')).astimezone(JST).strftime('%Y-%m-%d')
-    pay = tuple(call[k] for k in _PAYMENT_COLS)
-    values = (call['sales_product'], day, call['sales_amount'], call['sales_gross_profit'], call['sales_units'], *pay)
-    linked = d.first('SELECT id, is_active FROM telema_contracts WHERE source_call_id = %s ORDER BY id LIMIT 1', (call_id,))
-    if not linked:
-        new_id = d.value(
-            """INSERT INTO telema_contracts (company_id, product_name, contract_date, amount, gross_profit, units,
-                                              product_monthly, product_term, server_monthly, server_term, cashback, assigned_user_id, created_by, source_call_id)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-            (call['company_id'], call['sales_product'], day, call['sales_amount'], call['sales_gross_profit'], call['sales_units'], *pay, call['user_id'], user['id'], call_id))
-        audit(d, user['id'], 'create', 'contract', new_id, None, {'source_call_id': call_id, 'company_id': call['company_id'], 'product_name': call['sales_product']})
-    elif linked['is_active']:
-        d.run('UPDATE telema_contracts SET product_name = %s, contract_date = %s, amount = %s, gross_profit = %s, units = %s, '
-              'product_monthly = %s, product_term = %s, server_monthly = %s, server_term = %s, cashback = %s, updated_at = telema_now() WHERE id = %s',
-              (*values, linked['id']))
+    items = _effective_items(d, call)
+    for pos, it in enumerate(items):
+        pay = tuple(it[k] for k in _ITEM_PAY)
+        values = (it['product'], day, it['amount'], it['gross_profit'], it['units'], *pay)
+        # これまでの記録から作った契約（何番目の商材かを持たない）は、1番目の商材の契約として扱う
+        linked = d.first('SELECT id, is_active FROM telema_contracts WHERE source_call_id = %s AND (source_item_pos = %s OR (source_item_pos IS NULL AND %s = 0)) ORDER BY id LIMIT 1',
+                         (call_id, pos, pos))
+        if not linked:
+            new_id = d.value(
+                """INSERT INTO telema_contracts (company_id, product_name, contract_date, amount, gross_profit, units,
+                                                  product_monthly, product_term, server_monthly, server_term, cashback, assigned_user_id, created_by, source_call_id, source_item_pos)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                (call['company_id'], *values, call['user_id'], user['id'], call_id, pos))
+            audit(d, user['id'], 'create', 'contract', new_id, None, {'source_call_id': call_id, 'company_id': call['company_id'], 'product_name': it['product']})
+        elif linked['is_active']:
+            d.run('UPDATE telema_contracts SET product_name = %s, contract_date = %s, amount = %s, gross_profit = %s, units = %s, '
+                  'product_monthly = %s, product_term = %s, server_monthly = %s, server_term = %s, cashback = %s, updated_at = telema_now() WHERE id = %s',
+                  (*values, linked['id']))
+    if items:
+        d.run('UPDATE telema_contracts SET is_active = 0, updated_at = telema_now() WHERE source_call_id = %s AND source_item_pos >= %s AND is_active = 1', (call_id, len(items)))
 
 
 def _check_reply(b, d, company_id, exclude_id=None):
@@ -203,6 +313,7 @@ def list_calls(id):
 def create_call(id):
     id = parse_id(id)
     b = parse(CALL_BODY, body())
+    items = _take_items(b)
     user = current_user()
     d = db()
     company = load_visible_company(id)
@@ -234,6 +345,7 @@ def create_call(id):
     if sent_sales and not (is_reply or (is_visit and _is_sales_purpose(d, b.get('visit_purpose_id')))):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent_sales)}は、訪問の内容が「営業」の訪問記録だけに付けられます）')
     _check_sales_result(b.get, is_reply)
+    _check_items_won(items, b.get('sales_result'))
     sent_first = [label for k, label in _FIRST_FIELDS.items() if b.get(k) is not None]
     if sent_first and not (is_visit and _is_first_purpose(d, b.get('visit_purpose_id'))):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent_first)}は、訪問の内容が「初回訪問」の訪問記録だけに付けられます）')
@@ -255,6 +367,9 @@ def create_call(id):
          b.get('sales_product_monthly'), b.get('sales_product_term'), b.get('sales_server_monthly'), b.get('sales_server_term'), b.get('sales_cashback'),
          b.get('first_result'), b.get('first_followup_at'), reply_to),
     )
+    if items:
+        _store_items(d, call_id, items)
+        b['sales_items'] = items
     # 履歴を先に確定させる（この後の会社更新で失敗しても架電メモは残す）
     d.commit()
     if is_visit or is_reply:
@@ -295,6 +410,7 @@ CALL_PATCH = {
     'visit_method': Enum(['visit', 'zoom']),
     'visit_purpose_id': Int(nullable=True),
     'sales_product': Str(max=200, nullable=True),
+    'sales_items': _Items(nullable=True),
     'sales_result': Enum(SALES_RESULTS, nullable=True),
     'sales_followup_at': IsoDatetime(nullable=True),
     'sales_amount': Int(min=0, nullable=True),
@@ -390,6 +506,7 @@ def update_call(id):
     次回架電は、next_call_at が送られて今の予定と違うときだけ、施設の次回架電を書き換える（架電の記録のみ。訪問には付けられない）。最終架電日時と件数は再計算する"""
     id = parse_id(id)
     b = parse(CALL_PATCH, body(), partial=True)
+    items = _take_items(b)
     user = current_user()
     d = db()
     call = d.first('SELECT * FROM telema_call_logs WHERE id = %s AND is_active = 1', (id,))
@@ -452,6 +569,7 @@ def update_call(id):
                 if (k == 'sales_followup_at' and new_result not in _FOLLOWUP_RESULTS) or (k in _WON_FIELDS and new_result != 'won') or (k in _PAYMENT_LABELS and is_reply and new_result != 'won'):
                     b[k] = None
         _check_sales_result(lambda k: b[k] if k in b else call[k], is_reply)
+        _check_items_won(items, new_result)
         if is_reply and (b['sales_result'] if 'sales_result' in b else call['sales_result']) not in REPLY_RESULTS:
             raise ApiError(400, 'validation_error', '入力内容に誤りがあります（返事待ち対応の結果は「受注」「NG」「再営業」から選んでください）')
     # 初回訪問の結果・営業の日時は、訪問の内容が「初回訪問」の訪問記録だけ。内容を直したら外す。結果を営業時間設定以外に直したら、営業の日時も外す
@@ -464,6 +582,8 @@ def update_call(id):
             b['first_followup_at'] = None
         _check_first_result(lambda k: b[k] if k in b else call[k])
     changes = {k: v for k, v in b.items() if orig[k] != v}
+    prev_items = _effective_items(d, orig)
+    items_changed = items is not None and items != prev_items
     # 訪問する日時・事前確認日時を直した（または外れた）ときは、「対応済み」も外す（新しい予定として、また表示される）
     for k, done in (('visit_at', 'visit_done_at'), ('precheck_at', 'precheck_done_at')):
         if k in changes and orig[done] is not None:
@@ -473,7 +593,7 @@ def update_call(id):
     if next_call_given and next_call != company['next_call_at']:
         d.run('UPDATE telema_companies SET next_call_at = %s, updated_at = telema_now() WHERE id = %s', (next_call, company['id']))
         audit(d, user['id'], 'update', 'company', company['id'], {'next_call_at': company['next_call_at']}, {'next_call_at': next_call})
-    if not changes:
+    if not changes and not items_changed:
         return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (id,)))
 
     sets = dict(changes)
@@ -486,14 +606,20 @@ def update_call(id):
         sets['ai_status'] = 'pending' if (call['record_type'] == 'call' and note.strip()) else 'skipped'
         sets.update({k: None for k in _AI_RESET})
     d.run(
-        f'UPDATE telema_call_logs SET {", ".join(f"{k} = %s" for k in sets)}, updated_at = telema_now() WHERE id = %s',
+        f'UPDATE telema_call_logs SET {"".join(f"{k} = %s, " for k in sets)}updated_at = telema_now() WHERE id = %s',
         [*sets.values(), id],
     )
+    if items is not None:
+        if items_changed:
+            _store_items(d, id, items)
+    elif any(k in changes for k in _SALES_COLS):
+        _sync_items_from_call(d, id)
     if ('called_at' in changes and call['record_type'] == 'call') or ('record_type' in changes and 'call' in (orig['record_type'], call['record_type'])):
         _recalc_company_calls(d, call['company_id'])       # 架電の件数・最終架電日時は、架電に変えた／架電から変えたときも数え直す
     _sync_company_status(d, user, call, changes)
-    audit(d, user['id'], 'update', 'call_log', id, {k: orig[k] for k in changes}, changes)
-    if any(k in changes for k in ('sales_result', 'sales_product', 'called_at', 'record_type', *_WON_FIELDS, *_PAYMENT_LABELS)):
+    audit(d, user['id'], 'update', 'call_log', id, {**{k: orig[k] for k in changes}, **({'sales_items': prev_items} if items_changed else {})},
+          {**changes, **({'sales_items': items} if items_changed else {})})
+    if items_changed or any(k in changes for k in ('sales_result', 'sales_product', 'called_at', 'record_type', *_WON_FIELDS, *_PAYMENT_LABELS)):
         _sync_won_contract(d, user, id)
     return jsonify(d.first(f'{CALL_SELECT} WHERE cl.id = %s', (id,)))
 

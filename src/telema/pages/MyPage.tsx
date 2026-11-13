@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { MyAnalysis, MyPageData, MyPageMetric, MyPageProgress } from "../types";
 import { api, unwrap } from "../lib/api";
 import { fmtP, pToYen, yenToP } from "../lib/points";
@@ -183,6 +183,11 @@ function ProgressCard({ title, note, personal, team, teamName, teamSize }: { tit
 }
 
 function ProgressTable({ heading, progress }: { heading?: string; progress: MyPageProgress }) {
+  // 時間設定件数をクリックすると、初回訪問から／テレアポからの内訳を開く
+  const [open, setOpen] = useState(false);
+  const split = progress.scheduled_split;
+  const firstVisits = progress.first_visits.actual;
+  const conversion = firstVisits > 0 ? (split.first / firstVisits) * 100 : null;
   return (
     <div>
       {heading && <h3 className="mb-2 text-sm font-medium text-slate-700">{heading}</h3>}
@@ -202,8 +207,18 @@ function ProgressTable({ heading, progress }: { heading?: string; progress: MyPa
               const { target, actual } = progress[m.key];
               const rate = target > 0 ? (actual / target) * 100 : null;
               return (
-                <tr key={m.key} className="border-t border-slate-100">
-                  <td className="whitespace-nowrap px-3 py-2">{m.label}</td>
+                <Fragment key={m.key}>
+                <tr className="border-t border-slate-100">
+                  <td className="whitespace-nowrap px-3 py-2">
+                    {m.key === "scheduled" ? (
+                      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} title="クリックで内訳（初回訪問から／テレアポから）" className="inline-flex items-center gap-1 font-medium text-indigo-700 hover:underline">
+                        <span aria-hidden className="text-xs">{open ? "▾" : "▸"}</span>
+                        {m.label}
+                      </button>
+                    ) : (
+                      m.label
+                    )}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{target > 0 ? m.fmt(target) : <span className="text-slate-400">未設定</span>}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{m.fmt(actual)}</td>
                   <td className="min-w-32 px-3 py-2">
@@ -220,6 +235,29 @@ function ProgressTable({ heading, progress }: { heading?: string; progress: MyPa
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{target > 0 ? m.fmt(Math.max(0, target - actual)) : <span className="text-slate-400">—</span>}</td>
                 </tr>
+                {m.key === "scheduled" && open && (
+                  <>
+                    {([["初回訪問から", split.first], ["テレアポから", split.tele]] as const).map(([label, n]) => (
+                      <tr key={label} className="bg-slate-50/60 text-slate-600">
+                        <td className="whitespace-nowrap py-1.5 pl-8 pr-3 text-xs">└ {label}</td>
+                        <td />
+                        <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums">{num(n)}件</td>
+                        <td className="px-3 py-1.5 text-xs tabular-nums text-slate-500">{actual > 0 ? `${((n / actual) * 100).toFixed(1)}%` : "—"}</td>
+                        <td />
+                      </tr>
+                    ))}
+                  </>
+                )}
+                {m.key === "scheduled" && (
+                  <tr className="border-t border-slate-100">
+                    <td className="whitespace-nowrap px-3 py-2" title="初回訪問からの時間設定数 ÷ 初回訪問件数">時間設定昇華率</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{conversion == null ? <span className="text-slate-400">—</span> : `${conversion.toFixed(1)}%`}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500">初回訪問からの時間設定 {num(split.first)}件 ÷ 初回訪問 {num(firstVisits)}件</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right text-slate-400">—</td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>

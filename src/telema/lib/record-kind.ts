@@ -1,5 +1,5 @@
 // 記録の種類（架電／訪問）と、訪問の方法（訪問／Zoom）の表示名・絞り込み。
-import type { CallLog, FirstResult, SalesResult, VisitMethod } from "../types";
+import type { CallLog, FirstResult, SalesItem, SalesResult, VisitMethod } from "../types";
 import { fmtDateTime } from "./format";
 import { fmtP } from "./points";
 
@@ -25,6 +25,19 @@ export function paymentParts(p: { productMonthly: number | null; productTerm: st
   const part = (name: string, monthly: number | null, term: string | null) => (monthly != null || term ? `${name} ${[monthly != null ? `月額 ${monthly.toLocaleString()}円` : "", term ? paymentTermLabel(term) : ""].filter(Boolean).join("・")}` : "");
   return [part("商品", p.productMonthly, p.productTerm), part("サーバー", p.serverMonthly, p.serverTerm), p.cashback != null ? `CB ${p.cashback.toLocaleString()}円` : ""].filter(Boolean);
 }
+
+/** 商材の行の支払い内容 */
+export const itemPay = (it: SalesItem) => ({ productMonthly: it.product_monthly, productTerm: it.product_term, serverMonthly: it.server_monthly, serverTerm: it.server_term, cashback: it.cashback });
+
+/** 商材の名前（複数のときは「・」でつなぐ）。無ければ空 */
+export const productNames = (c: { sales_product: string | null; sales_items?: SalesItem[] }): string =>
+  c.sales_items && c.sales_items.length > 1 ? c.sales_items.map((i) => i.product ?? "（商材なし）").join("・") : (c.sales_product ?? "");
+
+/** 商材の行（複数のとき）を1行の文にする。商材・受注金額・粗利・台数・支払い内容 */
+const itemSummary = (it: SalesItem) =>
+  [it.product ?? "（商材なし）", it.amount != null ? `受注金額 ${it.amount.toLocaleString()}円` : "", it.gross_profit != null ? `粗利 ${fmtP(it.gross_profit)}` : "", it.units != null ? `${it.units}台` : "", ...paymentParts(itemPay(it))]
+    .filter(Boolean)
+    .join(" ");
 
 /** 架電の結果「初回訪問時間設定」。この結果と「時間設定」のときだけ、訪問する日時・事前確認日時を付けられる（名前で判定する） */
 export const FIRST_SCHEDULING_STATUS = "初回訪問時間設定";
@@ -58,11 +71,16 @@ export const REPLY_RESULTS: { value: SalesResult; label: string; on: string }[] 
   { value: "resales", label: "再営業", on: "bg-indigo-600 text-white ring-indigo-600" },
 ];
 
-type SalesFields = Pick<CallLog, "sales_product" | "sales_result" | "sales_followup_at" | "sales_amount" | "sales_gross_profit" | "sales_units"> &
+type SalesFields = Partial<Pick<CallLog, "sales_items">> & Pick<CallLog, "sales_product" | "sales_result" | "sales_followup_at" | "sales_amount" | "sales_gross_profit" | "sales_units"> &
   Partial<Pick<CallLog, "sales_product_monthly" | "sales_product_term" | "sales_server_monthly" | "sales_server_term" | "sales_cashback">>;
 
 /** 営業の内容（商材・結果・受注金額・支払い内容）を1行の文にする。何も無ければ空 */
 export function salesSummary(c: SalesFields, reply = false): string {
+  if (c.sales_items && c.sales_items.length > 1) {
+    return [`商材 ${c.sales_items.length}件`, c.sales_result ? `結果 ${salesResultLabel(c.sales_result, reply)}${c.sales_followup_at ? `（${fmtDateTime(c.sales_followup_at)}）` : ""}` : "", ...c.sales_items.map(itemSummary)]
+      .filter(Boolean)
+      .join(" ／ ");
+  }
   return [
     c.sales_product,
     c.sales_result ? `結果 ${salesResultLabel(c.sales_result, reply)}${c.sales_followup_at ? `（${fmtDateTime(c.sales_followup_at)}）` : ""}` : "",

@@ -9,6 +9,7 @@ from flask import jsonify, request
 
 from .common import JST, jst_month_range
 from .context import ApiError, current_user, db
+from .calls import ITEMS_SELECT
 from .routes import bp
 
 KINDS = {'sales': '営業', 'first': '初回訪問'}
@@ -79,7 +80,7 @@ def sales_results():
     rows = d.all(
         f'''SELECT cl.id, cl.record_type, cl.company_id, c.company_name, cl.called_at, cl.user_id, u.display_name AS user_name, cl.visit_method, cl.raw_note,
                    cl.sales_product, cl.sales_product_monthly, cl.sales_product_term, cl.sales_server_monthly, cl.sales_server_term, cl.sales_cashback,
-                   cl.sales_result, cl.sales_followup_at,
+                   cl.sales_result, cl.sales_followup_at, {ITEMS_SELECT},
                    cl.sales_amount, cl.sales_gross_profit, cl.sales_units, cl.first_result, cl.first_followup_at,
                    (SELECT r.sales_result FROM telema_call_logs r WHERE r.reply_to_id = cl.id AND r.is_active = 1 ORDER BY r.id DESC LIMIT 1) AS replied_result,
                    (SELECT COUNT(*) FROM telema_call_logs n JOIN telema_visit_purposes nv ON nv.id = n.visit_purpose_id AND nv.name = '営業'

@@ -51,11 +51,11 @@ def test_今日の必要数字と週間_月間の目標に対する実績(client
     assert contract('2026-03-10', 700_000, 7)[0] == 201
     assert contract('2026-03-11', 50_000, 1)[0] == 201
     assert contract('2026-02-27', 999_000, 9)[0] == 201                                        # 先月の分は入らない
-    visit = lambda purpose, at: api(f'/companies/{co}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': 'x', 'visit_purpose_id': purposes[purpose], 'called_at': at})
+    visit = lambda purpose, at, **kw: api(f'/companies/{co}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': 'x', 'visit_purpose_id': purposes[purpose], 'called_at': at, **kw})
     for at in ('2026-03-09T01:00:00Z', '2026-03-09T02:00:00Z', '2026-03-10T01:00:00Z'):         # 今日より前の商談3件
         assert visit('営業', at)[0] == 201
     assert visit('営業', '2026-03-11T01:00:00Z')[0] == 201                                      # 今日の商談1件
-    assert visit('初回訪問', '2026-03-09T03:00:00Z')[0] == 201 and visit('初回訪問', '2026-03-11T03:00:00Z')[0] == 201
+    assert visit('初回訪問', '2026-03-09T03:00:00Z', first_result='scheduled')[0] == 201 and visit('初回訪問', '2026-03-11T03:00:00Z')[0] == 201     # 初回訪問2件のうち、時間設定は1件
     assert visit('営業', '2026-03-16T01:00:00Z')[0] == 201                                      # 来週の分は今週に入らない（今日より先）
     for status, at in (('初回訪問時間設定', '2026-03-09T05:00:00Z'), ('時間設定成立', '2026-03-10T05:00:00Z')):
         assert api(f'/companies/{co}/calls', {'raw_note': 'x', 'called_at': at, 'result_status_id': client.status_id(status)})[0] == 201
@@ -75,12 +75,13 @@ def test_今日の必要数字と週間_月間の目標に対する実績(client
     assert wk['units'] == {'target': 5, 'actual': 8}
     assert wk['deals'] == {'target': 10, 'actual': 4}
     assert wk['first_visits'] == {'target': 5, 'actual': 2}
-    assert wk['scheduled'] == {'target': 15, 'actual': 2}
+    assert wk['scheduled'] == {'target': 15, 'actual': 3}                                       # 時間設定 = 初回訪問から1 + テレアポから2
+    assert wk['scheduled_split'] == {'first': 1, 'tele': 2}
     # 月間の目標と実績
     mo = r['month']['personal']
     assert r['month']['month'] == '2026-03'
     assert mo['gross_profit'] == {'target': 2_200_000, 'actual': 750_000}
-    assert mo['deals'] == {'target': 44, 'actual': 4} and mo['scheduled'] == {'target': 66, 'actual': 2}
+    assert mo['deals'] == {'target': 44, 'actual': 4} and mo['scheduled'] == {'target': 66, 'actual': 3} and mo['scheduled_split'] == {'first': 1, 'tele': 2}
 
 
 def test_目標が0の項目は今日の必要数字を出さない(client):
