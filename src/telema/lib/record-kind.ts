@@ -1,5 +1,5 @@
 // 記録の種類（架電／訪問）と、訪問の方法（訪問／Zoom）の表示名・絞り込み。
-import type { CallLog, FirstResult, SalesItem, SalesResult, VisitMethod } from "../types";
+import type { CallLog, FirstResult, PreResult, SalesItem, SalesResult, VisitMethod } from "../types";
 import { fmtDateTime } from "./format";
 import { fmtP } from "./points";
 
@@ -91,14 +91,24 @@ export function salesSummary(c: SalesFields, reply = false): string {
   ].filter(Boolean).join(" ／ ");
 }
 
+/** 事前対応のフラグ（訪問前連絡・リスケ・詰め直しNG・リスケ未定）。on は選んだときのボタンの色 */
+export const PRE_RESULTS: { value: PreResult; label: string; on: string }[] = [
+  { value: "precheck", label: "訪問前連絡", on: "bg-sky-600 text-white ring-sky-600" },
+  { value: "reschedule", label: "リスケ", on: "bg-amber-500 text-white ring-amber-500" },
+  { value: "retake_ng", label: "詰め直しNG", on: "bg-rose-600 text-white ring-rose-600" },
+  { value: "reschedule_tbd", label: "リスケ未定", on: "bg-slate-600 text-white ring-slate-600" },
+];
+export const preResultLabel = (r: PreResult | null) => PRE_RESULTS.find((x) => x.value === r)?.label ?? "";
+
 /** タイムラインの種類フィルタ。all＝すべて */
-export type KindFilter = "all" | "call" | "visit" | "reply";
+export type KindFilter = "all" | "call" | "visit" | "reply" | "pre";
 
 export const KIND_FILTERS: { value: KindFilter; label: string }[] = [
   { value: "all", label: "すべて" },
   { value: "call", label: "架電" },
   { value: "visit", label: "訪問" },
   { value: "reply", label: "返事待ち対応" },
+  { value: "pre", label: "事前対応" },
 ];
 
 export const callsOfKind = (calls: CallLog[], kind: KindFilter) => (kind === "all" ? calls : calls.filter((c) => c.record_type === kind));

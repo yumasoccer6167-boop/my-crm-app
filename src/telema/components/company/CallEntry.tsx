@@ -3,6 +3,7 @@ import type { CallLog, Company, Contact, RecordType, VisitMethod } from "../../t
 import type { CallExtraction } from "../../types";
 import { AIResult } from "./AIResult";
 import { AppointmentCopy } from "./AppointmentCopy";
+import { PreEntry } from "./PreEntry";
 import { ReplyEntry } from "./ReplyEntry";
 import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, quickDate, toLocalInput } from "../../lib/format";
@@ -24,6 +25,7 @@ const KINDS: { value: RecordType; label: string }[] = [
   { value: "call", label: "架電結果" },
   { value: "visit", label: "訪問記録" },
   { value: "reply", label: "返事待ち対応" },
+  { value: "pre", label: "事前対応" },
 ];
 
 /**
@@ -172,6 +174,17 @@ export function CallEntry({
         <div className="space-y-3">
           {tabs}
           <ReplyEntry companyId={companyId} contacts={contacts} onSaved={onSaved} />
+        </div>
+      </Card>
+    );
+  }
+
+  if (kind === "pre") {
+    return (
+      <Card title="事前対応を入力">
+        <div className="space-y-3">
+          {tabs}
+          <PreEntry companyId={companyId} contacts={contacts} onSaved={onSaved} />
         </div>
       </Card>
     );

@@ -96,8 +96,10 @@ export type Contact = {
 
 export type FieldSource = { field: string; source: string; source_ref: string | null; confidence: number | null; updated_at: string };
 
-/** 記録の種類。架電（call）か訪問（visit）。訪問は方法（visit＝訪問／zoom）を持つ */
-export type RecordType = "call" | "visit" | "reply";
+/** 記録の種類。架電（call）・訪問（visit）・返事待ち対応（reply）・事前対応（pre）。訪問は方法（visit＝訪問／zoom）を持つ */
+export type RecordType = "call" | "visit" | "reply" | "pre";
+/** 事前対応のフラグ。訪問前連絡・リスケ・詰め直しNG・リスケ未定（事前対応の記録だけが持つ） */
+export type PreResult = "precheck" | "reschedule" | "retake_ng" | "reschedule_tbd";
 /** 営業の訪問記録の結果。即決受注・返事待ち・NG・再営業 */
 export type SalesResult = "won" | "waiting" | "ng" | "resales";
 /** 初回訪問の訪問記録の結果。営業時間設定（営業の日時を決めた）・見込みなし */
@@ -121,6 +123,8 @@ export type SalesItem = {
 export type CallLog = {
   id: number;
   record_type: RecordType;
+  /** 事前対応のフラグ（事前対応の記録だけ） */
+  pre_result: PreResult | null;
   visit_method: VisitMethod | null;
   /** 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問の記録だけ。null は未設定 */
   visit_purpose_id: number | null;

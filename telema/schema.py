@@ -714,6 +714,13 @@ CREATE TABLE telema_week_plans (
     r"""
 ALTER TABLE telema_targets ADD COLUMN scheduling INTEGER NOT NULL DEFAULT 0 CHECK (scheduling >= 0);
 """,
+    # 35: 記録の種類に「事前対応」（pre）を追加。訪問の前後の対応を、フラグ（訪問前連絡・リスケ・詰め直しNG・リスケ未定）で残す。フラグは事前対応の記録だけが持つ
+    r"""
+ALTER TABLE telema_call_logs DROP CONSTRAINT telema_call_logs_record_type_check;
+ALTER TABLE telema_call_logs ADD CONSTRAINT telema_call_logs_record_type_check CHECK (record_type IN ('call', 'visit', 'reply', 'pre'));
+ALTER TABLE telema_call_logs ADD COLUMN pre_result TEXT CHECK (pre_result IN ('precheck', 'reschedule', 'retake_ng', 'reschedule_tbd'));
+ALTER TABLE telema_call_logs ADD CONSTRAINT telema_calls_pre_result CHECK ((record_type = 'pre') = (pre_result IS NOT NULL));
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

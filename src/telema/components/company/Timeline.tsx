@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Assignment, CallLog, Company, Contact, RecordType, VisitMethod } from "../../types";
+import type { Assignment, CallLog, Company, Contact, PreResult, RecordType, VisitMethod } from "../../types";
 import { fmtAppointmentDate } from "../../lib/appointment-format";
 import { markScheduleDone } from "../../lib/schedule";
 import { AppointmentCopy } from "./AppointmentCopy";
@@ -7,7 +7,8 @@ import { QUICK } from "./CallEntry";
 import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput, isOverdue, quickDate, toLocalInput } from "../../lib/format";
 import { useMasters } from "../../lib/masters";
-import { callsOfKind, FIRST_PURPOSE_NAME, FIRST_SCHEDULING_STATUS, firstSummary, KIND_FILTERS, type KindFilter, SALES_PURPOSE_NAME, salesResultLabel, salesSummary, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
+import { callsOfKind, FIRST_PURPOSE_NAME, FIRST_SCHEDULING_STATUS, firstSummary, KIND_FILTERS, type KindFilter, preResultLabel, SALES_PURPOSE_NAME, salesResultLabel, salesSummary, VISIT_METHODS, visitMethodLabel } from "../../lib/record-kind";
+import { PreFlagPicker } from "./PreEntry";
 import { FirstVisitFields, firstPayload, ReplyFields, replyPayload, SalesDetailFields, salesFromCall, salesPayload, type SalesDetail } from "./SalesDetailFields";
 import { ALL_TAB, callsInTab, timelineTabs } from "../../lib/timeline-tabs";
 import { Button, Card, CATEGORY_STYLE, Empty, ErrorBox, inputCls, StatusBadge } from "../ui";
@@ -17,16 +18,17 @@ const KIND_BADGE: Record<string, string> = {
   visit: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   zoom: "bg-violet-50 text-violet-700 ring-violet-200",
   reply: "bg-amber-50 text-amber-800 ring-amber-200",
+  pre: "bg-sky-50 text-sky-800 ring-sky-200",
 };
 
 /** 記録の種類のバッジ（架電／訪問／Zoom） */
 function KindBadge({ call }: { call: CallLog }) {
   const key = call.record_type === "visit" ? (call.visit_method ?? "visit") : call.record_type;
-  const label = call.record_type === "visit" ? visitMethodLabel(call.visit_method) || "訪問" : call.record_type === "reply" ? "返事待ち対応" : "架電";
+  const label = call.record_type === "visit" ? visitMethodLabel(call.visit_method) || "訪問" : call.record_type === "reply" ? "返事待ち対応" : call.record_type === "pre" ? "事前対応" : "架電";
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${KIND_BADGE[key]}`}>{label}</span>;
 }
 
-/** 過去の架電・訪問・返事待ち対応の記録を直すフォーム。記録の種類（架電・訪問・返事待ち対応）も変えられる。施設の現在のステータスは、最新の結果を直したときだけ変わる。次回架電は、ここで変えたときだけ施設の予定に反映する */
+/** 過去の架電・訪問・返事待ち対応・事前対応の記録を直すフォーム。記録の種類（架電・訪問・返事待ち対応・事前対応）も変えられる。施設の現在のステータスは、最新の結果を直したときだけ変わる。次回架電は、ここで変えたときだけ施設の予定に反映する */
 function CallEditForm({
   call,
   contacts,
@@ -48,6 +50,7 @@ function CallEditForm({
   const [kind, setKind] = useState<RecordType>(call.record_type);
   const [purposeId, setPurposeId] = useState<number | null>(call.visit_purpose_id);
   const [sales, setSales] = useState<SalesDetail>(salesFromCall(call));
+  const [preResult, setPreResult] = useState<PreResult | "">(call.pre_result ?? "");
   const isSalesVisit = kind === "visit" && visitPurposes.find((p) => p.id === purposeId)?.name === SALES_PURPOSE_NAME;
   const isFirstVisit = kind === "visit" && visitPurposes.find((p) => p.id === purposeId)?.name === FIRST_PURPOSE_NAME;
   const [userId, setUserId] = useState<number | null>(call.user_id);
@@ -66,6 +69,7 @@ function CallEditForm({
   // 無効になったステータスでも、この履歴が今そのステータスなら選べるように残す
   const isVisit = kind === "visit";
   const isReply = kind === "reply";
+  const isPre = kind === "pre";
   const isCall = kind === "call";
   const kindChanged = kind !== call.record_type;
   // 結果が「時間設定」のときだけ、訪問する日時・事前確認日時を設定できる
@@ -81,6 +85,10 @@ function CallEditForm({
       setError("日時を入力してください");
       return;
     }
+    if (isPre && preResult === "") {
+      setError("事前対応のフラグを選んでください");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -93,7 +101,9 @@ function CallEditForm({
             contact_id: contactId,
             ...(userId != null && userId !== call.user_id ? { user_id: userId } : {}),
             ...(kindChanged ? { record_type: kind } : {}),
-            ...(isReply
+            ...(isPre
+              ? { pre_result: preResult || undefined }
+              : isReply
               ? replyPayload(sales)
               : isVisit
               ? { visit_method: visitMethod, ...(purposeId !== call.visit_purpose_id || kindChanged ? { visit_purpose_id: purposeId } : {}), ...(isSalesVisit ? salesPayload(sales) : {}), ...(isFirstVisit ? firstPayload(sales) : {}) }
@@ -116,7 +126,7 @@ function CallEditForm({
       <div>
         <div className="mb-1 text-xs text-slate-500">記録の種類</div>
         <div role="group" aria-label="記録の種類を変える" className="inline-flex overflow-hidden rounded-md ring-1 ring-slate-300">
-          {([["call", "架電結果"], ["visit", "訪問記録"], ["reply", "返事待ち対応"]] as const).map(([k, label]) => (
+          {([["call", "架電結果"], ["visit", "訪問記録"], ["reply", "返事待ち対応"], ["pre", "事前対応"]] as const).map(([k, label]) => (
             <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={`px-3 py-1 text-xs font-medium ${kind === k ? "bg-indigo-600 text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}>
               {label}
             </button>
@@ -126,7 +136,7 @@ function CallEditForm({
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <div className="mb-1 text-xs text-slate-500">{isVisit ? "訪問日時" : isReply ? "対応日時" : "架電日時"}</div>
+          <div className="mb-1 text-xs text-slate-500">{isVisit ? "訪問日時" : isReply || isPre ? "対応日時" : "架電日時"}</div>
           <input type="datetime-local" value={calledAt} onChange={(e) => setCalledAt(e.target.value)} className={inputCls} />
         </div>
         <div>
@@ -143,7 +153,7 @@ function CallEditForm({
       </div>
 
       <div>
-        <div className="mb-1 text-xs text-slate-500">担当者（この記録を誰の{isVisit ? "訪問" : isReply ? "対応" : "架電"}にするか）</div>
+        <div className="mb-1 text-xs text-slate-500">担当者（この記録を誰の{isVisit ? "訪問" : isReply || isPre ? "対応" : "架電"}にするか）</div>
         <select value={userId ?? ""} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : null)} className={`${inputCls} sm:max-w-xs`}>
           {call.user_id == null && <option value="">（未設定）</option>}
           {users.map((u) => (
@@ -201,6 +211,7 @@ function CallEditForm({
       {isSalesVisit && <SalesDetailFields value={sales} onChange={setSales} />}
       {isFirstVisit && <FirstVisitFields value={sales} onChange={setSales} />}
       {isReply && <ReplyFields value={sales} onChange={setSales} />}
+      {isPre && <PreFlagPicker value={preResult} onChange={setPreResult} />}
 
       {isVisit && (
         <div>
@@ -277,8 +288,8 @@ function CallEditForm({
       </div>
 
       <p className="text-xs text-slate-500">
-        {isVisit || isReply
-          ? "訪問・返事待ち対応の記録は、施設のステータス・次回架電には影響しません。"
+        {isVisit || isReply || isPre
+          ? "訪問・返事待ち対応・事前対応の記録は、施設のステータス・次回架電には影響しません。"
           : "結果の付いた記録で一番新しいものの結果を直すと、施設のステータスもその結果に変わります（古い記録なら変わりません）。次回架電は、変えたときだけ施設の予定に反映されます。"}
       </p>
       {error && <ErrorBox message={`保存できませんでした：${error}`} />}
@@ -516,6 +527,7 @@ export function Timeline({
                       )}
                     </p>
                   )}
+                  {cl.record_type === "pre" && cl.pre_result && <p className="mt-1 rounded bg-sky-50 px-2 py-1 text-sm text-sky-900">事前対応：{preResultLabel(cl.pre_result)}</p>}
                   {firstSummary(cl) && <p className="mt-1 rounded bg-sky-50 px-2 py-1 text-sm text-sky-900">初回訪問の結果：{firstSummary(cl)}</p>}
                   {salesSummary(cl, cl.record_type === "reply") && (
                     <p className="mt-1 rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-900">
