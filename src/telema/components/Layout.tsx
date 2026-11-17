@@ -9,7 +9,6 @@ const NAV = [
   { to: "/associations", label: "協会" },
   { to: "/calendar", label: "カレンダー" },
   { to: "/recalls", label: "再コール" },
-  { to: "/report", label: "日報" },
   { to: "/visits", label: "訪問ルート" },
   { to: "/org", label: "組織図" },
   { to: "/import", label: "取り込み" },

@@ -4,6 +4,7 @@ import { api, unwrap } from "../lib/api";
 import { todayJst } from "../lib/format";
 import { useMasters } from "../lib/masters";
 import { useApi } from "../lib/useApi";
+import { ReportFormatCard } from "../components/ReportFormatCard";
 import { Button, Card, ErrorBox, Loading, selectCls } from "../components/ui";
 
 const addDays = (iso: string, n: number) => new Date(new Date(`${iso}T00:00:00Z`).getTime() + n * 86400000).toISOString().slice(0, 10);
@@ -18,6 +19,7 @@ export function DailyReport() {
   const [label, setLabel] = useState("最終");
   const [text, setText] = useState("");
   const [copied, setCopied] = useState<"ok" | "ng" | null>(null);
+  const [editing, setEditing] = useState(false);
   const isSales = me.role === "sales";
   const members = users.filter((u) => u.is_active);
   const { data, error, loading, reload } = useApi(
@@ -83,6 +85,9 @@ export function DailyReport() {
           <span className="flex items-center gap-2">
             {copied === "ok" && <span className="text-xs text-emerald-700">コピーしました</span>}
             {copied === "ng" && <span className="text-xs text-rose-700">コピーできませんでした。文章を選んでコピーしてください</span>}
+            <Button size="sm" onClick={() => setEditing((v) => !v)}>
+              {editing ? "フォーマットを閉じる" : "フォーマットを編集"}
+            </Button>
             <Button size="sm" disabled={!text} onClick={() => data && setText(data.text)}>
               自動作成に戻す
             </Button>
@@ -100,6 +105,7 @@ export function DailyReport() {
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={24} className="w-full rounded-md border-0 px-3 py-2 font-mono text-sm leading-relaxed ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-indigo-500" aria-label="日報の文章" />
         )}
       </Card>
+      {editing && <ReportFormatCard onSaved={reload} />}
     </div>
   );
 }

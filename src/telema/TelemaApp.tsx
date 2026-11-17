@@ -12,7 +12,6 @@ import { Associations } from "./pages/Associations";
 import { AssociationKarte } from "./pages/AssociationKarte";
 import { Network } from "./pages/Network";
 import { Calendar } from "./pages/Calendar";
-import { DailyReport } from "./pages/DailyReport";
 import { Org } from "./pages/Org";
 import { Recalls } from "./pages/Recalls";
 import { Settings } from "./pages/Settings";
@@ -31,7 +30,6 @@ const router = createMemoryRouter([
       { path: "/associations/:id", element: <AssociationKarte /> },
       { path: "/calendar", element: <Calendar /> },
       { path: "/recalls", element: <Recalls /> },
-      { path: "/report", element: <DailyReport /> },
       { path: "/org", element: <Org /> },
       { path: "/visits", element: <VisitRoute /> },
       { path: "/import", element: <ImportPage /> },

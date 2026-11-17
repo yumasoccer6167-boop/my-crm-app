@@ -721,6 +721,15 @@ ALTER TABLE telema_call_logs ADD CONSTRAINT telema_call_logs_record_type_check C
 ALTER TABLE telema_call_logs ADD COLUMN pre_result TEXT CHECK (pre_result IN ('precheck', 'reschedule', 'retake_ng', 'reschedule_tbd'));
 ALTER TABLE telema_call_logs ADD CONSTRAINT telema_calls_pre_result CHECK ((record_type = 'pre') = (pre_result IS NOT NULL));
 """,
+    # 36: 日報の文面の型（フォーマット）。全員共通の1件（id=1）。{{項目}}の差し込み方式。なければ標準の文面（daily_report.py の DEFAULT_TEMPLATE）
+    r"""
+CREATE TABLE telema_daily_report_template (
+  id          INTEGER PRIMARY KEY CHECK (id = 1),
+  body        TEXT NOT NULL,
+  updated_by  INTEGER,
+  updated_at  TEXT NOT NULL DEFAULT telema_now()
+);
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

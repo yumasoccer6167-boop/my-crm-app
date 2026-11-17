@@ -6,7 +6,9 @@
  - 達成率：実数 ÷ 累計必要数（表示している四捨五入後の数。粗利・台数それぞれ）
  - 累計営業件数／累計受注件数／営業落ち率：その月の初日〜選んだ日の「営業」の訪問記録と返事待ち対応から、訪問・Zoom別（返事待ち対応は元の訪問の方法）
  - 翌アポ：次の稼働日の、初回訪問予定・営業予定（カレンダー）。メンバーごとに時刻と施設を並べる
+ 文面の型（フォーマット）は設定で直せる（{{項目}}の差し込み方式。保存がなければ DEFAULT_TEMPLATE）
  対象メンバーは、選んだメンバー（省略は、組織図で自分と同じ部署（課）のメンバー。組織図に所属がなければ旧ユーザーの部署、それもなければ自分だけ）。一般の営業は自分だけ"""
+import re
 from datetime import datetime, timedelta
 
 from flask import jsonify, request
@@ -14,13 +16,77 @@ from flask import jsonify, request
 from .agenda import agenda_items, month_days, parse_day
 from .analytics import is_workday, workday_overrides, workdays
 from .common import JST
-from .context import ApiError, current_user, db
+from .common import audit
+from .context import ApiError, body, current_user, db, require_role
 from .org import _today, assignments_on, department_of
 from .routes import bp
-from .validate import iso_utc
+from .validate import Invalid, Str, iso_utc, parse
 
 SALES = '営業'
 APPOINTMENT_KINDS = ('first_visit', 'visit')     # 翌アポに数える予定（初回訪問予定・営業予定）
+
+# 日報の文面の型。{{項目}} の所に数値が入る。使える項目は PLACEHOLDERS（設定の画面にも出る）
+DEFAULT_TEMPLATE = """{{見出し}}
+
+累計稼働　{{累計稼働日数}}日目(総稼動{{総稼働日数}}日）
+本日受注 　{{本日受注}}
+営業予算　{{営業予算}}
+累計必要数 {{累計必要数}}
+実数 {{実数}}
+達成率　{{達成率}}
+
+累計営業件数{{累計営業件数}}件
+（訪問{{訪問営業件数}}、zoom{{zoom営業件数}}）
+累計受注件数{{累計受注件数}}
+（訪問{{訪問受注件数}}、zoom{{zoom受注件数}}）
+営業落ち率 {{営業落ち率}}
+（訪問 {{訪問営業落ち率}}、zoom {{zoom営業落ち率}}）
+
+翌アポ　{{翌アポ件数}}件
+{{翌アポ一覧}}
+
+以上
+"""
+PLACEHOLDERS = [
+    ('見出し', '「11/17_特販二課 最終」のような1行（日付・部署・区分）'),
+    ('日付', '選んだ日（11/17）'),
+    ('部署', '部署名'),
+    ('区分', '区分（最終など）'),
+    ('累計稼働日数', 'その月の初日から選んだ日までの稼働日数'),
+    ('総稼働日数', 'その月の稼働日数'),
+    ('本日受注', '選んだ日の受注（施設名・商材・粗利P/台数）。なければ「なし」'),
+    ('営業予算', '月の目標の合計（粗利P/台数）'),
+    ('累計必要数', '営業予算 × 累計稼働 ÷ 総稼動（粗利P/台数）'),
+    ('実数', '月の初日から選んだ日までの受注（粗利P/台数）'),
+    ('達成率', '実数 ÷ 累計必要数（粗利/台数）'),
+    ('累計営業件数', '営業の件数（訪問＋Zoom）'),
+    ('訪問営業件数', '営業の件数のうち訪問'),
+    ('zoom営業件数', '営業の件数のうちZoom'),
+    ('累計受注件数', '受注の件数（訪問＋Zoom）'),
+    ('訪問受注件数', '受注のうち訪問'),
+    ('zoom受注件数', '受注のうちZoom'),
+    ('営業落ち率', '営業のNGの割合（全体）'),
+    ('訪問営業落ち率', '営業のNGの割合（訪問）'),
+    ('zoom営業落ち率', '営業のNGの割合（Zoom）'),
+    ('翌アポ件数', '次の稼働日の初回訪問予定・営業予定の件数'),
+    ('翌アポ一覧', 'メンバーごとの「名前　時刻 施設」（複数行）'),
+]
+_PLACEHOLDER_RE = re.compile(r'\{\{([^{}\n]*)\}\}')
+TEMPLATE_MAX = 5000
+
+
+def unknown_placeholders(text):
+    known = {k for k, _ in PLACEHOLDERS}
+    return [k for k in dict.fromkeys(m.strip() for m in _PLACEHOLDER_RE.findall(text)) if k not in known]
+
+
+def render_template(text, values):
+    return _PLACEHOLDER_RE.sub(lambda m: values.get(m.group(1).strip(), m.group(0)), text)
+
+
+def saved_template(d):
+    row = d.first('SELECT body FROM telema_daily_report_template WHERE id = 1')
+    return row['body'] if row else None
 
 
 def _p(yen):
@@ -132,21 +198,22 @@ def build_report(d, uids, day, base_uid, dept=None, label='最終'):
         plan_lines.append(f'{_short(m["display_name"])}　' + ('、'.join(f'{_hm(p["at"])} {p["company_name"]}' for p in plans) if plans else 'なし'))
 
     orders = '、'.join(f'{c["company_name"]} {c["product_name"]} {_p(c["gross_profit"] or 0)}P/{c["units"] or 0}台' for c in today_orders) or 'なし'
-    lines = [
-        f'{day.month}/{day.day}' + (f'_{dept}' if dept else '') + (f' {label}' if label else ''), '',
-        f'累計稼働　{elapsed}日目(総稼動{total}日）',
-        f'本日受注 　{orders}',
-        '営業予算　' + (f'{_p(tg["gp"])}P/{tg["units"]}台' if tg['n'] else '未設定'),
-        f'累計必要数 {_round(need_gp)}P/{_round(need_units)}台',
-        f'実数 {_p(act_gp)}P/{act_units}台',
-        f'達成率　{_rate(act_gp / 10000, _round(need_gp), 1)}/{_rate(act_units, _round(need_units), 1)}', '',
-        f'累計営業件数{n_all}件', f'（訪問{v["n"]}、zoom{z["n"]}）',
-        f'累計受注件数{won_all}', f'（訪問{v["won"]}、zoom{z["won"]}）',
-        f'営業落ち率 {_rate(ng_all, n_all, 0)}', f'（訪問 {_rate(v["ng"], v["n"], 0)}、zoom {_rate(z["ng"], z["n"], 0)}）', '',
-        f'翌アポ　{plan_count}件', *plan_lines, '', '以上',
-    ]
+    heading = f'{day.month}/{day.day}' + (f'_{dept}' if dept else '') + (f' {label}' if label else '')
+    values = {
+        '見出し': heading, '日付': f'{day.month}/{day.day}', '部署': dept or '', '区分': label or '',
+        '累計稼働日数': str(elapsed), '総稼働日数': str(total), '本日受注': orders,
+        '営業予算': f'{_p(tg["gp"])}P/{tg["units"]}台' if tg['n'] else '未設定',
+        '累計必要数': f'{_round(need_gp)}P/{_round(need_units)}台',
+        '実数': f'{_p(act_gp)}P/{act_units}台',
+        '達成率': f'{_rate(act_gp / 10000, _round(need_gp), 1)}/{_rate(act_units, _round(need_units), 1)}',
+        '累計営業件数': str(n_all), '訪問営業件数': str(v['n']), 'zoom営業件数': str(z['n']),
+        '累計受注件数': str(won_all), '訪問受注件数': str(v['won']), 'zoom受注件数': str(z['won']),
+        '営業落ち率': _rate(ng_all, n_all, 0), '訪問営業落ち率': _rate(v['ng'], v['n'], 0), 'zoom営業落ち率': _rate(z['ng'], z['n'], 0),
+        '翌アポ件数': str(plan_count), '翌アポ一覧': '\n'.join(plan_lines),
+    }
+    text = render_template(saved_template(d) or DEFAULT_TEMPLATE, values)
     return {'date': day.isoformat(), 'user_ids': uids, 'members': [{'id': m['id'], 'name': m['display_name']} for m in members], 'department': dept,
-            'next_workday': nxt.isoformat(), 'plans': plan_count, 'text': '\n'.join(lines) + '\n'}
+            'next_workday': nxt.isoformat(), 'plans': plan_count, 'text': text}
 
 
 @bp.get('/daily-report')
@@ -158,3 +225,44 @@ def daily_report():
     if len(label) > 20 or (dept is not None and len(dept) > 50):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（dept・label: 長すぎます）')
     return jsonify(build_report(d, uids, day, user['id'] if user['id'] in uids else uids[0], dept, label))
+
+
+def _template_payload(d):
+    saved = saved_template(d)
+    return {'body': saved if saved is not None else DEFAULT_TEMPLATE, 'default': DEFAULT_TEMPLATE, 'is_default': saved is None,
+            'placeholders': [{'key': k, 'description': v} for k, v in PLACEHOLDERS]}
+
+
+@bp.get('/daily-report/template')
+def get_report_template():
+    """日報の文面の型。保存がなければ標準のもの"""
+    current_user()
+    return jsonify(_template_payload(db()))
+
+
+@bp.put('/daily-report/template')
+def put_report_template():
+    """日報の文面の型を保存する（マネージャー以上）。使えない {{項目}} があれば保存しない"""
+    require_role('admin', 'manager')
+    user, d = current_user(), db()
+    b = parse({'body': Str(min=1, max=TEMPLATE_MAX)}, body())
+    bad = unknown_placeholders(b['body'])
+    if bad:
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（使えない項目: ' + '、'.join('{{' + k + '}}' for k in bad) + '）')
+    before = saved_template(d)
+    d.run("""INSERT INTO telema_daily_report_template (id, body, updated_by, updated_at) VALUES (1, %s, %s, telema_now())
+             ON CONFLICT (id) DO UPDATE SET body = EXCLUDED.body, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at""", (b['body'], user['id']))
+    audit(d, user['id'], 'update', 'daily_report_template', 1, {'body': before}, {'body': b['body']})
+    return jsonify(_template_payload(d))
+
+
+@bp.delete('/daily-report/template')
+def reset_report_template():
+    """標準の文面に戻す（マネージャー以上）"""
+    require_role('admin', 'manager')
+    user, d = current_user(), db()
+    before = saved_template(d)
+    if before is not None:
+        d.run('DELETE FROM telema_daily_report_template WHERE id = 1')
+        audit(d, user['id'], 'delete', 'daily_report_template', 1, {'body': before}, None)
+    return jsonify(_template_payload(d))

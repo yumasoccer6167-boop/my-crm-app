@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { STATUS_CATEGORIES } from "../shared/constants";
 import { AIUsageCard } from "../components/AIUsageCard";
+import { ReportFormatCard } from "../components/ReportFormatCard";
 import { AssigneeMappingCard } from "../components/AssigneeMappingCard";
 import { TagsSettingsCard } from "../components/TagsSettingsCard";
 import { PREFECTURES } from "../shared/prefectures";
@@ -35,6 +36,8 @@ export function Settings() {
       {isAdmin && <AIUsageCard />}
 
       <PrefectureStatsCard />
+
+      <ReportFormatCard />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="ステータス">

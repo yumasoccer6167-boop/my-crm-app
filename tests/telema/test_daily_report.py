@@ -74,3 +74,28 @@ def test_日報の対象メンバーと部署名は組織図の所属から決�
     assert r['text'].startswith('5/12_日報課 最終') and '日報　なし' in r['text']                   # 名前は姓だけ
     # 選んだメンバーで上書きできる
     assert org(f'/daily-report?date=2027-05-12&user_ids={outsider}')[1]['user_ids'] == [outsider]
+
+
+def test_日報のフォーマットは設定で直せる(client):
+    t = client.api('/daily-report/template')[1]
+    assert t['is_default'] and t['body'] == t['default'] and any(p['key'] == '累計営業件数' for p in t['placeholders'])
+    base = client.api('/daily-report?date=2027-06-02')[1]['text']
+    assert base.startswith('6/2') and base.endswith('以上\n')
+    # 使えない項目は保存できない
+    status, err = client.api('/daily-report/template', {'body': '{{日付}} {{ないもの}}'}, method='PUT')
+    assert status == 400 and '{{ないもの}}' in str(err)
+    assert client.api('/daily-report/template', {'body': ''}, method='PUT')[0] == 400
+    # 保存すると日報の文面に反映される（項目の前後の空白は許す）
+    assert client.api('/daily-report/template', {'body': '【{{日付}}】{{ 累計営業件数 }}件\n{{翌アポ一覧}}\n'}, method='PUT')[0] == 200
+    t = client.api('/daily-report/template')[1]
+    assert not t['is_default'] and t['body'].startswith('【{{日付}}】')
+    r = client.api('/daily-report?date=2027-06-02')[1]['text']
+    assert r.startswith('【6/2】0件\n') and '{{' not in r
+    # 標準に戻す
+    t = client.api('/daily-report/template', method='DELETE')[1]
+    assert t['is_default'] and client.api('/daily-report?date=2027-06-02')[1]['text'] == base
+    # 営業は直せない（見るのはよい）
+    client.set_my_role('sales')
+    assert client.api('/daily-report/template', {'body': '{{日付}}'}, method='PUT')[0] == 403
+    assert client.api('/daily-report/template', method='DELETE')[0] == 403
+    assert client.api('/daily-report/template')[0] == 200

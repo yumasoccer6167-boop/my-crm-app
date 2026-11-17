@@ -19,6 +19,8 @@ const AnalyticsApp = lazy(() => import('./telema/AnalyticsApp'));
 const UserAnalysisApp = lazy(() => import('./telema/UserAnalysisApp'));
 // マイページ（数字の自己認識・自己分析）。プロフィールなどの個人設定は「個人設定」（旧マイページ）にある
 const MyPageApp = lazy(() => import('./telema/MyPageApp'));
+// 日報（記録から数値を自動で入れる。フォーマットは設定で直せる）。テレマリスト内の「日報」を左メニューに出したもの
+const DailyReportApp = lazy(() => import('./telema/DailyReportApp'));
 
 // アプリ更新のお知らせ（内容と更新日時は src/releaseNotes.js）。開いたときだけ読み込む
 const ReleaseNotesModal = lazy(() => import('./ReleaseNotesModal.jsx'));
@@ -2939,6 +2941,7 @@ export default function App() {
     { id: 'customers', icon: <Users className="w-4 h-4" />, label: '顧客リスト' },
     { id: 'telema', icon: <PhoneCall className="w-4 h-4" />, label: 'テレマリスト' },
     { id: 'analytics', icon: <TrendingUp className="w-4 h-4" />, label: '数値分析' },
+    { id: 'daily_report', icon: <ClipboardList className="w-4 h-4" />, label: '日報' },
     { id: 'user_analysis', icon: <PieChart className="w-4 h-4" />, label: 'ユーザー分析' },
     { id: 'success_cases', icon: <Trophy className="w-4 h-4" />, label: '事例管理' },
     { id: 'mypage', icon: <User className="w-4 h-4" />, label: '個人設定' },
@@ -2946,7 +2949,7 @@ export default function App() {
   ];
 
   const titles = {
-    my_numbers: 'マイページ', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', user_analysis: 'ユーザー分析', success_cases: '事例管理',
+    my_numbers: 'マイページ', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', daily_report: '日報', user_analysis: 'ユーザー分析', success_cases: '事例管理',
     mypage: '個人設定', settings: '設定・管理',
   };
 
@@ -3056,6 +3059,11 @@ export default function App() {
         {activeTab === 'analytics' && (
           <Suspense fallback={<p className="text-slate-400 font-semibold text-sm">読み込み中...</p>}>
             <AnalyticsApp onOpenCompany={(companyId) => { setTelemaRequest({ ts: Date.now(), companyId }); setActiveTab('telema'); }} />
+          </Suspense>
+        )}
+        {activeTab === 'daily_report' && (
+          <Suspense fallback={<p className="text-slate-400 font-semibold text-sm">読み込み中...</p>}>
+            <DailyReportApp />
           </Suspense>
         )}
         {activeTab === 'user_analysis' && (

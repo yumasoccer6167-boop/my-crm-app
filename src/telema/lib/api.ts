@@ -32,6 +32,7 @@ import type {
   RecallsData,
   WorkdayResult,
   DailyReportData,
+  DailyReportTemplate,
   OrgAssignment,
   OrgData,
   OrgDepartment,
@@ -102,7 +103,7 @@ type Api = {
   calendar: { $get: Call<CalendarData> };
   recalls: { $get: Call<RecallsData> };
   workdays: { ":user_id": { ":day": { $put: Call<WorkdayResult> } } };
-  "daily-report": { $get: Call<DailyReportData> };
+  "daily-report": { $get: Call<DailyReportData>; template: { $get: Call<DailyReportTemplate>; $put: Call<DailyReportTemplate>; $delete: Call<DailyReportTemplate> } };
   "sales-board": { $get: Call<SalesBoardData> };
   teleappt: { $get: Call<TeleapptData> };
   org: {

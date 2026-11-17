@@ -758,4 +758,5 @@ export type SalesBoardRow = {
 export type SalesBoardData = { month: string; workdays_total: number; workdays_elapsed: number; rows: SalesBoardRow[] };
 
 /** 日報。user_ids は対象メンバー（省略時は自分と同じ部署）、department は見出しに入れた部署名 */
+export type DailyReportTemplate = { body: string; default: string; is_default: boolean; placeholders: { key: string; description: string }[] };
 export type DailyReportData = { date: string; user_ids: number[]; members: { id: number; name: string }[]; department: string; next_workday: string; plans: number; text: string };
