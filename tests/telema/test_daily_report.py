@@ -24,10 +24,16 @@ def test_日報はフォーマットの数値を記録から入れる(client):
     assert client.api(f'/companies/{dd}/calls', {'record_type': 'reply', 'raw_note': '返事', 'sales_result': 'ng', 'reply_to_id': waiting['id'], 'called_at': f'{day}T03:00:00Z'})[0] == 201
     # 翌稼働日（5/13 木）の訪問予定
     client.sql('UPDATE telema_companies SET assigned_user_id = %s WHERE id = %s', (owner['id'], e))
-    client.api(f'/companies/{e}/calls', {'raw_note': 'x', 'result_status_id': client.status_id('初回訪問時間設定'), 'visit_at': '2027-05-13T06:00:00Z'})
+    client.api(f'/companies/{e}/calls', {'raw_note': 'x', 'result_status_id': client.status_id('初回訪問時間設定'), 'visit_at': '2027-05-13T06:00:00Z'})     # 初回訪問予定は翌アポに数えない
+    f, g, h = (make_company(client, f'日報園{x}') for x in 'FGH')
+    client.sql('UPDATE telema_companies SET assigned_user_id = %s, city = %s WHERE id = %s', (owner['id'], '川越市', f))
+    client.sql('UPDATE telema_companies SET assigned_user_id = %s, city = %s WHERE id = %s', (owner['id'], '所沢市', g))
+    client.sql('UPDATE telema_companies SET assigned_user_id = %s WHERE id = %s', (owner['id'], h))
+    for cid, method, at in ((f, 'visit', '2027-05-13T02:00:00Z'), (g, 'zoom', '2027-05-13T04:00:00Z'), (h, None, '2027-05-13T07:00:00Z')):
+        assert client.api(f'/companies/{cid}/calls', {'raw_note': 'x', 'result_status_id': client.status_id('時間設定成立'), 'visit_at': at, 'appointment_method': method})[0] == 201
 
     status, r = client.api(f'/daily-report?date={day}&dept=特販2課')
-    assert status == 200 and r['next_workday'] == '2027-05-13' and r['plans'] == 1 and r['user_ids'] == [owner['id']]
+    assert status == 200 and r['next_workday'] == '2027-05-13' and r['plans'] == 3 and r['user_ids'] == [owner['id']]
     name = owner['display_name'].replace('　', ' ').split(' ')[0]
     assert r['text'] == f'''5/12_特販2課 最終
 
@@ -45,8 +51,8 @@ def test_日報はフォーマットの数値を記録から入れる(client):
 営業落ち率 67%
 （訪問 50%、zoom 100%）
 
-翌アポ　1件
-{name}　15:00 日報園E
+翌アポ　3件
+{name}　11:00 川越市、13:00 zoom、16:00 場所未設定
 
 以上
 '''
@@ -99,3 +105,24 @@ def test_日報のフォーマットは設定で直せる(client):
     assert client.api('/daily-report/template', {'body': '{{日付}}'}, method='PUT')[0] == 403
     assert client.api('/daily-report/template', method='DELETE')[0] == 403
     assert client.api('/daily-report/template')[0] == 200
+
+
+def test_営業予定の方法は予定の日時があるときだけ持てる(client):
+    owner = me(client)
+    c = make_company(client, '方法園')
+    st = client.status_id('時間設定成立')
+    ok, call = client.api(f'/companies/{c}/calls', {'raw_note': 'x', 'result_status_id': st, 'visit_at': '2027-05-13T02:00:00Z', 'appointment_method': 'zoom'})
+    assert ok == 201 and call['appointment_method'] == 'zoom'
+    # 日時を外すと方法も外れる
+    s, r = client.api(f'/calls/{call["id"]}', {'visit_at': None}, method='PATCH')
+    assert s == 200 and r['appointment_method'] is None
+    # 日時だけ付け直したときは方法は付かない。方法だけ送っても日時がなければ付かない
+    s, r = client.api(f'/calls/{call["id"]}', {'visit_at': '2027-05-13T03:00:00Z', 'appointment_method': 'visit'}, method='PATCH')
+    assert s == 200 and r['appointment_method'] == 'visit'
+    # 訪問記録の「営業の日時」にも付く
+    p = {x['name']: x['id'] for x in client.api('/visit-purposes')[1]}
+    s, v = client.api(f'/companies/{c}/calls', {'record_type': 'visit', 'visit_method': 'visit', 'raw_note': 'x', 'visit_purpose_id': p['初回訪問'], 'first_result': 'scheduled', 'first_followup_at': '2027-05-14T02:00:00Z', 'appointment_method': 'zoom'})
+    assert s == 201 and v['appointment_method'] == 'zoom'
+    s, v2 = client.api(f'/calls/{v["id"]}', {'first_result': 'no_prospect'}, method='PATCH')
+    assert s == 200 and v2['appointment_method'] is None
+    assert client.api(f'/companies/{c}/calls', {'raw_note': 'x', 'appointment_method': 'bike'})[0] == 400

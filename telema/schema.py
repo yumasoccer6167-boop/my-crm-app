@@ -730,6 +730,10 @@ CREATE TABLE telema_daily_report_template (
   updated_at  TEXT NOT NULL DEFAULT telema_now()
 );
 """,
+    # 37: 営業予定の方法（訪問／zoom）。架電の訪問日時・初回訪問の営業の日時につく。日報の翌アポの「場所 or zoom」に使う
+    r"""
+ALTER TABLE telema_call_logs ADD COLUMN appointment_method TEXT CHECK (appointment_method IN ('visit', 'zoom'));
+""",
 ]
 
 # 部分一致検索を速くする索引（pg_trgm）。拡張を作れない環境では索引なしの ILIKE で動く

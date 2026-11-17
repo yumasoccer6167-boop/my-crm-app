@@ -120,6 +120,8 @@ CALL_BODY = {
     # 「時間設定」の結果のときの、訪問する日時と事前確認の日時（任意）
     'visit_at': IsoDatetime(nullable=True, optional=True),
     'precheck_at': IsoDatetime(nullable=True, optional=True),
+    # 営業予定（架電の訪問日時／初回訪問の「営業の日時」）の方法：訪問か zoom。日報の翌アポに出る。日時がなければ付かない
+    'appointment_method': Enum(['visit', 'zoom'], nullable=True, optional=True),
 }
 
 _APPOINTMENT_ONLY = {'visit_at': '訪問日時', 'precheck_at': '事前確認日時'}
@@ -173,6 +175,12 @@ def _check_sales_result(get, reply=False):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent)}は、結果が「即決受注」のときだけ設定できます）')
     if result == 'won' and not get('sales_product'):
         raise ApiError(400, 'validation_error', '入力内容に誤りがあります（即決受注にするときは、商材を選んでください）')
+
+
+def _appointment_method(record_type, method, visit_at, first_followup_at):
+    """営業予定の方法（訪問／zoom）は、予定の日時があるときだけ持てる（架電の訪問日時、または初回訪問の営業の日時）。なければ None"""
+    has_date = visit_at is not None if record_type == 'call' else first_followup_at is not None if record_type == 'visit' else False
+    return method if has_date else None
 
 
 def _is_first_purpose(d, purpose_id):
@@ -364,6 +372,7 @@ def create_call(id):
     if sent_first and not (is_visit and _is_first_purpose(d, b.get('visit_purpose_id'))):
         raise ApiError(400, 'validation_error', f'入力内容に誤りがあります（{"・".join(sent_first)}は、訪問の内容が「初回訪問」の訪問記録だけに付けられます）')
     _check_first_result(b.get)
+    b['appointment_method'] = _appointment_method(b['record_type'], b.get('appointment_method'), b.get('visit_at'), b.get('first_followup_at'))
     called_at = b.get('called_at') or now_iso()
     call_id = d.value(
         '''INSERT INTO telema_call_logs (company_id, contact_id, user_id, called_at, phone_number, result_status_id, raw_note, ai_status, section_id,
@@ -371,15 +380,15 @@ def create_call(id):
                                           sales_product,
                                           sales_result, sales_followup_at, sales_amount, sales_gross_profit, sales_units,
                                           sales_product_monthly, sales_product_term, sales_server_monthly, sales_server_term, sales_cashback,
-                                          first_result, first_followup_at, reply_to_id, pre_result)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+                                          first_result, first_followup_at, reply_to_id, pre_result, appointment_method)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
         (id, b.get('contact_id'), user['id'], called_at, None if (is_visit or is_reply or is_pre) else (b.get('phone_number') or company['phone']), b.get('result_status_id'),
          b['raw_note'], 'pending' if b['raw_note'].strip() and not (is_visit or is_reply or is_pre) else 'skipped', b.get('section_id'),
          b['record_type'], b.get('visit_method'), b.get('visit_at'), b.get('precheck_at'), b.get('visit_purpose_id'),
          b.get('sales_product'),
          b.get('sales_result'), b.get('sales_followup_at'), b.get('sales_amount'), b.get('sales_gross_profit'), b.get('sales_units'),
          b.get('sales_product_monthly'), b.get('sales_product_term'), b.get('sales_server_monthly'), b.get('sales_server_term'), b.get('sales_cashback'),
-         b.get('first_result'), b.get('first_followup_at'), reply_to, b.get('pre_result')),
+         b.get('first_result'), b.get('first_followup_at'), reply_to, b.get('pre_result'), b['appointment_method']),
     )
     if items:
         _store_items(d, call_id, items)
@@ -440,6 +449,7 @@ CALL_PATCH = {
     'first_followup_at': IsoDatetime(nullable=True),
     'visit_at': IsoDatetime(nullable=True),
     'precheck_at': IsoDatetime(nullable=True),
+    'appointment_method': Enum(['visit', 'zoom'], nullable=True),
     'user_id': Int(min=1),     # この記録の担当者（誰の架電・訪問として数えるか）。一般以上は誰でも付け替えられる
     'next_call_at': IsoDatetime(nullable=True),     # 施設の次回架電（履歴ではなく施設の予定。架電の記録を直すときに、あわせて足せる）
 }
@@ -603,6 +613,11 @@ def update_call(id):
         if 'first_result' in b and b['first_result'] != 'scheduled' and 'first_followup_at' not in b and call['first_followup_at'] is not None:
             b['first_followup_at'] = None
         _check_first_result(lambda k: b[k] if k in b else call[k])
+    # 営業予定の方法（訪問／zoom）：予定の日時がなくなる（または記録の種類が変わる）ときは外す
+    fin = lambda k: b[k] if k in b else call[k]
+    method = _appointment_method(fin('record_type'), fin('appointment_method'), fin('visit_at'), fin('first_followup_at'))
+    if method != call['appointment_method'] or 'appointment_method' in b:
+        b['appointment_method'] = method
     changes = {k: v for k, v in b.items() if orig[k] != v}
     prev_items = _effective_items(d, orig)
     items_changed = items is not None and items != prev_items

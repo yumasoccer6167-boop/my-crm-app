@@ -5,7 +5,7 @@
  - 実数：その月の初日〜選んだ日の受注（契約情報の契約日）の粗利P・台数
  - 達成率：実数 ÷ 累計必要数（表示している四捨五入後の数。粗利・台数それぞれ）
  - 累計営業件数／累計受注件数／営業落ち率：その月の初日〜選んだ日の「営業」の訪問記録と返事待ち対応から、訪問・Zoom別（返事待ち対応は元の訪問の方法）
- - 翌アポ：次の稼働日の、初回訪問予定・営業予定（カレンダー）。メンバーごとに時刻と施設を並べる
+ - 翌アポ：次の稼働日の営業予定（カレンダー。初回訪問予定は数えない）。メンバーごとに「時刻 場所 or zoom」を並べる（zoom は予定に入れた方法。訪問は施設の市区町村）
  文面の型（フォーマット）は設定で直せる（{{項目}}の差し込み方式。保存がなければ DEFAULT_TEMPLATE）
  対象メンバーは、選んだメンバー（省略は、組織図で自分と同じ部署（課）のメンバー。組織図に所属がなければ旧ユーザーの部署、それもなければ自分だけ）。一般の営業は自分だけ"""
 import re
@@ -23,7 +23,7 @@ from .routes import bp
 from .validate import Invalid, Str, iso_utc, parse
 
 SALES = '営業'
-APPOINTMENT_KINDS = ('first_visit', 'visit')     # 翌アポに数える予定（初回訪問予定・営業予定）
+APPOINTMENT_KINDS = ('visit',)     # 翌アポに数える予定（営業予定だけ。初回訪問予定は数えない）
 
 # 日報の文面の型。{{項目}} の所に数値が入る。使える項目は PLACEHOLDERS（設定の画面にも出る）
 DEFAULT_TEMPLATE = """{{見出し}}
@@ -68,8 +68,8 @@ PLACEHOLDERS = [
     ('営業落ち率', '営業のNGの割合（全体）'),
     ('訪問営業落ち率', '営業のNGの割合（訪問）'),
     ('zoom営業落ち率', '営業のNGの割合（Zoom）'),
-    ('翌アポ件数', '次の稼働日の初回訪問予定・営業予定の件数'),
-    ('翌アポ一覧', 'メンバーごとの「名前　時刻 施設」（複数行）'),
+    ('翌アポ件数', '次の稼働日の営業予定の件数（初回訪問予定は数えない）'),
+    ('翌アポ一覧', 'メンバーごとの「名前　時刻 場所orzoom」（複数行。場所は施設の市区町村）'),
 ]
 _PLACEHOLDER_RE = re.compile(r'\{\{([^{}\n]*)\}\}')
 TEMPLATE_MAX = 5000
@@ -105,6 +105,14 @@ def _rate(num, den, digits):
 
 def _hm(iso):
     return datetime.fromisoformat(iso.replace('Z', '+00:00')).astimezone(JST).strftime('%H:%M')
+
+
+def _place(plan, places):
+    """翌アポの場所。zoom の予定は「zoom」、訪問の予定は施設の市区町村（なければ都道府県）。どちらもなければ「場所未設定」"""
+    if plan.get('method') == 'zoom':
+        return 'zoom'
+    c = places.get(plan['company_id']) or {}
+    return (c.get('city') or '').strip() or (c.get('prefecture') or '').strip() or '場所未設定'
 
 
 def _short(name):
@@ -187,15 +195,16 @@ def build_report(d, uids, day, base_uid, dept=None, label='最終'):
     v, z = cnt['visit'], cnt['zoom']
     n_all, won_all, ng_all = v['n'] + z['n'], v['won'] + z['won'], v['ng'] + z['ng']
 
-    # 翌アポ（次の稼働日の、初回訪問予定・営業予定）。2週間先まで稼働日がなければ翌日
+    # 翌アポ（次の稼働日の営業予定）。2週間先まで稼働日がなければ翌日
     nxt = next((day + timedelta(days=i) for i in range(1, 15) if is_workday(day + timedelta(days=i), over)), day + timedelta(days=1))
     nstart = iso_utc(datetime(nxt.year, nxt.month, nxt.day, tzinfo=JST))
     nend = iso_utc(datetime(nxt.year, nxt.month, nxt.day, tzinfo=JST) + timedelta(days=1))
     plan_lines, plan_count = [], 0
-    for m in members:
-        plans = [p for p in agenda_items(d, m['id'], nstart, nend) if p['kind'] in APPOINTMENT_KINDS]
+    member_plans = [(m, [p for p in agenda_items(d, m['id'], nstart, nend) if p['kind'] in APPOINTMENT_KINDS]) for m in members]
+    places = {r['id']: r for r in d.all('SELECT id, city, prefecture FROM telema_companies WHERE id = ANY(%s)', ([p['company_id'] for _, ps in member_plans for p in ps],))}
+    for m, plans in member_plans:
         plan_count += len(plans)
-        plan_lines.append(f'{_short(m["display_name"])}　' + ('、'.join(f'{_hm(p["at"])} {p["company_name"]}' for p in plans) if plans else 'なし'))
+        plan_lines.append(f'{_short(m["display_name"])}　' + ('、'.join(f'{_hm(p["at"])} {_place(p, places)}' for p in plans) if plans else 'なし'))
 
     orders = '、'.join(f'{c["company_name"]} {c["product_name"]} {_p(c["gross_profit"] or 0)}P/{c["units"] or 0}台' for c in today_orders) or 'なし'
     heading = f'{day.month}/{day.day}' + (f'_{dept}' if dept else '') + (f' {label}' if label else '')

@@ -3,6 +3,7 @@ import type { CallLog, Company, Contact, RecordType, VisitMethod } from "../../t
 import type { CallExtraction } from "../../types";
 import { AIResult } from "./AIResult";
 import { AppointmentCopy } from "./AppointmentCopy";
+import { AppointmentMethod } from "./AppointmentMethod";
 import { PreEntry } from "./PreEntry";
 import { ReplyEntry } from "./ReplyEntry";
 import { api, unwrap } from "../../lib/api";
@@ -71,6 +72,7 @@ export function CallEntry({
   // 結果が「時間設定」のときの、訪問する日時と事前確認の日時
   const [visitAt, setVisitAt] = useState("");
   const [precheckAt, setPrecheckAt] = useState("");
+  const [apptMethod, setApptMethod] = useState<VisitMethod | "">("");
   const [savedAppointment, setSavedAppointment] = useState<CallLog | null>(null);
   const [contactId, setContactId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -124,7 +126,7 @@ export function CallEntry({
                 result_status_id: statusId ?? undefined,
                 phone_number: phone,
                 next_call_at: nextCall ? fromLocalInput(nextCall) : undefined,
-                ...(isAppointment ? { visit_at: fromLocalInput(visitAt), precheck_at: fromLocalInput(precheckAt) } : {}),
+                ...(isAppointment ? { visit_at: fromLocalInput(visitAt), precheck_at: fromLocalInput(precheckAt), appointment_method: visitAt && apptMethod ? apptMethod : null } : {}),
               },
         }),
       );
@@ -333,6 +335,7 @@ export function CallEntry({
               <div className="mb-1 text-xs text-slate-600">事前確認日時</div>
               <input type="datetime-local" value={precheckAt} onChange={(e) => setPrecheckAt(e.target.value)} className={inputCls} />
             </div>
+            <AppointmentMethod value={apptMethod} onChange={setApptMethod} />
             <p className="text-xs text-slate-500 sm:col-span-2">どちらも後から変えられます。カレンダーに予定として出ます。{chosenStatus?.category === "appointment" && "保存すると、カレンダー・アジェンダ登録用の文面をコピーできます。"}</p>
           </div>
         )}

@@ -2,7 +2,8 @@ import { api, unwrap } from "../../lib/api";
 import { fromLocalInput, toLocalInput } from "../../lib/format";
 import { pToYen, yenToP } from "../../lib/points";
 import { FIRST_RESULTS, PAYMENT_TERMS, REPLY_RESULTS, SALES_RESULTS } from "../../lib/record-kind";
-import type { CallLog, FirstResult, SalesItem, SalesResult } from "../../types";
+import type { CallLog, FirstResult, SalesItem, SalesResult, VisitMethod } from "../../types";
+import { AppointmentMethod } from "./AppointmentMethod";
 import { useApi } from "../../lib/useApi";
 import { inputCls } from "../ui";
 
@@ -29,8 +30,10 @@ export type SalesDetail = {
   followupAt: string;
   firstResult: FirstResult | "";
   firstAt: string;
+  /** 営業の日時の方法（訪問／Zoom）。日報の翌アポに出る */
+  firstMethod: VisitMethod | "";
 };
-export const emptySales: SalesDetail = { items: [emptyItem], result: "", followupAt: "", firstResult: "", firstAt: "" };
+export const emptySales: SalesDetail = { items: [emptyItem], result: "", followupAt: "", firstResult: "", firstAt: "", firstMethod: "" };
 
 const numStr = (n: number | null | undefined) => (n == null ? "" : String(n));
 
@@ -66,6 +69,7 @@ export function salesFromCall(c: CallLog): SalesDetail {
     followupAt: toLocalInput(c.sales_followup_at),
     firstResult: c.first_result ?? "",
     firstAt: toLocalInput(c.first_followup_at),
+    firstMethod: c.appointment_method ?? "",
   };
 }
 
@@ -240,9 +244,12 @@ export function FirstVisitFields({ value, onChange }: { value: SalesDetail; onCh
         </div>
       </div>
       {value.firstResult === "scheduled" && (
-        <div className="sm:max-w-xs">
-          <div className="mb-1 text-xs text-slate-500">営業の日時</div>
-          <input type="datetime-local" value={value.firstAt} onChange={(e) => onChange({ ...value, firstAt: e.target.value })} className={inputCls} />
+        <div className="grid gap-3 sm:max-w-xl sm:grid-cols-2">
+          <div>
+            <div className="mb-1 text-xs text-slate-500">営業の日時</div>
+            <input type="datetime-local" value={value.firstAt} onChange={(e) => onChange({ ...value, firstAt: e.target.value })} className={inputCls} />
+          </div>
+          <AppointmentMethod value={value.firstMethod} onChange={(m) => onChange({ ...value, firstMethod: m })} />
         </div>
       )}
     </div>
@@ -251,7 +258,8 @@ export function FirstVisitFields({ value, onChange }: { value: SalesDetail; onCh
 
 /** 初回訪問の結果の保存用の値。営業の日時は営業時間設定のときだけ */
 export function firstPayload(v: SalesDetail) {
-  return { first_result: v.firstResult || null, first_followup_at: v.firstResult === "scheduled" ? fromLocalInput(v.firstAt) : null };
+  const scheduled = v.firstResult === "scheduled";
+  return { first_result: v.firstResult || null, first_followup_at: scheduled ? fromLocalInput(v.firstAt) : null, appointment_method: scheduled && v.firstAt && v.firstMethod ? v.firstMethod : null };
 }
 
 /** 返事待ち対応の結果（受注・NG・再営業）。受注は商材（複数）・受注金額・粗利・台数・支払い内容、再営業は次回日時 */

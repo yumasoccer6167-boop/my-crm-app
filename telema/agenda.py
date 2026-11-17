@@ -58,14 +58,14 @@ def agenda_items(d, uid, start, end, ids=None):
         who, wp = '(cl.user_id = ANY(%s) OR c.assigned_user_id = ANY(%s))', [list(ids), list(ids)]
     base = '''FROM telema_call_logs cl JOIN telema_companies c ON c.id = cl.company_id AND c.is_active = 1
               LEFT JOIN users u ON u.id = COALESCE(cl.user_id, c.assigned_user_id)'''
-    cols = 'cl.id, cl.company_id, c.company_name, u.display_name AS user_name, cl.raw_note AS note'
+    cols = 'cl.id, cl.company_id, c.company_name, u.display_name AS user_name, cl.raw_note AS note, cl.appointment_method AS method'
     items = []
 
     def add(kind, rows, done=lambda r: False, detail=None):
         for r in rows:
             items.append({'kind': kind, 'label': KIND_LABEL[kind], 'id': r['id'], 'company_id': r['company_id'], 'company_name': r['company_name'],
                           'user_name': r['user_name'], 'at': r['at'], 'note': (r['note'] or '').strip()[:80] or None,
-                          'done': done(r), 'detail': detail(r) if detail else None})
+                          'done': done(r), 'detail': detail(r) if detail else None, 'method': r['method']})
 
     call_base = base + ' LEFT JOIN telema_call_statuses st ON st.id = cl.result_status_id'
     first = 'st.label = %s'

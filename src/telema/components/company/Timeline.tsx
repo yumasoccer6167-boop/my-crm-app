@@ -3,6 +3,7 @@ import type { Assignment, CallLog, Company, Contact, PreResult, RecordType, Visi
 import { fmtAppointmentDate } from "../../lib/appointment-format";
 import { markScheduleDone } from "../../lib/schedule";
 import { AppointmentCopy } from "./AppointmentCopy";
+import { AppointmentMethod } from "./AppointmentMethod";
 import { QUICK } from "./CallEntry";
 import { api, unwrap } from "../../lib/api";
 import { fmtDateTime, fromLocalInput, isOverdue, quickDate, toLocalInput } from "../../lib/format";
@@ -61,6 +62,7 @@ function CallEditForm({
   const [visitMethod, setVisitMethod] = useState<VisitMethod>(call.visit_method ?? "visit");
   const [visitAt, setVisitAt] = useState(toLocalInput(call.visit_at));
   const [precheckAt, setPrecheckAt] = useState(toLocalInput(call.precheck_at));
+  const [apptMethod, setApptMethod] = useState<VisitMethod | "">(call.appointment_method ?? "");
   const [note, setNote] = useState(call.raw_note);
   const [nextCall, setNextCall] = useState(toLocalInput(nextCallAt));
   const [saving, setSaving] = useState(false);
@@ -107,7 +109,7 @@ function CallEditForm({
               ? replyPayload(sales)
               : isVisit
               ? { visit_method: visitMethod, ...(purposeId !== call.visit_purpose_id || kindChanged ? { visit_purpose_id: purposeId } : {}), ...(isSalesVisit ? salesPayload(sales) : {}), ...(isFirstVisit ? firstPayload(sales) : {}) }
-              : { result_status_id: statusId, visit_at: isAppointment ? fromLocalInput(visitAt) : null, precheck_at: isAppointment ? fromLocalInput(precheckAt) : null }),
+              : { result_status_id: statusId, visit_at: isAppointment ? fromLocalInput(visitAt) : null, precheck_at: isAppointment ? fromLocalInput(precheckAt) : null, appointment_method: isAppointment && visitAt && apptMethod ? apptMethod : null }),
             ...(isUser ? { section_id: sectionId } : {}),
             ...(isCall && nextCall !== toLocalInput(nextCallAt) ? { next_call_at: nextCall ? fromLocalInput(nextCall) : null } : {}),
           },
@@ -259,6 +261,7 @@ function CallEditForm({
             <div className="mb-1 text-xs text-slate-500">事前確認日時</div>
             <input type="datetime-local" value={precheckAt} onChange={(e) => setPrecheckAt(e.target.value)} className={inputCls} />
           </div>
+          <AppointmentMethod value={apptMethod} onChange={setApptMethod} />
         </div>
       )}
 

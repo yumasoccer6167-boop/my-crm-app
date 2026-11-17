@@ -126,6 +126,8 @@ export type CallLog = {
   /** 事前対応のフラグ（事前対応の記録だけ） */
   pre_result: PreResult | null;
   visit_method: VisitMethod | null;
+  /** 営業予定の方法（架電の訪問日時／初回訪問の営業の日時につく）。予定の日時がなければ null */
+  appointment_method: VisitMethod | null;
   /** 訪問の内容（ユーザー訪問・初回訪問・営業）。訪問の記録だけ。null は未設定 */
   visit_purpose_id: number | null;
   visit_purpose_name: string | null;
