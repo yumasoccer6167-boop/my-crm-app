@@ -60,7 +60,6 @@ function Numbers() {
       <p className="text-xs text-slate-500">
         {mmdd(data.today)} の数字（営業成績ダッシュボードと同じ数え方です）。目標は、数値分析・営業成績の「月間目標」で設定します。
       </p>
-      <Commit data={data} onSaved={reload} />
       <Shortage data={data} />
       <ProgressCard title={`週間目標に対する達成率（${mmdd(data.week.from)}〜${mmdd(data.week.to)}）`} note="週間の目標は、月間目標 × その週の稼働日数 ÷ その月の稼働日数です。" personal={data.week.personal} team={data.week.team} teamName={data.team_name} teamSize={data.team_size} />
       <ProgressCard title={`月間目標に対する達成率（${Number(data.month.month.slice(5))}月）`} note="実績は今日までの数です。" personal={data.month.personal} team={data.month.team} teamName={data.team_name} teamSize={data.team_size} />
@@ -69,73 +68,7 @@ function Numbers() {
   );
 }
 
-/** ① 今日のコミット：定量（粗利・台数・商談件数）と定性（ひとことコメント） */
-function Commit({ data, onSaved }: { data: MyPageData; onSaved: () => void }) {
-  const c = data.commit;
-  const [gp, setGp] = useState(yenToP(c?.commit_gp));
-  const [units, setUnits] = useState(c?.commit_units == null ? "" : String(c.commit_units));
-  const [deals, setDeals] = useState(c?.commit_deals == null ? "" : String(c.commit_deals));
-  const [comment, setComment] = useState(c?.comment ?? "");
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
-  useEffect(() => {
-    if (!message?.ok) return;
-    const t = setTimeout(() => setMessage(null), 2500);
-    return () => clearTimeout(t);
-  }, [message]);
-
-  const count = (s: string) => (s.trim() === "" ? null : Math.max(0, Math.round(Number(s) || 0)));
-  async function save() {
-    setSaving(true);
-    setMessage(null);
-    try {
-      await unwrap(api.mypage.commit.$put({ json: { commit_gp: pToYen(gp), commit_units: count(units), commit_deals: count(deals), comment: comment.trim() } }));
-      setMessage({ text: "保存しました", ok: true });
-      onSaved();
-    } catch (e) {
-      setMessage({ text: e instanceof Error ? e.message : String(e), ok: false });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Card title="① 今日のコミット">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <div>
-          <h3 className="mb-2 text-xs font-medium text-slate-500">定量</h3>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="block w-40">
-              <div className="mb-1 text-xs text-slate-500">粗利（P）</div>
-              <input type="number" min={0} step="any" inputMode="decimal" value={gp} onChange={(e) => setGp(e.target.value)} placeholder="例：30（1万円＝1P）" className={inputCls} />
-            </label>
-            <label className="block w-24">
-              <div className="mb-1 text-xs text-slate-500">台数</div>
-              <input type="number" min={0} step={1} inputMode="numeric" value={units} onChange={(e) => setUnits(e.target.value)} className={inputCls} />
-            </label>
-            <label className="block w-24">
-              <div className="mb-1 text-xs text-slate-500">商談件数</div>
-              <input type="number" min={0} step={1} inputMode="numeric" value={deals} onChange={(e) => setDeals(e.target.value)} className={inputCls} />
-            </label>
-          </div>
-        </div>
-        <div>
-          <h3 className="mb-2 text-xs font-medium text-slate-500">定性</h3>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} maxLength={1000} placeholder="今日どう動くか・何を意識するか" className={inputCls} aria-label="定性のコミット" />
-        </div>
-      </div>
-      <div className="mt-3 flex items-center gap-3">
-        <Button variant="primary" size="sm" disabled={saving} onClick={save}>
-          {saving ? "保存中…" : "コミットを保存"}
-        </Button>
-        {message && <span className={`text-xs ${message.ok ? "text-emerald-700" : "text-rose-600"}`}>{message.text}</span>}
-        {!message && c && <span className="text-xs text-slate-400">保存済み</span>}
-      </div>
-    </Card>
-  );
-}
-
-/** ② 不足数：今月のコミット（＝月間目標）に対する、今月・今週・今日の不足 */
+/** ① 不足数：今月のコミット（＝月間目標）に対する、今月・今週・今日の不足 */
 const SHORT_ROWS: MyPageMetric[] = ["gross_profit", "units", "deals", "scheduled", "first_visits", "scheduling"];
 
 function Shortage({ data }: { data: MyPageData }) {
@@ -147,7 +80,7 @@ function Shortage({ data }: { data: MyPageData }) {
     </td>
   );
   return (
-    <Card title="② 不足数（今月のコミットに対して）">
+    <Card title="① 不足数（今月のコミットに対して）">
       <p className="mb-3 text-xs text-slate-500">
         今月のコミット＝月間目標です。今月は「月間目標 − 今月の実績」、今週は「週間目標 − 今週の実績」、今日は「（月間目標 − 今日より前の実績）÷ 今日以降の残り稼働日（{data.workdays_left}日
         {data.today_workday ? "、今日を含む" : "。今日は稼働日ではありません"}）− 今日の実績」で出しています。
