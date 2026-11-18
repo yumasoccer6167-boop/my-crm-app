@@ -8,8 +8,6 @@ import { CompanyDetail } from "./pages/CompanyDetail";
 import { Companies } from "./pages/Companies";
 import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
-import { Associations } from "./pages/Associations";
-import { AssociationKarte } from "./pages/AssociationKarte";
 import { Network } from "./pages/Network";
 import { Calendar } from "./pages/Calendar";
 import { Org } from "./pages/Org";
@@ -26,8 +24,6 @@ const router = createMemoryRouter([
       { path: "/companies", element: <Companies /> },
       { path: "/companies/:id", element: <CompanyDetail /> },
       { path: "/network", element: <Network /> },
-      { path: "/associations", element: <Associations /> },
-      { path: "/associations/:id", element: <AssociationKarte /> },
       { path: "/calendar", element: <Calendar /> },
       { path: "/recalls", element: <Recalls /> },
       { path: "/org", element: <Org /> },

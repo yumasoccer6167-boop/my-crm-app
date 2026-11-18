@@ -6,7 +6,6 @@ const NAV = [
   { to: "/", label: "マイページ", end: true },
   { to: "/companies", label: "リスト" },
   { to: "/network", label: "つながり" },
-  { to: "/associations", label: "協会" },
   { to: "/calendar", label: "カレンダー" },
   { to: "/recalls", label: "再コール" },
   { to: "/visits", label: "訪問ルート" },

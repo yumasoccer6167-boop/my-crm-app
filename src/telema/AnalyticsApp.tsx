@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
-import { createMemoryRouter, Navigate, NavLink, Outlet, RouterProvider, useNavigate, useParams } from "react-router";
-import { HostProvider, useHost } from "./lib/host";
+import { createMemoryRouter, Navigate, NavLink, Outlet, RouterProvider } from "react-router";
+import { OpenCompany } from "./components/OpenCompany";
+import { HostProvider } from "./lib/host";
 import { MastersProvider } from "./lib/masters";
 import { Analytics } from "./pages/Analytics";
 import { SalesBoard } from "./pages/SalesBoard";
@@ -33,21 +33,6 @@ function AnalyticsLayout() {
       <Outlet />
     </div>
   );
-}
-
-/** 施設名のリンク（/companies/:id）は、テレマリストの顧客カルテを開く。ここでは開かずに、元の画面へ戻す */
-function OpenCompany() {
-  const { id } = useParams();
-  const { openCompany } = useHost();
-  const navigate = useNavigate();
-  const done = useRef(false);
-  useEffect(() => {
-    if (done.current) return;
-    done.current = true;
-    navigate(-1);
-    if (id) openCompany(Number(id));
-  }, [id, navigate, openCompany]);
-  return null;
 }
 
 // CRM本体はURLを使わずタブで画面を切り替えているので、ここもURLを変えないメモリ上のルーターで画面を切り替える

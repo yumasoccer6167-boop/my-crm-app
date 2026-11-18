@@ -6,7 +6,7 @@ import {
   Star, Camera, Upload, Download, Copy, BarChart,
   Sparkles, FileText, ClipboardList, CalendarDays,
   CheckSquare, Square, Mic, LayoutGrid, List,
-  Heart, Briefcase, AlertTriangle, PieChart, User, Link2, XCircle, PhoneCall, Trophy, TrendingUp, Target
+  Heart, Briefcase, AlertTriangle, PieChart, User, Link2, XCircle, PhoneCall, Trophy, TrendingUp, Target, Landmark
 } from 'lucide-react';
 
 import SuccessCasesView from './SuccessCases';
@@ -23,6 +23,8 @@ const MyPageApp = lazy(() => import('./telema/MyPageApp'));
 const DailyReportApp = lazy(() => import('./telema/DailyReportApp'));
 // 地域分析（地域で絞り込んだ業種別の事業所数・地域別の営業活動・未開拓エリア）
 const RegionAnalysisApp = lazy(() => import('./telema/RegionAnalysisApp'));
+// 協会（組織図・加盟施設数・協会カルテ）。テレマリスト内の「協会」を、テレマリストとは別の軸として左メニューに出したもの
+const AssociationsApp = lazy(() => import('./telema/AssociationsApp'));
 
 // アプリ更新のお知らせ（内容と更新日時は src/releaseNotes.js）。開いたときだけ読み込む
 const ReleaseNotesModal = lazy(() => import('./ReleaseNotesModal.jsx'));
@@ -2946,13 +2948,14 @@ export default function App() {
     { id: 'daily_report', icon: <ClipboardList className="w-4 h-4" />, label: '日報' },
     { id: 'user_analysis', icon: <PieChart className="w-4 h-4" />, label: 'ユーザー分析' },
     { id: 'region_analysis', icon: <MapPin className="w-4 h-4" />, label: '地域分析' },
+    { id: 'associations', icon: <Landmark className="w-4 h-4" />, label: '協会' },
     { id: 'success_cases', icon: <Trophy className="w-4 h-4" />, label: '事例管理' },
     { id: 'mypage', icon: <User className="w-4 h-4" />, label: '個人設定' },
     ...(canViewSettings ? [{ id: 'settings', icon: <Settings className="w-4 h-4" />, label: '設定・管理' }] : []),
   ];
 
   const titles = {
-    my_numbers: 'マイページ', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', daily_report: '日報', user_analysis: 'ユーザー分析', region_analysis: '地域分析', success_cases: '事例管理',
+    my_numbers: 'マイページ', customers: '顧客リスト', telema: 'テレマリスト', analytics: '数値分析', daily_report: '日報', user_analysis: 'ユーザー分析', region_analysis: '地域分析', associations: '協会', success_cases: '事例管理',
     mypage: '個人設定', settings: '設定・管理',
   };
 
@@ -3077,6 +3080,11 @@ export default function App() {
         {activeTab === 'region_analysis' && (
           <Suspense fallback={<p className="text-slate-400 font-semibold text-sm">読み込み中...</p>}>
             <RegionAnalysisApp />
+          </Suspense>
+        )}
+        {activeTab === 'associations' && (
+          <Suspense fallback={<p className="text-slate-400 font-semibold text-sm">読み込み中...</p>}>
+            <AssociationsApp onOpenCompany={(companyId) => { setTelemaRequest({ ts: Date.now(), companyId }); setActiveTab('telema'); }} />
           </Suspense>
         )}
         {activeTab === 'my_numbers' && (
