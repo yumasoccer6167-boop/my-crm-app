@@ -48,6 +48,7 @@ import type {
   ListType,
   PrefectureStat,
   UserAnalysis,
+  RegionAnalysisData,
   MyAnalysis,
   MyPagePlan,
   MyRule,
@@ -114,6 +115,7 @@ type Api = {
   };
   "prefecture-stats": { $get: Call<PrefectureStat[]> };
   "user-analysis": { $get: Call<UserAnalysis> };
+  "region-analysis": { $get: Call<RegionAnalysisData> };
   "association-structure": { bulk: { $post: Call<{ updated: number }> } };
   "association-overview": { $get: Call<AssociationOverview>; ":id": { members: { $get: Call<AssociationMembers> } } };
   companies: {

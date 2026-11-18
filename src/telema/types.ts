@@ -475,6 +475,32 @@ type CountKey = "total" | "not_started" | "in_progress" | "appointment" | "won" 
 export type PrefectureStat = { prefecture: string; total: number; users: number };
 
 /** ユーザー分析の元データ：「ユーザー」にチェックが入った施設と、その契約。絞り込みと集計は画面側で行う（issues が空の契約は「課題未選択」） */
+/** 地域分析。areas は、都道府県を選ぶまでは都道府県ごと・選んだら市区町村ごとの行 */
+export type RegionAreaRow = {
+  area: string;
+  total: number;
+  called: number;
+  users: number;
+  calls: number;
+  scheduled: number;
+  first_visits: number;
+  sales: number;
+  contracts: number;
+  gross_profit: number;
+  units: number;
+};
+export type RegionIndustryRow = { industry: string; total: number; called: number; users: number };
+export type RegionAnalysisData = {
+  from: string;
+  to: string;
+  level: "prefecture" | "city";
+  filters: { prefecture: string | null; city: string | null; industry: string | null };
+  options: { prefectures: { name: string; total: number }[]; cities: { name: string; total: number }[] };
+  industries: RegionIndustryRow[];
+  areas: RegionAreaRow[];
+  totals: Omit<RegionAreaRow, "area">;
+};
+
 export type UserAnalysis = {
   facilities: { id: number; industry: string; prefecture: string; city: string; organization_id: number | null }[];
   contracts: { company_id: number; product: string; issues: string[]; amount: number | null; gross_profit: number | null; units: number | null }[];
