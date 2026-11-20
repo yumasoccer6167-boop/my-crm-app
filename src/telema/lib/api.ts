@@ -50,6 +50,7 @@ import type {
   UserAnalysis,
   RegionAnalysisData,
   MyAnalysis,
+  MyListStatus,
   MyPagePlan,
   MyRule,
   MyRules,
@@ -94,6 +95,7 @@ type Api = {
     $get: Call<MyPageData>;
     commit: { $put: Call<{ day: string; commit_gp: number | null; commit_units: number | null; commit_deals: number | null; comment: string | null }> };
     analysis: { $get: Call<MyAnalysis> };
+    "list-status": { $get: Call<MyListStatus> };
     "next-week": { $put: Call<{ week_start: string; plan: MyPagePlan }> };
   };
   "my-rules": {

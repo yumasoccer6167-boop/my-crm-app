@@ -643,6 +643,15 @@ export type MyAnalysis = {
   months: { month: string; orders: number; gross_profit: number; units: number }[];
 };
 
+/** マイページ「リスト状況」：施設カルテのリスト種類ごとの施設数（1施設に複数付くので、合計は total を超えうる） */
+export type MyListStatus = {
+  scope: "mine" | "all";
+  total: number;
+  user_total: number;
+  list_types: { id: number; name: string; is_active: number; count: number; user_count: number }[];
+  none: { name: string; count: number; user_count: number };
+};
+
 /** 数値分析：目標に対する今週・今日のペース。目標が未設定なら target 以降が null */
 export type AnalyticsPace = {
   user_id: number;

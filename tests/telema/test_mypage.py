@@ -178,3 +178,30 @@ def test_翌週の予定はカレンダーから自動で数え_粗利と台数�
     team = api('/mypage')[1]['next_week']['team']
     assert (team['gross_profit']['actual'], team['units']['actual']) == (400_000, 1)
     assert team['deals']['actual'] == base['deals']['actual'] + 2 and team['first_visits']['actual'] == base['first_visits']['actual'] + 1
+
+
+def test_リスト状況はリスト種類ごとの施設数_比率の元_うちユーザーを数える(client):
+    """施設カルテの「リスト種類」を種類ごとに数える。複数付いた施設は両方に数え、付いていない施設は「未設定」"""
+    mine = me(client)
+    a = client.api('/list-types', {'name': '群私幼'})[1]['id']
+    b = client.api('/list-types', {'name': 'テレアポ'})[1]['id']
+    c1, c2, c3, c4 = (make_company(client, n) for n in ('園1', '園2', '園3', '園4'))
+    other = client.add_user('他の人')
+    client.sql('UPDATE telema_companies SET assigned_user_id = %s WHERE id IN (%s, %s, %s)', (mine, c1, c2, c3))
+    client.sql('UPDATE telema_companies SET assigned_user_id = %s WHERE id = %s', (other, c4))
+    client.sql('UPDATE telema_companies SET is_user = 1 WHERE id = %s', (c1,))
+    for cid, ids in ((c1, [a, b]), (c2, [a]), (c4, [b])):
+        assert client.api(f'/companies/{cid}/list-types', {'list_type_ids': ids}, method='PATCH')[0] == 200
+    client.api(f'/list-types/{b}', {'is_active': False}, method='PATCH')
+
+    status, body = client.api('/mypage/list-status')
+    assert status == 200 and body['scope'] == 'mine' and body['total'] == 3 and body['user_total'] == 1
+    rows = {t['name']: (t['count'], t['user_count']) for t in body['list_types']}
+    assert rows['群私幼'] == (2, 1) and rows['テレアポ'] == (1, 1)         # 無効にしても、施設が付いていれば出る
+    assert rows['繋がり'] == (0, 0)                                         # 有効な種類は 0 件でも出る
+    assert body['none'] == {'name': '未設定', 'count': 1, 'user_count': 0}   # c3 だけがリスト種類なし
+
+    body = client.api('/mypage/list-status?scope=all')[1]
+    every = client.sql('SELECT COUNT(*) AS n FROM telema_companies WHERE is_active = 1')[0]['n']      # 他のテストが作った施設も数える
+    assert body['total'] == every and {t['name']: t['count'] for t in body['list_types']}['テレアポ'] == 2
+    assert client.api('/mypage/list-status?scope=x')[0] == 400

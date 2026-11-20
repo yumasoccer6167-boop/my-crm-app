@@ -16,6 +16,10 @@
      商談数 ＝ 営業予定（「時間設定」の架電の訪問日時 ＋ 初回訪問の結果「営業時間設定」の営業の日時）
      時間設定件数 ＝ 営業予定のうち、「時間設定」の架電から　　初回訪問時間設定件数 ＝ 営業予定のうち、初回訪問の「営業時間設定」から
    粗利・台数はカレンダーに情報が無いため、自分で入力する（営業ごと・週ごと。チームは全員の合計）
+リスト状況（GET /mypage/list-status?scope=mine|all）
+ - 施設カルテの基本情報の「リスト種類」を、リスト種類ごとに数えた表（協会カルテの業種別の施設数と同じ形：施設数・比率・うちユーザー）。
+   mine＝営業担当が自分の施設（既定）、all＝全施設。比率＝その種類の施設数 ÷ 対象の施設数（1施設に複数のリスト種類が付けられるので、合計は100%を超えることがある）。
+   リスト種類が1つも付いていない施設は「未設定」の行にまとめる。リスト種類は並び順どおり。無効にしたリスト種類も、施設が付いていれば出す
 2ページ（GET /mypage/analysis?scope=closed|user）
  - closed＝自己クローズ（契約情報の営業担当が自分）、user＝自己ユーザー（営業担当か台数担当のどちらかが自分）の契約について、商材別・業種別の件数、平均粗利、
    1件あたり粗利、1契約あたり台数（同じ施設・同じ契約日の契約情報は、まとめて1契約と数える）、単月平均粗利・台数（最初の契約の月から今月まで）を返す"""
@@ -26,7 +30,7 @@ from flask import jsonify, request
 
 from .agenda import agenda_items, month_days
 from .analytics import FIRST, SALES, SCHEDULING_STATUS, _day_bounds, _today, workday_overrides, workdays
-from .common import JST, audit
+from .common import JST, LIST_TYPE, audit
 from .context import ApiError, body, current_user, db
 from .org import assignments_on, department_tree
 from .routes import bp
@@ -348,4 +352,38 @@ def mypage_analysis():
         'products': sorted(products.values(), key=lambda p: (-p['orders'], p['name'])),
         'industries': [{'name': k, 'orders': v} for k, v in sorted(industries.items(), key=lambda kv: (-kv[1], kv[0]))],
         'months': series,
+    })
+
+
+NO_LIST_TYPE = '未設定'
+
+
+@bp.get('/mypage/list-status')
+def mypage_list_status():
+    """施設カルテの基本情報の「リスト種類」ごとの施設数・比率・うちユーザー（協会カルテの業種別の施設数と同じ形）"""
+    user, d = current_user(), db()
+    scope = request.args.get('scope') or 'mine'
+    if scope not in ('mine', 'all'):
+        raise ApiError(400, 'validation_error', '入力内容に誤りがあります（scope: mine / all のどちらかを指定してください）')
+    where, params = ('c.is_active = 1', []) if scope == 'all' else ('c.is_active = 1 AND c.assigned_user_id = %s', [user['id']])
+    total = d.first(f'SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE c.is_user = 1) AS users FROM telema_companies c WHERE {where}', params)
+    # 有効なリスト種類は、施設が1つも付いていなくても 0 件の行で出す。無効なものは、施設が付いているときだけ出す
+    rows = d.all(
+        f'''SELECT t.id, t.name, t.is_active, COUNT(c.id) AS count, COUNT(c.id) FILTER (WHERE c.is_user = 1) AS user_count
+              FROM {LIST_TYPE.master} t
+              LEFT JOIN {LIST_TYPE.link} l ON l.{LIST_TYPE.fk} = t.id
+              LEFT JOIN telema_companies c ON c.id = l.company_id AND {where}
+             GROUP BY t.id, t.name, t.is_active, t.sort_order
+            HAVING t.is_active = 1 OR COUNT(c.id) > 0
+             ORDER BY t.sort_order, t.id''', params)
+    none = d.first(
+        f'''SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE c.is_user = 1) AS users FROM telema_companies c
+             WHERE {where} AND NOT EXISTS (SELECT 1 FROM {LIST_TYPE.link} l WHERE l.company_id = c.id)''', params)
+    types = [{'id': r['id'], 'name': r['name'], 'is_active': r['is_active'], 'count': r['count'], 'user_count': r['user_count']} for r in rows]
+    return jsonify({
+        'scope': scope,
+        'total': total['n'],
+        'user_total': total['users'],
+        'list_types': types,
+        'none': {'name': NO_LIST_TYPE, 'count': none['n'], 'user_count': none['users']},
     })

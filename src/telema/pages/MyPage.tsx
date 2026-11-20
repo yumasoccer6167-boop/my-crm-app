@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import type { MyAnalysis, MyPageData, MyPageMetric, MyPagePlan, MyPagePlanKey, MyPageProgress, MyPageRowKey } from "../types";
+import type { MyAnalysis, MyListStatus, MyPageData, MyPageMetric, MyPagePlan, MyPagePlanKey, MyPageProgress, MyPageRowKey } from "../types";
 import { api, unwrap } from "../lib/api";
 import { fmtP, pToYen, yenToP } from "../lib/points";
 import { useApi } from "../lib/useApi";
@@ -21,9 +21,9 @@ const METRICS: { key: MyPageMetric; label: string; fmt: (n: number) => string }[
   { key: "scheduling", label: "スケジューリング数", fmt: (n) => `${num(n)}件` },
 ];
 
-/** マイページ：1ページ「数字の自己認識」と、2ページ「自己分析」 */
+/** マイページ：「数字の自己認識」「自己分析」「リスト状況」「マイルール」 */
 export function MyPage() {
-  const [page, setPage] = useState<"numbers" | "analysis" | "rules">("numbers");
+  const [page, setPage] = useState<"numbers" | "analysis" | "lists" | "rules">("numbers");
   return (
     <div className="space-y-4">
       <div role="tablist" aria-label="マイページの表示" className="inline-flex rounded-lg bg-slate-100 p-0.5 text-sm">
@@ -31,6 +31,7 @@ export function MyPage() {
           [
             ["numbers", "数字の自己認識"],
             ["analysis", "自己分析"],
+            ["lists", "リスト状況"],
             ["rules", "マイルール"],
           ] as const
         ).map(([k, label]) => (
@@ -45,7 +46,7 @@ export function MyPage() {
           </button>
         ))}
       </div>
-      {page === "numbers" ? <Numbers /> : page === "analysis" ? <Analysis /> : <MyRules />}
+      {page === "numbers" ? <Numbers /> : page === "analysis" ? <Analysis /> : page === "lists" ? <ListStatus /> : <MyRules />}
     </div>
   );
 }
@@ -304,6 +305,91 @@ function ProgressTable({ heading, progress, actualLabel = "実績", editor }: { 
         </table>
       </div>
     </div>
+  );
+}
+
+// ---------- リスト状況：施設カルテの「リスト種類」ごとの施設数 ----------
+function ListStatus() {
+  const [scope, setScope] = useState<"mine" | "all">("mine");
+  const { data, error, loading, reload } = useApi(() => unwrap(api.mypage["list-status"].$get({ query: { scope } })), [scope]);
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div role="tablist" aria-label="対象の施設" className="inline-flex rounded-lg bg-slate-100 p-0.5 text-sm">
+          {(
+            [
+              ["mine", "自分の担当"],
+              ["all", "全体"],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={scope === k}
+              onClick={() => setScope(k)}
+              className={`rounded-md px-4 py-1.5 font-medium ${scope === k ? "bg-white text-indigo-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-slate-500">{scope === "mine" ? "営業担当に自分の名前が入っている施設だけ" : "登録されているすべての施設"}</span>
+      </div>
+      {error ? <ErrorBox message={error} onRetry={reload} /> : !data || (loading && !data) ? <Loading /> : <ListStatusTable data={data} />}
+    </div>
+  );
+}
+
+/** リスト種類ごとの施設数。バーは一番多い種類を100%にした長さ、比率は対象の施設全体に対する割合（協会カルテの業種別の施設数と同じ形） */
+function ListStatusTable({ data }: { data: MyListStatus }) {
+  const rows = [...data.list_types.map((t) => ({ key: String(t.id), name: t.is_active ? t.name : `${t.name}（無効）`, count: t.count, user_count: t.user_count })), { key: "none", name: data.none.name, count: data.none.count, user_count: data.none.user_count }];
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  const total = data.total;
+  return (
+    <Card title="リスト種類別の施設数">
+      {total === 0 ? (
+        <p className="py-6 text-center text-sm text-slate-400">{data.scope === "mine" ? "営業担当が自分の施設がまだありません" : "施設がまだありません"}</p>
+      ) : (
+        <>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
+                <th className="py-1.5 pr-2 font-medium">リスト種類</th>
+                <th className="w-1/3 py-1.5 pr-2 font-medium" aria-label="施設数のグラフ" />
+                <th className="py-1.5 pr-2 text-right font-medium">施設数</th>
+                <th className="py-1.5 pr-2 text-right font-medium">比率</th>
+                <th className="py-1.5 text-right font-medium">うちユーザー</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key} className="border-b border-slate-50">
+                  <td className={`py-1.5 pr-2 ${r.key === "none" ? "text-slate-500" : "text-slate-800"}`}>{r.name}</td>
+                  <td className="py-1.5 pr-2">
+                    <div className="h-2 rounded-full bg-slate-100">
+                      <div className={`h-2 rounded-full ${r.key === "none" ? "bg-slate-300" : "bg-indigo-400"}`} style={{ width: `${(r.count / max) * 100}%` }} />
+                    </div>
+                  </td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums">{num(r.count)}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums text-slate-600">{((r.count / total) * 100).toFixed(1)}%</td>
+                  <td className="py-1.5 text-right tabular-nums">{num(r.user_count)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="text-slate-700">
+                <td className="py-1.5 pr-2 font-medium">施設の合計</td>
+                <td />
+                <td className="py-1.5 pr-2 text-right font-medium tabular-nums">{num(total)}</td>
+                <td className="py-1.5 pr-2 text-right tabular-nums text-slate-600">100.0%</td>
+                <td className="py-1.5 text-right font-medium tabular-nums">{num(data.user_total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <p className="mt-2 text-xs text-slate-500">比率は、対象の施設の合計に対する割合です。1つの施設に複数のリスト種類を付けられるので、合計が100%を超えることがあります。「未設定」はリスト種類が1つも付いていない施設です。</p>
+        </>
+      )}
+    </Card>
   );
 }
 
