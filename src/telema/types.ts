@@ -439,6 +439,27 @@ export type ContractImportBatch = {
   applied: boolean;
 };
 
+/** 施設類型CSVの取り込み（管理者）。1回分（数百行）の結果 */
+export type IndustryImportRow = { line: number; name: string; phone: string; facility_type: string; conflict: boolean };
+export type IndustryImportBatch = {
+  rows: number;
+  filled: number;
+  overwritten: number;
+  same: number;
+  kept: number;
+  unmatched: number;
+  review: number;
+  duplicate: number;
+  no_phone: number;
+  no_type: number;
+  types: Record<string, number>;
+  unmatched_rows: { line: number; name: string; phone: string; facility_type: string }[];
+  review_rows: { line: number; name: string; phone: string; facility_type: string; reason: string; candidates: string[] }[];
+  kept_rows: { line: number; name: string; phone: string; facility_type: string; company_name: string; current: string }[];
+  new_keys: string[];
+  applied: boolean;
+};
+
 /** 同じ加盟協会の施設。協会ごと */
 export type AssociationPeers = {
   association_id: number;
