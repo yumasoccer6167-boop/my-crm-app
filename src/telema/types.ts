@@ -307,6 +307,10 @@ export type AssociationOverviewItem = {
   facility_count: number;
   organization_count: number;
   user_count: number;
+  /** ユーザー施設のある法人の数 */
+  user_organization_count: number;
+  /** ユーザー率（%）＝ユーザー法人 ÷ 加盟法人（協会カルテと同じ）。加盟法人が0のときは null */
+  user_rate: number | null;
   /** 親の協会（組織図）。null は都道府県の協会 */
   parent_id: number | null;
   /** 1＝組織図の最上位の組織（全日本私立幼稚園連合会と同じ位置。複数登録できる） */

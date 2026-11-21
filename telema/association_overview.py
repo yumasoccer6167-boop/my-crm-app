@@ -25,7 +25,7 @@ def _descendants(children, root_id):
 
 @bp.get('/association-overview')
 def association_overview():
-    """協会ごとの加盟施設数・加盟法人数・ユーザー施設数と、協会会長・協会役員。
+    """協会ごとの加盟施設数・加盟法人数・ユーザー施設数・ユーザー法人数・ユーザー率（分析の順位に使う）と、協会会長・協会役員。
     数字は、下位の協会（地区単位・各地域の協会）の加盟施設も含む（同じ施設は1回だけ）。own_facility_count はその協会に直接加盟している施設の数。
     都道府県は、協会に指定したものを優先し、なければ加盟施設で一番多い都道府県"""
     d = db()
@@ -61,12 +61,17 @@ def association_overview():
                 rows[r['company_id']] = r
         prefs = Counter(r['prefecture'] for r in rows.values() if r['prefecture'])
         ps = by_assoc.get(a['id'], [])
+        orgs = {r['organization_id'] for r in rows.values() if r['organization_id'] is not None}
+        user_orgs = {r['organization_id'] for r in rows.values() if r['is_user'] == 1 and r['organization_id'] is not None}
         items.append({
             **a,
             'facility_count': len(rows),
             'own_facility_count': len(own.get(a['id'], [])),
-            'organization_count': len({r['organization_id'] for r in rows.values() if r['organization_id'] is not None}),
+            'organization_count': len(orgs),
             'user_count': sum(1 for r in rows.values() if r['is_user'] == 1),
+            'user_organization_count': len(user_orgs),
+            # ユーザー率＝ユーザー法人 ÷ 加盟法人（%。協会カルテと同じ）。加盟法人が 0 のときは出さない
+            'user_rate': round(len(user_orgs) / len(orgs) * 100, 1) if orgs else None,
             'prefecture': a['prefecture_setting'] or (prefs.most_common(1)[0][0] if prefs else None),
             # 会長が先、そのあと役員（同じ人が両方なら会長として出す）
             'chairs': [p for p in ps if p['is_association_chair']],

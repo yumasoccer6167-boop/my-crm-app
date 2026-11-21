@@ -33,6 +33,7 @@ def test_協会ごとの加盟施設数_加盟法人数_ユーザー数_会長�
     client.api(f'/companies/{f4}/contacts', {'name': '一般 三郎'})
     by, totals = overview(client)
     y = by['概要テスト横浜協会']
+    assert (y['user_organization_count'], y['user_rate']) == (1, 50.0)          # ユーザー法人1 ÷ 加盟法人2（協会カルテと同じ）
     assert (y['facility_count'], y['organization_count'], y['user_count'], y['prefecture']) == (4, 2, 1, '神奈川県')       # 法人数は法人に属している施設の法人（法人なしの施設は数えない）
     assert [c['name'] for c in y['chairs']] == ['会長 太郎', '兼任 次郎'] and [o['name'] for o in y['officers']] == ['役員 花子']      # 兼任は会長として出す
     assert y['chairs'][0]['company_name'] == '概要園1' and y['chairs'][0]['role'] == '理事長'
@@ -40,6 +41,7 @@ def test_協会ごとの加盟施設数_加盟法人数_ユーザー数_会長�
     assert (k['facility_count'], k['organization_count'], k['user_count']) == (2, 1, 0) and [c['name'] for c in k['chairs']] == ['兼任 次郎']
     e = by['概要テスト空協会']
     assert (e['facility_count'], e['organization_count'], e['chairs'], e['officers'], e['prefecture']) == (0, 0, [], [], None) and empty
+    assert (e['user_organization_count'], e['user_rate']) == (0, None)         # 加盟法人がないときはユーザー率を出さない
     # 全体：同じ施設は1回だけ数える
     assert totals['facility_count'] >= 4 and totals['association_count'] >= 3
 

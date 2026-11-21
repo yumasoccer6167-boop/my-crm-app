@@ -7,13 +7,14 @@ import { buildAssociationForest, flattenForest, groupByRegion, topLevelNodes, TO
 import { api, unwrap } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { useMasters } from "../lib/masters";
+import { AssociationAnalysis } from "../components/AssociationAnalysis";
 import { AssociationMembers } from "../components/AssociationMembers";
 import { AssociationMindMap } from "../components/AssociationMindMap";
 import { AssociationStructureDialog, AssociationStructureFields, descendantIds } from "../components/AssociationStructureEditor";
 import { ChairCrown, OfficerCrown } from "../components/CompanyTable";
 import { Button, Card, Empty, ErrorBox, inputCls } from "../components/ui";
 
-type View = "map" | "list";
+type View = "map" | "list" | "analysis";
 const selectCls = "rounded-md border-0 bg-white px-2.5 py-1.5 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500";
 const VIEW_KEY = "telema:associations-view";
 const SORTS = [
@@ -25,7 +26,8 @@ const SORTS = [
 
 function loadView(): View {
   try {
-    return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "map";
+    const v = localStorage.getItem(VIEW_KEY);
+    return v === "list" || v === "analysis" ? v : "map";
   } catch {
     return "map";
   }
@@ -92,7 +94,7 @@ export function Associations() {
           </Button>
         )}
         <div role="tablist" aria-label="表示の切り替え" className="inline-flex rounded-md bg-slate-100 p-0.5 text-sm">
-          {([["map", "マインドマップ"], ["list", "リスト"]] as const).map(([v, label]) => (
+          {([["map", "マインドマップ"], ["list", "リスト"], ["analysis", "分析"]] as const).map(([v, label]) => (
             <button
               key={v}
               type="button"
@@ -161,7 +163,7 @@ export function Associations() {
             </div>
           </Card>
 
-          {shown.length === 0 ? <Empty>該当する協会がありません</Empty> : view === "map" ? <AssociationMindMap associations={all.filter((a) => shown.some((f) => f.node.item.id === a.id))} onEdit={editing ? setEditId : undefined} /> : <AssociationList rows={shown} indent={sort === "tree"} editing={editing} all={all} onSaved={reload} />}
+          {shown.length === 0 ? <Empty>該当する協会がありません</Empty> : view === "analysis" ? <AssociationAnalysis rows={shown} /> : view === "map" ? <AssociationMindMap associations={all.filter((a) => shown.some((f) => f.node.item.id === a.id))} onEdit={editing ? setEditId : undefined} /> : <AssociationList rows={shown} indent={sort === "tree"} editing={editing} all={all} onSaved={reload} />}
         </>
       )}
       {editId != null && <AssociationStructureDialog itemId={editId} items={all} onSaved={reload} onClose={() => setEditId(null)} />}
