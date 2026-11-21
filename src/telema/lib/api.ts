@@ -70,7 +70,7 @@ import type {
 } from "../types";
 
 type Args = { param?: Record<string, string>; query?: Record<string, string | number | undefined>; json?: unknown };
-type Res<T> = { ok: boolean; status: number; json(): Promise<T> };
+type Res<T> = { ok: boolean; status: number; json(): Promise<T>; blob(): Promise<Blob>; headers: { get(name: string): string | null } };
 type Call<T> = (args?: Args) => Promise<Res<T>>;
 
 /** API の形（パス → メソッド → レスポンス型）。サーバー側は telema/*.py */
@@ -125,6 +125,8 @@ type Api = {
     $get: Call<CompanyListData>;
     $post: Call<Company>;
     duplicates: { $get: Call<DuplicateCandidate[]> };
+    /** 今の絞り込みを Excel（.xlsx）で受け取る。downloadFile で保存する */
+    export: { $get: Call<unknown> };
     facets: { $get: Call<{ industries: Facet[]; prefectures: Facet[]; cities: Facet[] }> };
     "bulk-assign": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
     "bulk-status": { $post: Call<{ updated: number; unchanged: number; not_found: number }> };
@@ -230,6 +232,36 @@ export class ApiRequestError extends Error {
   ) {
     super(message);
   }
+}
+
+/** ファイル（Excel など）が返る API を呼んで、ブラウザのダウンロードとして保存する。エラー時はサーバーの日本語メッセージで throw する */
+export async function downloadFile(p: Promise<Res<unknown>>, fallbackName: string): Promise<{ name: string; count: number | null }> {
+  let res;
+  try {
+    res = await p;
+  } catch {
+    throw new ApiRequestError("サーバーに接続できません。ネットワークを確認してください", 0, "network_error");
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: { code: string; message: string } } | null;
+    throw new ApiRequestError(body?.error?.message ?? `エラーが発生しました (${res.status})`, res.status, body?.error?.code ?? "unknown");
+  }
+  // Content-Disposition の filename*=UTF-8''... をファイル名にする
+  const m = /filename\*=UTF-8''([^;]+)/i.exec(res.headers.get("Content-Disposition") ?? "");
+  let name = fallbackName;
+  try {
+    if (m) name = decodeURIComponent(m[1]!);
+  } catch {
+    // 読めなければ既定の名前
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+  const count = Number(res.headers.get("X-Export-Count"));
+  return { name, count: Number.isFinite(count) && res.headers.get("X-Export-Count") ? count : null };
 }
 
 /** レスポンスを検査し、エラー時はサーバーの日本語メッセージで throw する */

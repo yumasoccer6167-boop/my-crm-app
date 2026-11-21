@@ -4,7 +4,7 @@ import { STATUS_CATEGORIES, TEMPERATURES } from "../shared/constants";
 import { CompanyTable } from "../components/CompanyTable";
 import { SearchSelect } from "../components/SearchSelect";
 import { Button, Card, Empty, ErrorBox, inputCls, Loading, selectCls } from "../components/ui";
-import { api, unwrap } from "../lib/api";
+import { api, downloadFile, unwrap } from "../lib/api";
 import { lastOpened, saveListQuery } from "../lib/list-query";
 import { useMasters } from "../lib/masters";
 import { PREFECTURES } from "../shared/prefectures";
@@ -52,6 +52,21 @@ export function Companies() {
     return r;
   }, [key]);
   const total = data?.total ?? knownTotal;
+  // 今の絞り込みを Excel に出力する（ページに関係なく該当の全件）
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function exportExcel() {
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      const r = await downloadFile(api.companies.export.$get({ query }), "リスト.xlsx");
+      setExportMsg({ ok: true, text: `${r.count != null ? `${r.count.toLocaleString()}件を` : ""}Excelに出力しました（${r.name}）` });
+    } catch (e) {
+      setExportMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setExporting(false);
+    }
+  }
   // 会社カルテから戻ったとき、直前に開いていた施設の行までスクロールして目印を付ける（開いた直後の1回だけ）
   const [highlightId] = useState(lastOpened);
   const scrolled = useRef(false);
@@ -277,6 +292,14 @@ export function Companies() {
             {total != null ? `${total.toLocaleString()}件` : "…"}
             {loading && data && <span className="ml-2 text-xs font-normal text-slate-400">更新中…</span>}
           </>
+        }
+        action={
+          <div className="flex items-center gap-2">
+            {exportMsg && <span className={`text-xs ${exportMsg.ok ? "text-emerald-700" : "text-rose-700"}`} role={exportMsg.ok ? "status" : "alert"}>{exportMsg.text}</span>}
+            <Button size="sm" disabled={exporting || !data || data.items.length === 0} onClick={() => void exportExcel()} title="今の絞り込みに合う施設すべて（ページに関係なく）を、法人名・園名・決裁者名・住所・電話番号のExcelファイルにします">
+              {exporting ? "出力中…" : "Excelに出力"}
+            </Button>
+          </div>
         }
       >
         {error ? (

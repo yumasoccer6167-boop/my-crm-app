@@ -1,14 +1,17 @@
 """施設一覧・会社カルテ・先方担当者。"""
 import json
+from datetime import datetime
+from urllib.parse import quote
 
-from flask import jsonify, request
+from flask import Response, jsonify, request
 
 from .agenda import check_recall_slot
-from .common import ASSOCIATION, ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_CHAIR_EXISTS, ASSOCIATION_OFFICER_EXISTS, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, LATEST_VISIT_PURPOSE_ID, TAG_KINDS, VISIT_STATUS_COLUMN, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
+from .common import JST, ASSOCIATION, ASSOCIATION_CHAIR_COLUMN, ASSOCIATION_CHAIR_EXISTS, ASSOCIATION_OFFICER_EXISTS, ASSOCIATION_OFFICER_COLUMN, CONTRACT_COUNT_COLUMN, CONTRACT_SELECT, LATEST_VISIT_PURPOSE_ID, TAG_KINDS, VISIT_STATUS_COLUMN, audit, can_edit_company, company_visibility, jst_day_range, record_list_assign
 from .context import ApiError, body, current_user, db, forbidden, not_found, require_role
 from .normalize import (display_phone, extract_domain, normalize_address, normalize_company_name,
                         normalize_phone, normalize_postal_code, split_prefecture_city, escape_like)
 from .routes import bp
+from .xlsx import build_xlsx
 from .validate import Bool, Email, Enum, Int, IntList, IsoDatetime, Num, Str, parse, parse_id
 
 TEMPERATURES = ['unrated', 'low', 'mid', 'high']
@@ -98,10 +101,8 @@ def _list_query():
     return q
 
 
-@bp.get('/companies')
-def list_companies():
-    q = _list_query()
-    user = current_user()
+def _filtered_companies(q, user):
+    """一覧と Excel 出力で共通の絞り込み。(FROM 以降の SQL, パラメータ, ORDER BY) を返す"""
     vis_sql, vis_params = company_visibility(user)
     where = ['c.is_active = 1', vis_sql]
     params = list(vis_params)
@@ -194,6 +195,13 @@ def list_companies():
     frm = from_clause(where)
     order = ', '.join(p if p.endswith('IS NULL') else f'{p} {q["order"]}' for p in SORTS[q['sort']]) + ', c.id'
 
+    return frm, params, order
+
+
+@bp.get('/companies')
+def list_companies():
+    q = _list_query()
+    frm, params, order = _filtered_companies(q, current_user())
     d = db()
     rows = d.all(
         f'''SELECT c.id, c.company_name, o.name AS organization_name, c.phone, c.city, c.industry,
@@ -207,6 +215,37 @@ def list_companies():
     )
     total = None if q['skip_count'] else d.value(f'SELECT COUNT(*) {frm}', params)
     return jsonify({'total': total, 'page': q['page'], 'per_page': q['per_page'], 'items': rows})
+
+
+EXPORT_MAX = 20000
+EXPORT_HEADER = ['法人名', '園名', '決裁者名', '住所', '電話番号']
+
+
+@bp.get('/companies/export')
+def export_companies():
+    """今の絞り込み（一覧と同じ条件・同じ並び順。ページは無視して全件）を Excel（.xlsx）にして返す。
+    列は 法人名・園名・決裁者名・住所・電話番号。決裁者名は、決裁者に印を付けた担当者（施設の担当者と、法人に登録した担当者。複数いれば「、」でつなぐ）。
+    見える施設は一覧と同じ（担当外の施設は出ない）。出力のたびに操作ログを残す"""
+    q = _list_query()
+    user = current_user()
+    frm, params, order = _filtered_companies(q, user)
+    d = db()
+    rows = d.all(
+        f'''SELECT o.name AS organization_name, c.company_name, c.address, c.phone,
+              (SELECT string_agg(DISTINCT ct.name, '、') FROM telema_contacts ct
+                WHERE ct.is_active = 1 AND ct.is_decision_maker = 1 AND ct.name IS NOT NULL AND btrim(ct.name) <> ''
+                  AND (ct.company_id = c.id OR (ct.company_id IS NULL AND c.organization_id IS NOT NULL AND ct.organization_id = c.organization_id))) AS decision_makers
+            {frm} ORDER BY {order} LIMIT %s''',
+        [*params, EXPORT_MAX + 1])
+    if len(rows) > EXPORT_MAX:
+        raise ApiError(400, 'too_many', f'該当が{EXPORT_MAX:,}件を超えています。絞り込みを増やしてから出力してください')
+    data = build_xlsx('リスト', EXPORT_HEADER, [[r['organization_name'], r['company_name'], r['decision_makers'], r['address'], r['phone']] for r in rows])
+    shown = {k: v for k, v in q.items() if v not in (None, False) and k not in ('page', 'per_page', 'skip_count', 'sort', 'order')}
+    audit(d, user['id'], 'export', 'company_list', None, None, {'count': len(rows), 'filters': shown})
+    name = f'リスト_{datetime.now(JST).strftime("%Y%m%d_%H%M")}.xlsx'
+    return Response(data, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers={
+        'Content-Disposition': f"attachment; filename=list.xlsx; filename*=UTF-8''{quote(name)}",
+        'X-Export-Count': str(len(rows)), 'Cache-Control': 'no-store'})
 
 
 @bp.get('/companies/facets')
